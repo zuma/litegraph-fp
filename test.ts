@@ -58,8 +58,12 @@ async function executeBulletproofTest() {
     if (finalResult.state['nodeA.out'] === 15) console.log("✅ Math Pipeline survived rogue node explosion.");
     if (finalResult.state['nodeC.out'] === 600) console.log("✅ Tier 2 execution completed safely.");
     if (finalResult.errors['nodeRogue'].includes("Timeout")) console.log("🚨 Watchdog successfully assassinated nodeRogue before it could freeze the system!");
+    
+    // Explicitly kill the Node process because `nodeRogue` leaves a dormant setTimeout inside the event loop!
+    process.exit(0);
 }
 
 executeBulletproofTest().catch(e => {
     console.error("❌ ENGINE FATAL CRASH:", e);
+    process.exit(1);
 });
