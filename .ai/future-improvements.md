@@ -35,3 +35,23 @@ This document tracks long-term vision features and structural improvements to th
 *   **Workflow:** Define `.proto` schemas mirroring `GraphState`, `NodeState`, and `Edge`. The inert-data principle (First Principle #2) makes this viable — the graph is already plain structured data with no behavior attached. JSON remains the default for human-readable debugging and small graphs; protobuf becomes an opt-in format for performance-critical paths. Libraries like `protobuf.js` or `buf` provide TypeScript-native codegen.
 *   **Trade-off:** Adds a build step (proto compilation) and a dependency. Worth it only when graph sizes or transfer frequency justify the overhead. Start with JSON, migrate hot paths to protobuf when profiling demands it.
 
+---
+
+## Human Interaction Layer
+
+The UI is not just a canvas renderer — it is an entire domain of **human-facing tooling**. Because the graph is inert data (First Principle #2), most of these features are trivially cheap to implement. They are data operations, not complex undo frameworks.
+
+### 9. Undo / Redo (State History Stack)
+*   **Concept:** Maintain an array of previous `GraphState` snapshots. "Undo" swaps the current state with the previous one. "Redo" swaps forward. No command-pattern reversal logic needed — just pointer movement over an immutable history.
+*   **Design:** A simple `{ past: GraphState[], present: GraphState, future: GraphState[] }` structure. Every user action (add node, move node, connect edge) pushes the current state onto `past` and replaces `present` with the new state. Undo pops from `past`, redo pops from `future`.
+*   **Optimization:** For very large graphs, structural sharing (only storing diffs or using persistent data structures) can reduce memory overhead. But start with full snapshots — they're cheap for graphs under 10,000 nodes.
+
+### 10. Graph Persistence (Save / Load / Export)
+*   **Concept:** The graph is already a plain object. Persistence is serialization.
+*   **Format:** JSON is the natural default — it maps 1:1 to `GraphState` with zero transformation. XML adds verbosity and parsing complexity with no structural benefit for this use case. Protobuf (item #8) becomes the high-performance alternative when needed.
+*   **Workflow:** `save()` = `JSON.stringify(graphState)`. `load()` = `JSON.parse(fileContents)` + validation. Export to `.json` files, import from `.json` files. The file *is* the graph. No custom binary formats, no proprietary save logic.
+*   **Validation:** On load, run a schema validator (see item #2, zod) to verify the imported file conforms to the `GraphState` interface before the engine touches it.
+
+### 11. Named Snapshots (User Checkpoints)
+*   **Concept:** Like undo, but explicitly user-triggered and labeled. "Save this graph state as 'before refactor'" so you can return to it by name, not just by linear history position.
+*   **Workflow:** A `Map<string, GraphState>` of named snapshots. The user assigns a label, the current `GraphState` is frozen and stored. Restoring a snapshot replaces the current state and optionally pushes the replaced state onto the undo stack.
