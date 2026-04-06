@@ -1,0 +1,15 @@
+{
+  "name": "litegraph-fp",
+  "version": "0.1.0",
+  "description": "A headless, purely functional fork of litegraph.js",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  }
+}

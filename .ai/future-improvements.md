@@ -29,3 +29,9 @@ This document tracks long-term vision features and structural improvements to th
 ### 7. Explicit Feedback Loops (State Memory)
 *   **Concept:** Pure topological sorts strictly forbid circular dependencies. However, in Audio DSP and simulation loops, data often needs to feed *backwards* into previous nodes for the *next* execution frame.
 *   **Workflow:** Introduce a specialized `DelayEdge` concept in the AST. The topological sorter ignores `DelayEdges` when checking for loops. The execution engine then plucks the values from these edges and pre-loads them into the `initialInputs` dictionary for the *next* tick of the loop, simulating 1-frame memory without violating mathematical topology.
+
+### 8. Protocol Buffers as a Serialization Layer
+*   **Concept:** JSON is human-readable but verbose and slow to parse at scale. For high-frequency graph transfers (WebSocket sync, Worker messaging, disk persistence of large graphs), Protocol Buffers (protobuf) offer a compact binary format with strict schema enforcement and significantly faster serialization/deserialization.
+*   **Workflow:** Define `.proto` schemas mirroring `GraphState`, `NodeState`, and `Edge`. The inert-data principle (First Principle #2) makes this viable — the graph is already plain structured data with no behavior attached. JSON remains the default for human-readable debugging and small graphs; protobuf becomes an opt-in format for performance-critical paths. Libraries like `protobuf.js` or `buf` provide TypeScript-native codegen.
+*   **Trade-off:** Adds a build step (proto compilation) and a dependency. Worth it only when graph sizes or transfer frequency justify the overhead. Start with JSON, migrate hot paths to protobuf when profiling demands it.
+

@@ -4,16 +4,36 @@
 This is a ground-up, purely functional rewrite of `litegraph.js`. The goal is to completely decouple the execution engine from the visual canvas to achieve extreme portability (running in browsers, Web Workers, or headless edge/server environments). 
 
 ## Architecture Directives
-* **Paradigm:** Purely functional. Zero object-oriented classes. 
-* **State:** The graph is an immutable JSON object/AST.
-* **Execution:** Nodes are pure functions. The engine takes a graph state and input data, and returns a *new* graph state. No mutations.
+* **Paradigm:** Purely functional. Zero object-oriented classes for core logic. Closures and factory functions for impure boundaries.
+* **State:** The graph is an immutable JSON object/AST (`src/core/ast.ts`).
+* **Execution:** Nodes are pure functions. The engine takes a graph state and input data, and returns a *new* frozen state. No mutations.
+* **Side-Effects:** Handled via the Command Pattern. Pure nodes return `$commands` arrays, which the engine extracts into a first-class `commands` field on `ExecutionResult`. An impure `createDispatcher()` factory processes them at the boundary.
 
-## Development Environment Setup
+## Current Architecture
+
+```
+src/
+├── core/            # Immutable data definitions (AST)
+│   └── ast.ts       # GraphState, NodeState, Edge, NodeID
+├── engine/          # Pure execution logic
+│   ├── types.ts     # EngineConfig, ExecutionState, ExecutionResult
+│   ├── topology.ts  # Tiered topological sort (Kahn's algorithm)
+│   └── evaluate.ts  # Core graph evaluator with watchdog timeouts
+├── registry/        # Node function implementations
+│   ├── types.ts     # NodeFunction, NodeRegistry
+│   ├── math.ts      # add, multiply
+│   ├── logic.ts     # invertBoolean
+│   ├── system.ts    # delaySim, logToConsole
+│   └── index.ts     # StandardNodes registry assembly
+├── events/          # Impure side-effect boundary
+│   ├── types.ts     # Command, SideEffectHandler
+│   └── dispatcher.ts # createDispatcher factory
+└── ui/              # Canvas rendering (placeholder)
+    ├── types.ts     # Viewport, RenderingContext
+    ├── canvas.ts    # Pure draw instructions
+    └── renderer.ts  # createRenderer factory (rAF loop)
+```
+
+## Development Environment
 * **Runtime/Tooling:** Node.js for development only (via a Docker container). The final output will be environment-agnostic ECMAScript.
 * **Language:** Strict TypeScript (`"strict": true`, `"target": "ES2022"`).
-* **Linting/Formatting:** ESLint paired with Prettier. Crucially, using `eslint-plugin-functional` to strictly enforce immutability and ban keywords like `let` and `this`. 
-
-## Current Status & Next Steps
-1.  The repository is a fresh, blank slate (not a fork containing legacy code).
-2.  `package.json` and strict `tsconfig.json` are initialized.
-3.  **Immediate Task:** We need to implement the core Execution Engine's topological sorting algorithm in `src/engine.ts`. It must be a pure function that takes the immutable graph schema and returns a flat array of Node IDs representing the correct execution order (pre-calculated on graph modification).
