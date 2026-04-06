@@ -1,10 +1,10 @@
 import { NodeFunction, NodeRegistry } from './types.js';
 
-// ==========================================
-// PURE FUNCTIONAL NODE IMPLEMENTATIONS
-// ==========================================
-// Every function must be 100% deterministic, 
-// completely stateless, and cause zero side-effects.
+// ============================================================================
+// 1. PURE FUNCTIONAL NODE IMPLEMENTATIONS
+// ============================================================================
+// Every function must be 100% deterministic, completely stateless, 
+// and cause zero side-effects.
 
 const add: NodeFunction = (inputs, params) => {
     const a = (inputs.a as number) ?? 0;
@@ -33,9 +33,9 @@ const delaySim: NodeFunction = async (inputs, params) => {
     return { out: a };
 };
 
-// ==========================================
-// THE STANDARD REGISTRY
-// ==========================================
+// ============================================================================
+// 2. THE STANDARD REGISTRY EXPORT
+// ============================================================================
 // The execution engine matches AST node types to this dictionary 
 // to resolve the pure mathematical logic required for evaluation.
 

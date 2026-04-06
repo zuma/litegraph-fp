@@ -2,9 +2,9 @@ import { GraphState, ExecutionState } from './src/types.js';
 import { evaluateGraph } from './src/engine.js';
 import { StandardNodes } from './src/registry.js';
 
-// ----------------------------------------------------
-// MARS-GRADE RESILIENCE TEST
-// ----------------------------------------------------
+// ============================================================================
+// 1. MOCK DATA & FIXTURES
+// ============================================================================
 // Node A / B / C / D run the standard math sequence.
 // Node E is a rogue node designed to HANG FOREVER.
 // Our engine must evaluate A B C D perfectly, isolate E, kill it, and log the error!
@@ -23,6 +23,10 @@ const mockGraph: GraphState = {
         { id: 'edge3', sourceNodeId: 'nodeC', sourcePinId: 'out', targetNodeId: 'nodeD', targetPinId: 'a' }
     ]
 };
+
+// ============================================================================
+// 2. MARS-GRADE RESILIENCE TEST ENGINE
+// ============================================================================
 
 async function executeBulletproofTest() {
     console.log("🚀 Booting Mars-Grade Functional Engine...");

@@ -4,6 +4,10 @@
  * No methods, no classes, no mutations.
  */
 
+// ============================================================================
+// 1. GRAPH ABSTRACT SYNTAX TREE (AST)
+// ============================================================================
+
 export type NodeID = string;
 
 /**
@@ -45,11 +49,9 @@ export interface GraphState {
     readonly edges: ReadonlyArray<Edge>;
 }
 
-/**
- * The temporary dictionary holding the propagated values 
- * passing through cables during execution.
- */
-export type ExecutionState = Readonly<Record<string, unknown>>;
+// ============================================================================
+// 2. EXECUTION & STATE DICTIONARIES
+// ============================================================================
 
 /**
  * Configuration options for the graph evaluation engine.
@@ -60,6 +62,12 @@ export interface EngineConfig {
 }
 
 /**
+ * The temporary dictionary holding the propagated values 
+ * passing through cables during execution.
+ */
+export type ExecutionState = Readonly<Record<string, unknown>>;
+
+/**
  * Payload returned by the engine after a full topological evaluation.
  * Contains the frozen state, alongside a strict dictionary of nodes that critically failed.
  */
@@ -67,6 +75,10 @@ export interface ExecutionResult {
     readonly state: ExecutionState;
     readonly errors: Readonly<Record<NodeID, string>>;
 }
+
+// ============================================================================
+// 3. NODE LOGIC REGISTRY
+// ============================================================================
 
 /**
  * A pure Node execution function signature.
