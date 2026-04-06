@@ -64,9 +64,9 @@ export const evaluateGraph = async (
     // Helper: Evaluates a single, mathematically pure node with Mars-Grade Resilience
     const evaluateNode = async (nodeId: NodeID) => {
         const node = graph.nodes[nodeId];
-        const pureLogic = registry[node.type];
+        const nodeDef = registry[node.type];
         
-        if (!pureLogic) {
+        if (!nodeDef) {
             throw new Error(`Engine Error: Missing functional logic for node type "${node.type}"`);
         }
 
@@ -94,7 +94,7 @@ export const evaluateGraph = async (
         //   2. controller.abort() signals the node function to clean up its own
         //      internal async work (timers, fetch requests, etc.)
         const controller = new AbortController();
-        const executionPromise = pureLogic(resolvedInputs, node.params, controller.signal);
+        const executionPromise = nodeDef.execute(resolvedInputs, node.params, controller.signal);
         const timeoutMs = config.nodeTimeoutMs ?? 5000;
         
         let timerId: ReturnType<typeof setTimeout>;

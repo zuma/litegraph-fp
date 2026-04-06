@@ -55,3 +55,7 @@ The UI is not just a canvas renderer — it is an entire domain of **human-facin
 ### 11. Named Snapshots (User Checkpoints)
 *   **Concept:** Like undo, but explicitly user-triggered and labeled. "Save this graph state as 'before refactor'" so you can return to it by name, not just by linear history position.
 *   **Workflow:** A `Map<string, GraphState>` of named snapshots. The user assigns a label, the current `GraphState` is frozen and stored. Restoring a snapshot replaces the current state and optionally pushes the replaced state onto the undo stack.
+
+### 12. Programmable Custom Script Nodes
+*   **Concept:** Like Autodesk Dynamo's "Execute Python" node, allow users to drop a node on the canvas where they can type dynamic Python or JS code directly to map inputs to outputs, providing infinite flexibility without modifying the core TypeScript registry.
+*   **Workflow:** For browsers, use a WebAssembly layer like `Pyodide` to instantiate a safe Python interpreter context. For JS, evaluate user strings in an isolated context (like QuickJS). The compiler injects the node `inputs` into the environment as global variables and reads back the `out` variables when the script finishes. Delegated to a future state due to the heavy dependency size and sandboxing requirements involved in ensuring pure-execution security.

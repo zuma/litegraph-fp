@@ -15,4 +15,4 @@ export const StandardNodes: NodeRegistry = Object.freeze({
     'logic/not': invertBoolean,
     'system/delay': delaySim,
     'system/log': logToConsole
-});
+} as any);

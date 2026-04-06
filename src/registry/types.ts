@@ -18,6 +18,27 @@ export type NodeFunction = (
 ) => Promise<Record<string, unknown>> | Record<string, unknown>;
 
 /**
- * A registry linking node typestrings (e.g., "math/add") to pure NodeFunctions.
+ * Metadata surrounding a node executor, placing it within the strict ecosystem taxonomy.
  */
-export type NodeRegistry = Readonly<Record<string, NodeFunction>>;
+export interface NodeDefinition {
+    /** The top-level tier (e.g., "core", "io", "cad", "custom") */
+    namespace: string;
+    /** The specific domain group (e.g., "math", "logic", "scripting") */
+    category: string;
+    /** The actual node name (e.g., "add", "python_script") */
+    name: string;
+    /** Describes what the node does */
+    description?: string;
+    
+    /** Static analysis arrays defining required input keys and provided output keys */
+    requires: string[];
+    provides: string[];
+
+    /** The pure execution block */
+    execute: NodeFunction;
+}
+
+/**
+ * A registry linking node identifiers (e.g., "core/math/add") to full NodeDefinitions.
+ */
+export type NodeRegistry = Readonly<Record<string, NodeDefinition>>;
