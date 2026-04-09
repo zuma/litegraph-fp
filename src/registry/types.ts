@@ -17,6 +17,8 @@ export type NodeFunction = (
     signal?: AbortSignal
 ) => Promise<Record<string, unknown>> | Record<string, unknown>;
 
+import { PinType } from '../core/ast.js';
+
 /**
  * Metadata surrounding a node executor, placing it within the strict ecosystem taxonomy.
  */
@@ -30,9 +32,10 @@ export interface NodeDefinition {
     /** Describes what the node does */
     description?: string;
     
-    /** Static analysis arrays defining required input keys and provided output keys */
-    requires: string[];
-    provides: string[];
+    /** Static analysis mappings defining required input keys and their types */
+    requires: Record<string, PinType>;
+    /** Static analysis mappings defining provided output keys and their types */
+    provides: Record<string, PinType>;
 
     /** The pure execution block */
     execute: NodeFunction;

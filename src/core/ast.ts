@@ -5,6 +5,20 @@
 export type NodeID = string;
 
 /**
+ * Definition for a Tensor Type.
+ */
+export interface TensorType {
+    type: 'tensor';
+    dtype: string;
+    shape: number[];
+}
+
+/**
+ * Valid pin data schemas.
+ */
+export type PinType = 'any' | 'number' | 'string' | 'boolean' | TensorType | string;
+
+/**
  * Represents a directed link between an output of one node to the input of another.
  */
 export interface Edge {

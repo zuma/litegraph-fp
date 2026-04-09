@@ -4,8 +4,8 @@ export const delaySim: NodeDefinition = {
     namespace: 'system',
     category: 'simulation',
     name: 'delay',
-    requires: ['a'],
-    provides: ['out'],
+    requires: { a: 'any' },
+    provides: { out: 'any' },
     execute: async (inputs, params, signal?) => {
         const delayMs = (params.ms as number) ?? 1000;
         const a = inputs.a;
@@ -26,8 +26,8 @@ export const logToConsole: NodeDefinition = {
     namespace: 'system',
     category: 'debug',
     name: 'log',
-    requires: ['msg'],
-    provides: ['out'],
+    requires: { msg: 'any' },
+    provides: { out: 'any' },
     execute: (inputs) => {
         const message = inputs.msg ?? "undefined";
         return {
@@ -43,8 +43,8 @@ export const state: NodeDefinition = {
     namespace: 'system',
     category: 'state',
     name: 'state',
-    requires: ['nextValue'],
-    provides: ['value'],
+    requires: { nextValue: 'any' },
+    provides: { value: 'any' },
     execute: (inputs, params) => {
         // The state node outputs its current 'value'.
         // If no value is provided in inputs (meaning it's the first tick or not set),
