@@ -38,6 +38,13 @@ export const sortTopologically = (graph: GraphState): NodeID[][] => {
         // Safety check if an edge references a deleted node
         if (!nodes[source] || !nodes[target]) return; 
 
+        // CRITICAL: Ignore edges targeting the state node feedback pin (nextValue)
+        // to prevent circular dependency errors. Feedback loops are resolved 
+        // across execution ticks by the engine.
+        if (nodes[target].type === 'system/state' && edge.targetPinId === 'nextValue') {
+            return;
+        }
+
         adjList[source].push(target);
         inDegree[target] += 1;
     });

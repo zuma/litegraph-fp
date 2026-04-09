@@ -8,8 +8,8 @@ export const add: NodeDefinition = {
     requires: ['a', 'b'],
     provides: ['out'],
     execute: (inputs, params) => {
-        const a = (inputs.a as number) ?? 0;
-        const b = (inputs.b as number) ?? 0;
+        const a = (inputs.a ?? params.a ?? 0) as number;
+        const b = (inputs.b ?? params.b ?? 0) as number;
         return { out: a + b };
     }
 };
@@ -22,8 +22,8 @@ export const multiply: NodeDefinition = {
     requires: ['a', 'b'],
     provides: ['out'],
     execute: (inputs, params) => {
-        const a = (inputs.a as number) ?? 1;
-        const b = (inputs.b as number) ?? 1;
+        const a = (inputs.a ?? params.a ?? 1) as number;
+        const b = (inputs.b ?? params.b ?? 1) as number;
         return { out: a * b };
     }
 };
@@ -35,8 +35,8 @@ export const subtract: NodeDefinition = {
     requires: ['a', 'b'],
     provides: ['out'],
     execute: (inputs, params) => {
-        const a = (inputs.a as number) ?? 0;
-        const b = (inputs.b as number) ?? 0;
+        const a = (inputs.a ?? params.a ?? 0) as number;
+        const b = (inputs.b ?? params.b ?? 0) as number;
         return { out: a - b };
     }
 };

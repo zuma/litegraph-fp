@@ -152,6 +152,35 @@ export const evaluateGraph = async (
         }
     }
 
+    // 5. Phase 2: Atomic State Commitment
+    // Iterate through all nodes looking for system/state types to commit nextValue -> value
+    Object.keys(graph.nodes).forEach(nodeId => {
+        const node = graph.nodes[nodeId];
+        if (node.type === 'system/state') {
+            const nextValuePin = 'nextValue';
+            const valueKey = `${nodeId}.value`;
+            
+            // Find edges targeting our nextValue pin
+            const incomingEdges = edgeIndex.get(nodeId) ?? [];
+            const nextValueEdge = incomingEdges.find(e => e.targetPinId === nextValuePin);
+            
+            if (nextValueEdge) {
+                // The value "received" at nextValue is the output value of the source pin
+                const sourceKey = `${nextValueEdge.sourceNodeId}.${nextValueEdge.sourcePinId}`;
+                if (sourceKey in activeState) {
+                    activeState[valueKey] = activeState[sourceKey];
+                }
+            } else {
+                // If NO edge is connected to nextValue, we might want to check if it was 
+                // manually provided in initialInputs, though this is rare for feedback loops.
+                const nextValueKey = `${nodeId}.nextValue`;
+                if (nextValueKey in activeState) {
+                    activeState[valueKey] = activeState[nextValueKey];
+                }
+            }
+        }
+    });
+
     // Return frozen execution outputs, separated error log, and extracted commands
     return {
         state: Object.freeze(activeState) as ExecutionState,

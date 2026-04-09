@@ -1,7 +1,7 @@
 import { NodeRegistry } from './types.js';
 import { add, multiply } from './math.js';
 import { invertBoolean } from './logic.js';
-import { delaySim, logToConsole } from './system.js';
+import { delaySim, logToConsole, state } from './system.js';
 
 // ============================================================================
 // THE STANDARD REGISTRY EXPORT
@@ -14,5 +14,6 @@ export const StandardNodes: NodeRegistry = Object.freeze({
     'math/multiply': multiply,
     'logic/not': invertBoolean,
     'system/delay': delaySim,
-    'system/log': logToConsole
+    'system/log': logToConsole,
+    'system/state': state
 } as any);
