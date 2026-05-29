@@ -742,6 +742,12 @@ body, html {
     user-select: none;
 }
 
+.btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
 .btn-primary {
     background-color: var(--accent-cyan);
     color: var(--bg-obsidian);

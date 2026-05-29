@@ -35,6 +35,13 @@
                 </div>
                 
                 <div class="control-button-group">
+                    <button id="btn-undo" class="btn btn-secondary btn-sm" disabled title="Undo last action (Ctrl+Z)">
+                        ↩️ Undo
+                    </button>
+                    <button id="btn-redo" class="btn btn-secondary btn-sm" disabled title="Redo last action (Ctrl+Y)">
+                        ↪️ Redo
+                    </button>
+                    <div style="width: 1px; height: 20px; background: var(--border-panel); margin: 0 4px;"></div>
                     <button id="btn-run" class="btn btn-primary" title="Execute current graph state">
                         <span class="btn-icon">⚡</span> Run Graph
                     </button>

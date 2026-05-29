@@ -69,6 +69,9 @@ let dragOffsetY = 0;
 let spawnX = 0;
 let spawnY = 0;
 
+// Module-level rendering context object
+let renderingContext: RenderingContext;
+
 // Dynamic Dom elements
 let canvas: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D;
@@ -79,6 +82,91 @@ function screenToWorld(sx: number, sy: number) {
         x: (sx - viewport.x) / viewport.zoom,
         y: (sy - viewport.y) / viewport.zoom
     };
+}
+
+// ============================================================================
+// UNDO/REDO HISTORY STACKS
+// ============================================================================
+
+const undoStack: GraphState[] = [];
+const redoStack: GraphState[] = [];
+
+// Track transient states to prevent flooding the history stack
+let preDragGraphState: GraphState | null = null;
+let dragHasMoved = false;
+let dragNodeOriginalX = 0;
+let dragNodeOriginalY = 0;
+
+let preEditGraphState: GraphState | null = null;
+
+function pushToHistory() {
+    const cloned = JSON.parse(JSON.stringify(currentGraph)) as GraphState;
+    undoStack.push(cloned);
+    
+    // Enforce history threshold size
+    if (undoStack.length > 50) {
+        undoStack.shift();
+    }
+    
+    // Clear redo history when a new structural action occurs
+    redoStack.length = 0;
+    updateUndoRedoButtons();
+}
+
+function undo() {
+    if (undoStack.length === 0) return;
+    
+    const currentCloned = JSON.parse(JSON.stringify(currentGraph)) as GraphState;
+    redoStack.push(currentCloned);
+
+    const prev = undoStack.pop()!;
+    currentGraph = prev;
+
+    // Deselect if node no longer exists in history
+    if (selectedNodeId && !currentGraph.nodes[selectedNodeId]) {
+        selectedNodeId = null;
+    }
+    syncContextState();
+
+    logToTerminal(`Undo action performed`, 'system-msg');
+    updateUndoRedoButtons();
+    updateInspector();
+    runExecutionPipeline().catch(console.error);
+}
+
+function redo() {
+    if (redoStack.length === 0) return;
+
+    const currentCloned = JSON.parse(JSON.stringify(currentGraph)) as GraphState;
+    undoStack.push(currentCloned);
+
+    const next = redoStack.pop()!;
+    currentGraph = next;
+
+    // Deselect if node no longer exists in history
+    if (selectedNodeId && !currentGraph.nodes[selectedNodeId]) {
+        selectedNodeId = null;
+    }
+    syncContextState();
+
+    logToTerminal(`Redo action performed`, 'system-msg');
+    updateUndoRedoButtons();
+    updateInspector();
+    runExecutionPipeline().catch(console.error);
+}
+
+function updateUndoRedoButtons() {
+    const btnUndo = document.getElementById('btn-undo') as HTMLButtonElement;
+    const btnRedo = document.getElementById('btn-redo') as HTMLButtonElement;
+    if (btnUndo) btnUndo.disabled = undoStack.length === 0;
+    if (btnRedo) btnRedo.disabled = redoStack.length === 0;
+}
+
+function syncContextState() {
+    if (renderingContext) {
+        renderingContext.selectedNodeId = selectedNodeId;
+        renderingContext.nodeErrors = nodeErrors;
+    }
 }
 
 // ============================================================================
@@ -154,6 +242,7 @@ async function runExecutionPipeline() {
     // Save state
     latestExecutionState = result.state;
     nodeErrors = { ...result.errors };
+    syncContextState();
 
     // Update controls UI
     if (timeValue) {
@@ -283,7 +372,9 @@ function updateInspector() {
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
                     checkbox.checked = !!currentVal;
-                    checkbox.addEventListener('change', (e) => {
+                    checkbox.addEventListener('change', () => {
+                        // Capture snapshot on toggle action
+                        pushToHistory();
                         updateNodeParam(node.id, pinId, checkbox.checked);
                     });
                     checkLabel.appendChild(checkbox);
@@ -296,7 +387,21 @@ function updateInspector() {
                     textInput.value = currentVal.toString();
                     textInput.autocomplete = 'off';
                     
+                    // Capture snapshot once upon focusing the input
+                    textInput.addEventListener('focus', () => {
+                        preEditGraphState = JSON.parse(JSON.stringify(currentGraph));
+                    });
+
                     textInput.addEventListener('input', () => {
+                        // If we have a pending pre-edit snapshot, push it to history before saving the first keystroke
+                        if (preEditGraphState) {
+                            undoStack.push(preEditGraphState);
+                            if (undoStack.length > 50) undoStack.shift();
+                            redoStack.length = 0;
+                            updateUndoRedoButtons();
+                            preEditGraphState = null; // Only push once per focus session
+                        }
+
                         let parsedVal: any = textInput.value;
                         if (pinType === 'number') {
                             parsedVal = parseFloat(textInput.value);
@@ -402,7 +507,7 @@ window.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', resizeCanvas);
 
     // Initialize rendering context object
-    const renderingContext: RenderingContext = {
+    renderingContext = {
         canvas,
         ctx,
         viewport,
@@ -419,6 +524,27 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Trigger initial run
     runExecutionPipeline().catch(console.error);
+
+    // ========================================================================
+    // KEYBOARD SHORTCUTS BINDING (Undo / Redo Listener)
+    // ========================================================================
+    window.addEventListener('keydown', (e) => {
+        const isCtrlCmd = e.ctrlKey || e.metaKey;
+        
+        if (isCtrlCmd) {
+            if (e.key === 'z' || e.key === 'Z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo(); // Ctrl+Shift+Z = Redo
+                } else {
+                    undo(); // Ctrl+Z = Undo
+                }
+            } else if (e.key === 'y' || e.key === 'Y') {
+                e.preventDefault();
+                redo(); // Ctrl+Y = Redo
+            }
+        }
+    });
 
     // ========================================================================
     // MOUSE INTERACTION EVENT LISTENERS
@@ -510,6 +636,12 @@ window.addEventListener('DOMContentLoaded', () => {
             dragOffsetX = worldPos.x - (node.ui?.x ?? 0);
             dragOffsetY = worldPos.y - (node.ui?.y ?? 0);
             
+            // Record pre-drag details to handle undo cleanly upon mouseup
+            preDragGraphState = JSON.parse(JSON.stringify(currentGraph));
+            dragHasMoved = false;
+            dragNodeOriginalX = node.ui?.x ?? 0;
+            dragNodeOriginalY = node.ui?.y ?? 0;
+            
             // Hide node adder if showing
             document.getElementById('node-adder')?.classList.add('hidden');
             updateInspector();
@@ -545,10 +677,18 @@ window.addEventListener('DOMContentLoaded', () => {
         // B. Handle node moving
         else if (draggedNodeId && currentGraph.nodes[draggedNodeId]) {
             const node = currentGraph.nodes[draggedNodeId];
+            const newX = Math.round(worldPos.x - dragOffsetX);
+            const newY = Math.round(worldPos.y - dragOffsetY);
+            
+            // Check if node has actually shifted position
+            if (newX !== dragNodeOriginalX || newY !== dragNodeOriginalY) {
+                dragHasMoved = true;
+            }
+
             const updatedUi = {
                 ...(node.ui ?? { x: 0, y: 0 }),
-                x: Math.round(worldPos.x - dragOffsetX),
-                y: Math.round(worldPos.y - dragOffsetY)
+                x: newX,
+                y: newY
             };
             currentGraph = {
                 ...currentGraph,
@@ -618,7 +758,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     canvas.addEventListener('mouseup', (e) => {
-        // Resolve Edge linkages on connection release
+        // A. Resolve Edge linkages on connection release
         if (renderingContext.draggingConnection) {
             const drag = renderingContext.draggingConnection;
             
@@ -642,6 +782,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
                         // 1. Perform strict schema type-checking validation
                         if (isCompatible(sourceType, targetType)) {
+                            // Capture snapshot before modifying graph edges
+                            pushToHistory();
+
                             // Clear any existing connection leading to targetPin (since inputs can have only 1 source)
                             const cleanedEdges = currentGraph.edges.filter(
                                 edge => !(edge.targetNodeId === targetNodeId && edge.targetPinId === targetPinId)
@@ -669,6 +812,20 @@ window.addEventListener('DOMContentLoaded', () => {
                 }
             }
             renderingContext.draggingConnection = null;
+        }
+
+        // B. Resolve Node Drag completion
+        if (draggedNodeId) {
+            // Push history snapshot ONLY if the node was actually moved to avoid empty history pushes
+            if (preDragGraphState && dragHasMoved) {
+                undoStack.push(preDragGraphState);
+                if (undoStack.length > 50) undoStack.shift();
+                redoStack.length = 0;
+                updateUndoRedoButtons();
+                triggerAutoRun();
+            }
+            preDragGraphState = null;
+            dragHasMoved = false;
         }
 
         draggedNodeId = null;
@@ -733,6 +890,10 @@ window.addEventListener('DOMContentLoaded', () => {
         renderingContext.viewport = { ...viewport };
     });
 
+    // Undo/Redo Button clicks
+    document.getElementById('btn-undo')?.addEventListener('click', undo);
+    document.getElementById('btn-redo')?.addEventListener('click', redo);
+
     // ========================================================================
     // SIDEBAR HOOKS
     // ========================================================================
@@ -742,6 +903,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
         const idToDelete = selectedNodeId;
         
+        // Capture snapshot before deleting node
+        pushToHistory();
+
         // Remove node
         const updatedNodes = { ...currentGraph.nodes };
         delete updatedNodes[idToDelete];
@@ -847,6 +1011,9 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     function addNewNode(type: string) {
+        // Capture snapshot before spawning node
+        pushToHistory();
+
         const baseId = type.split('/')[1] || 'node';
         const uniqueId = `${baseId}_${Date.now().toString().slice(-4)}`;
         
@@ -885,7 +1052,7 @@ window.addEventListener('DOMContentLoaded', () => {
         logToTerminal(`Spawned node ${uniqueId} of type '${type}'`, 'system-msg');
         
         selectedNodeId = uniqueId;
-        renderingContext.selectedNodeId = uniqueId;
+        syncContextState();
         
         updateInspector();
         triggerAutoRun();
