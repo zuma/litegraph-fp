@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx test.ts"
+    "test": "tsx test.ts",
+    "build": "tsc",
+    "watch": "tsc -w",
+    "dev": "node scripts/dev_server.js"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

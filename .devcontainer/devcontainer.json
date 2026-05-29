@@ -1,6 +1,7 @@
 {
     "name": "litegraph-fp",
     "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bullseye",
+    "forwardPorts": [3000],
     "customizations": {
         "vscode": {
             "settings": {
