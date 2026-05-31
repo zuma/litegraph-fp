@@ -70,6 +70,8 @@ let dragOffsetY = 0;
 
 let spawnX = 0;
 let spawnY = 0;
+let isShiftPressed = false;
+
 
 // Module-level rendering context object
 let renderingContext: RenderingContext;
@@ -173,6 +175,52 @@ function syncContextState() {
         renderingContext.nodeErrors = nodeErrors;
     }
 }
+
+function updateCursor() {
+    if (!canvas) return;
+
+    // 1. Connection drag
+    if (renderingContext && renderingContext.draggingConnection) {
+        canvas.style.cursor = 'cell';
+        return;
+    }
+
+    // 2. Node drag
+    if (draggedNodeId) {
+        canvas.style.cursor = 'grabbing';
+        return;
+    }
+
+    // 3. Canvas panning
+    if (isPanning) {
+        canvas.style.cursor = 'grabbing';
+        return;
+    }
+
+    // 4. Selection box active or Shift is held down (ready for selection box)
+    const isSelecting = (renderingContext && renderingContext.selectionBox && renderingContext.selectionBox.active) || isShiftPressed;
+    if (isSelecting) {
+        // AutoCAD-style custom crosshair with a small selection indicator
+        canvas.style.cursor = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><line x1='16' y1='4' x2='16' y2='28' stroke='%23888888' stroke-width='1'/><line x1='4' y1='16' x2='28' y2='16' stroke='%23888888' stroke-width='1'/><rect x='13' y='13' width='6' height='6' fill='none' stroke='%23888888' stroke-width='1'/><rect x='20' y='20' width='8' height='6' fill='rgba(0,120,255,0.25)' stroke='%230078ff' stroke-width='1' stroke-dasharray='2,2'/></svg>\") 16 16, crosshair";
+        return;
+    }
+
+    // 5. Hovering a pin
+    if (hoveredPin) {
+        canvas.style.cursor = 'pointer';
+        return;
+    }
+
+    // 6. Hovering a node (ready to drag/select)
+    if (hoveredNodeId) {
+        canvas.style.cursor = 'grab';
+        return;
+    }
+
+    // 7. Hovering background (ready to pan)
+    canvas.style.cursor = 'grab';
+}
+
 
 // ============================================================================
 // CANVAS PIN POSITION LOOKUPS
@@ -529,6 +577,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // Instantiate and start renderer
     const renderer = createRenderer(renderingContext, () => currentGraph, StandardNodes);
     renderer.start();
+    updateCursor();
 
     // Sidebar Collapsible Management
     const sidebar = document.getElementById('sidebar');
@@ -621,6 +670,11 @@ window.addEventListener('DOMContentLoaded', () => {
     // KEYBOARD SHORTCUTS BINDING (Undo / Redo / Delete Listener)
     // ========================================================================
     window.addEventListener('keydown', (e) => {
+        if (e.key === 'Shift') {
+            isShiftPressed = true;
+            updateCursor();
+        }
+
         const isCtrlCmd = e.ctrlKey || e.metaKey;
         
         if (isCtrlCmd) {
@@ -651,6 +705,13 @@ window.addEventListener('DOMContentLoaded', () => {
                     deleteSelectedNodes();
                 }
             }
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'Shift') {
+            isShiftPressed = false;
+            updateCursor();
         }
     });
 
@@ -723,7 +784,10 @@ window.addEventListener('DOMContentLoaded', () => {
             if (pinClicked) break;
         }
 
-        if (pinClicked) return;
+        if (pinClicked) {
+            updateCursor();
+            return;
+        }
 
         // 2. Check if clicked on a node body
         let clickedNodeId: string | null = null;
@@ -793,6 +857,7 @@ window.addEventListener('DOMContentLoaded', () => {
             // Hide node adder if showing
             document.getElementById('node-adder')?.classList.add('hidden');
             updateInspector();
+            updateCursor();
             return;
         }
 
@@ -822,6 +887,7 @@ window.addEventListener('DOMContentLoaded', () => {
             viewportStartX = viewport.x;
             viewportStartY = viewport.y;
         }
+        updateCursor();
     });
 
     canvas.addEventListener('mousemove', (e) => {
@@ -941,6 +1007,7 @@ window.addEventListener('DOMContentLoaded', () => {
         
         renderingContext.hoveredNodeId = hoveredNodeId;
         renderingContext.hoveredPin = hoveredPin;
+        updateCursor();
     });
 
     canvas.addEventListener('mouseup', (e) => {
@@ -1084,6 +1151,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
         draggedNodeId = null;
         isPanning = false;
+        updateCursor();
     });
 
     // Zooming handler

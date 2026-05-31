@@ -62,3 +62,8 @@ To allow precise, intricate group selections, holding down the `Shift` key while
 * When multiple nodes are selected, dragging any selected node offsets all other selected nodes by the same relative delta (maintaining their spacing).
 * Pressing `Delete` or `Backspace` (outside input fields) deletes all selected nodes and prunes all of their associated incoming/outgoing edges.
 
+### 4. Interactive Cursor States
+* **Hovering/Panning**: Custom `grab` cursor indicates the canvas is ready to be panned. Clicking and dragging background transitions dynamically to `grabbing`.
+* **Selection Crosshair**: Pressing or holding `Shift` immediately swaps the cursor to a custom **AutoCAD-style crosshair** (`32x32` SVG data URI) complete with a central pickbox and a miniature dotted selection box indicator in the bottom-right quadrant. Hotspot is set to the exact crosshair intersection point `(16, 16)`.
+
+
