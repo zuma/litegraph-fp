@@ -50,6 +50,8 @@ let currentGraph: GraphState = {
 
 let viewport: Viewport = { x: 0, y: 0, zoom: 1.0 };
 let selectedNodeId: string | null = null;
+let selectedNodeIds = new Set<string>();
+
 let hoveredNodeId: string | null = null;
 let hoveredPin: { nodeId: string; pinId: string; isInput: boolean } | null = null;
 let draggingConnection: DraggingConnection | null = null;
@@ -96,6 +98,8 @@ let preDragGraphState: GraphState | null = null;
 let dragHasMoved = false;
 let dragNodeOriginalX = 0;
 let dragNodeOriginalY = 0;
+let dragNodesOriginalPositions = new Map<string, { x: number, y: number }>();
+
 
 let preEditGraphState: GraphState | null = null;
 
@@ -165,6 +169,7 @@ function updateUndoRedoButtons() {
 function syncContextState() {
     if (renderingContext) {
         renderingContext.selectedNodeId = selectedNodeId;
+        renderingContext.selectedNodeIds = selectedNodeIds;
         renderingContext.nodeErrors = nodeErrors;
     }
 }
@@ -174,16 +179,16 @@ function syncContextState() {
 // ============================================================================
 // Import layout constants from canvas.js
 const NODE_WIDTH = 180;
-const ROW_HEIGHT = 24;      // Changed to highly composite multiple of 3
-const HEADER_HEIGHT = 36;    // Changed to highly composite multiple of 3
-const GRID_SIZE = 60;        // Grid spacing for snapping
+const ROW_HEIGHT = 15;      // Spaced by 15px (divisor of 30 and 60) for compact connection points
+const HEADER_HEIGHT = 30;    // Changed to align input/output pins on 60px grid
+const GRID_SIZE = 30;        // Grid spacing for snapping (half the 60px visible grid)
 
 function getNodeHeight(node: NodeState): number {
     const nodeDef = StandardNodes[node.type];
-    if (!nodeDef) return 72; // Default to 1-row node height (36 + 24 + 12)
+    if (!nodeDef) return 75; // Default to 1-row node height (30 + 15 + 30)
     const numInputs = Object.keys(nodeDef.requires).length;
     const numOutputs = Object.keys(nodeDef.provides).length;
-    return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + 12;
+    return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + 30; // 30px bottom padding
 }
 
 function getInputPinCoords(node: NodeState, pinId: string): { x: number, y: number } {
@@ -194,7 +199,7 @@ function getInputPinCoords(node: NodeState, pinId: string): { x: number, y: numb
     const ny = node.ui?.y ?? 0;
     return {
         x: nx,
-        y: ny + HEADER_HEIGHT + 12 + Math.max(0, idx) * ROW_HEIGHT
+        y: ny + HEADER_HEIGHT + 30 + Math.max(0, idx) * ROW_HEIGHT // Pins placed at ny + 60 + idx * 60 (grid aligned)
     };
 }
 
@@ -207,7 +212,7 @@ function getOutputPinCoords(node: NodeState, pinId: string): { x: number, y: num
     const nw = node.ui?.width ?? NODE_WIDTH;
     return {
         x: nx + nw,
-        y: ny + HEADER_HEIGHT + 12 + Math.max(0, idx) * ROW_HEIGHT
+        y: ny + HEADER_HEIGHT + 30 + Math.max(0, idx) * ROW_HEIGHT // Pins placed at ny + 60 + idx * 60 (grid aligned)
     };
 }
 
@@ -513,10 +518,12 @@ window.addEventListener('DOMContentLoaded', () => {
         ctx,
         viewport,
         selectedNodeId,
+        selectedNodeIds,
         hoveredNodeId,
         hoveredPin,
         draggingConnection,
-        nodeErrors
+        nodeErrors,
+        selectionBox: null
     };
 
     // Instantiate and start renderer
@@ -576,8 +583,42 @@ window.addEventListener('DOMContentLoaded', () => {
     // Trigger initial run
     runExecutionPipeline().catch(console.error);
 
+    function deleteSelectedNodes() {
+        const idsToDelete = new Set<string>(selectedNodeIds);
+        if (selectedNodeId) {
+            idsToDelete.add(selectedNodeId);
+        }
+        
+        if (idsToDelete.size === 0) return;
+        
+        pushToHistory();
+
+        const updatedNodes = { ...currentGraph.nodes };
+        idsToDelete.forEach(id => {
+            delete updatedNodes[id];
+        });
+
+        const updatedEdges = currentGraph.edges.filter(
+            e => !idsToDelete.has(e.sourceNodeId) && !idsToDelete.has(e.targetNodeId)
+        );
+
+        currentGraph = {
+            nodes: updatedNodes,
+            edges: updatedEdges
+        };
+
+        selectedNodeId = null;
+        selectedNodeIds.clear();
+        syncContextState();
+        
+        logToTerminal(`Deleted ${idsToDelete.size} selected node(s)`, 'system-msg');
+        
+        updateInspector();
+        triggerAutoRun();
+    }
+
     // ========================================================================
-    // KEYBOARD SHORTCUTS BINDING (Undo / Redo Listener)
+    // KEYBOARD SHORTCUTS BINDING (Undo / Redo / Delete Listener)
     // ========================================================================
     window.addEventListener('keydown', (e) => {
         const isCtrlCmd = e.ctrlKey || e.metaKey;
@@ -596,6 +637,19 @@ window.addEventListener('DOMContentLoaded', () => {
             } else if (e.key === 'b' || e.key === 'B') {
                 e.preventDefault();
                 toggleSidebar();
+            }
+        } else {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                // Ignore if user is editing inside a form field or textbox
+                const activeEl = document.activeElement;
+                if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.getAttribute('contenteditable') === 'true')) {
+                    return;
+                }
+                const idsToDeleteCount = selectedNodeIds.size + (selectedNodeId && !selectedNodeIds.has(selectedNodeId) ? 1 : 0);
+                if (idsToDeleteCount > 0) {
+                    e.preventDefault();
+                    deleteSelectedNodes();
+                }
             }
         }
     });
@@ -688,13 +742,47 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         if (clickedNodeId) {
-            selectedNodeId = clickedNodeId;
-            renderingContext.selectedNodeId = selectedNodeId;
+            // Toggle or set selection
+            if (e.shiftKey) {
+                if (selectedNodeIds.has(clickedNodeId)) {
+                    selectedNodeIds.delete(clickedNodeId);
+                    if (selectedNodeId === clickedNodeId) {
+                        selectedNodeId = selectedNodeIds.size > 0 ? Array.from(selectedNodeIds)[0] : null;
+                    }
+                } else {
+                    selectedNodeIds.add(clickedNodeId);
+                    selectedNodeId = clickedNodeId; // primary selection
+                }
+            } else {
+                // If not holding shift, and the node is NOT already in selectedNodeIds,
+                // we set this node as the sole selection.
+                // If it IS already selected, we keep the selection so all selected nodes can be dragged together.
+                if (!selectedNodeIds.has(clickedNodeId)) {
+                    selectedNodeIds.clear();
+                    selectedNodeIds.add(clickedNodeId);
+                    selectedNodeId = clickedNodeId;
+                }
+            }
+            syncContextState();
+            
             draggedNodeId = clickedNodeId;
             
             const node = currentGraph.nodes[clickedNodeId];
             dragOffsetX = worldPos.x - (node.ui?.x ?? 0);
             dragOffsetY = worldPos.y - (node.ui?.y ?? 0);
+            
+            // Save starting positions of all selected nodes for relative drag movement
+            dragNodesOriginalPositions.clear();
+            selectedNodeIds.forEach(id => {
+                const n = currentGraph.nodes[id];
+                if (n && n.ui) {
+                    dragNodesOriginalPositions.set(id, { x: n.ui.x, y: n.ui.y });
+                }
+            });
+            // Ensure the clicked node itself is in original positions
+            if (node && node.ui) {
+                dragNodesOriginalPositions.set(clickedNodeId, { x: node.ui.x, y: node.ui.y });
+            }
             
             // Record pre-drag details to handle undo cleanly upon mouseup
             preDragGraphState = JSON.parse(JSON.stringify(currentGraph));
@@ -708,18 +796,32 @@ window.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 3. Fallback: Clicked empty canvas space. Start panning or deselect.
-        selectedNodeId = null;
-        renderingContext.selectedNodeId = null;
-        updateInspector();
-
+        // 3. Fallback: Clicked empty canvas space. Start panning or selection box.
         document.getElementById('node-adder')?.classList.add('hidden');
 
-        isPanning = true;
-        panStartX = e.clientX;
-        panStartY = e.clientY;
-        viewportStartX = viewport.x;
-        viewportStartY = viewport.y;
+        if (e.shiftKey) {
+            // Start Selection Box (AutoCAD-style crossing/enclosing selection window)
+            isPanning = false;
+            renderingContext.selectionBox = {
+                startX: worldPos.x,
+                startY: worldPos.y,
+                currentX: worldPos.x,
+                currentY: worldPos.y,
+                active: true
+            };
+        } else {
+            // Panning: deselect all
+            selectedNodeId = null;
+            selectedNodeIds.clear();
+            syncContextState();
+            updateInspector();
+
+            isPanning = true;
+            panStartX = e.clientX;
+            panStartY = e.clientY;
+            viewportStartX = viewport.x;
+            viewportStartY = viewport.y;
+        }
     });
 
     canvas.addEventListener('mousemove', (e) => {
@@ -734,9 +836,11 @@ window.addEventListener('DOMContentLoaded', () => {
             renderingContext.draggingConnection.cursorY = worldPos.y;
         }
 
-        // B. Handle node moving
+        // B. Handle node moving (potentially multiple nodes together)
         else if (draggedNodeId && currentGraph.nodes[draggedNodeId]) {
-            const node = currentGraph.nodes[draggedNodeId];
+            const mainNode = currentGraph.nodes[draggedNodeId];
+            const origPos = dragNodesOriginalPositions.get(draggedNodeId) || { x: mainNode.ui?.x ?? 0, y: mainNode.ui?.y ?? 0 };
+
             let newX = Math.round(worldPos.x - dragOffsetX);
             let newY = Math.round(worldPos.y - dragOffsetY);
             
@@ -751,21 +855,37 @@ window.addEventListener('DOMContentLoaded', () => {
                 dragHasMoved = true;
             }
 
-            const updatedUi = {
-                ...(node.ui ?? { x: 0, y: 0 }),
-                x: newX,
-                y: newY
-            };
+            const dx = newX - origPos.x;
+            const dy = newY - origPos.y;
+
+            let updatedNodes = { ...currentGraph.nodes };
+            dragNodesOriginalPositions.forEach((pos, id) => {
+                const node = currentGraph.nodes[id];
+                if (node) {
+                    updatedNodes[id] = {
+                        ...node,
+                        ui: {
+                            ...(node.ui ?? { x: 0, y: 0 }),
+                            x: pos.x + dx,
+                            y: pos.y + dy
+                        }
+                    };
+                }
+            });
+
             currentGraph = {
                 ...currentGraph,
-                nodes: {
-                    ...currentGraph.nodes,
-                    [draggedNodeId]: { ...node, ui: updatedUi }
-                }
+                nodes: updatedNodes
             };
         }
 
-        // C. Handle canvas panning
+        // C. Handle selection box resizing
+        else if (renderingContext.selectionBox && renderingContext.selectionBox.active) {
+            renderingContext.selectionBox.currentX = worldPos.x;
+            renderingContext.selectionBox.currentY = worldPos.y;
+        }
+
+        // D. Handle canvas panning
         else if (isPanning) {
             const dx = e.clientX - panStartX;
             const dy = e.clientY - panStartY;
@@ -882,6 +1002,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
         // B. Resolve Node Drag completion
         if (draggedNodeId) {
+            // Click-without-drag selection resolution
+            if (!dragHasMoved && !e.shiftKey) {
+                selectedNodeIds.clear();
+                selectedNodeIds.add(draggedNodeId);
+                selectedNodeId = draggedNodeId;
+                syncContextState();
+                updateInspector();
+            }
+
             // Push history snapshot ONLY if the node was actually moved to avoid empty history pushes
             if (preDragGraphState && dragHasMoved) {
                 undoStack.push(preDragGraphState);
@@ -892,6 +1021,65 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             preDragGraphState = null;
             dragHasMoved = false;
+        }
+
+        // C. Resolve Selection Box completion
+        if (renderingContext.selectionBox && renderingContext.selectionBox.active) {
+            const box = renderingContext.selectionBox;
+            const bx = Math.min(box.startX, box.currentX);
+            const by = Math.min(box.startY, box.currentY);
+            const bw = Math.abs(box.currentX - box.startX);
+            const bh = Math.abs(box.currentY - box.startY);
+            const isEnclosing = box.currentX >= box.startX;
+
+            if (bw >= 2 || bh >= 2) {
+                const selectedFromBox: string[] = [];
+
+                for (const nodeId in currentGraph.nodes) {
+                    const node = currentGraph.nodes[nodeId];
+                    const nx = node.ui?.x ?? 0;
+                    const ny = node.ui?.y ?? 0;
+                    const nw = node.ui?.width ?? NODE_WIDTH;
+                    const nh = getNodeHeight(node);
+
+                    if (isEnclosing) {
+                        // Enclosing Window (left-to-right): Node must be fully enclosed
+                        if (nx >= bx && (nx + nw) <= (bx + bw) && ny >= by && (ny + nh) <= (by + bh)) {
+                            selectedFromBox.push(nodeId);
+                        }
+                    } else {
+                        // Crossing Window (right-to-left): Node must intersect/touch
+                        if (nx <= (bx + bw) && (nx + nw) >= bx && ny <= (by + bh) && (ny + nh) >= by) {
+                            selectedFromBox.push(nodeId);
+                        }
+                    }
+                }
+
+                // If Ctrl/Cmd is held down, toggle/add to existing selection.
+                // Otherwise, replace the selection.
+                if (e.ctrlKey || e.metaKey) {
+                    selectedFromBox.forEach(id => {
+                        if (selectedNodeIds.has(id)) {
+                            selectedNodeIds.delete(id);
+                        } else {
+                            selectedNodeIds.add(id);
+                        }
+                    });
+                } else {
+                    selectedNodeIds.clear();
+                    selectedFromBox.forEach(id => selectedNodeIds.add(id));
+                }
+
+                selectedNodeId = selectedNodeIds.size > 0 ? Array.from(selectedNodeIds)[0] : null;
+            } else {
+                // Click on empty space: clear selection
+                selectedNodeIds.clear();
+                selectedNodeId = null;
+            }
+
+            renderingContext.selectionBox = null;
+            syncContextState();
+            updateInspector();
         }
 
         draggedNodeId = null;
@@ -1094,34 +1282,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // ========================================================================
 
     document.getElementById('btn-delete-node')?.addEventListener('click', () => {
-        if (!selectedNodeId) return;
-
-        const idToDelete = selectedNodeId;
-        
-        // Capture snapshot before deleting node
-        pushToHistory();
-
-        // Remove node
-        const updatedNodes = { ...currentGraph.nodes };
-        delete updatedNodes[idToDelete];
-
-        // Remove linked edges
-        const updatedEdges = currentGraph.edges.filter(
-            e => e.sourceNodeId !== idToDelete && e.targetNodeId !== idToDelete
-        );
-
-        currentGraph = {
-            nodes: updatedNodes,
-            edges: updatedEdges
-        };
-
-        selectedNodeId = null;
-        renderingContext.selectedNodeId = null;
-        
-        logToTerminal(`Deleted node [${idToDelete}]`, 'system-msg');
-        
-        updateInspector();
-        triggerAutoRun();
+        deleteSelectedNodes();
     });
 
     document.getElementById('btn-clear-logs')?.addEventListener('click', () => {

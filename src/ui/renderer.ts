@@ -91,6 +91,41 @@ export const createRenderer = (
             drawNode(context, node, nodeDef);
         }
 
+        // 6. Draw Selection Box (if active)
+        if (context.selectionBox && context.selectionBox.active) {
+            const box = context.selectionBox;
+            const startX = box.startX;
+            const startY = box.startY;
+            const currX = box.currentX;
+            const currY = box.currentY;
+
+            const bx = Math.min(startX, currX);
+            const by = Math.min(startY, currY);
+            const bw = Math.abs(currX - startX);
+            const bh = Math.abs(currY - startY);
+
+            ctx.save();
+            if (currX >= startX) {
+                // Enclosing Window: Blue background, solid blue border
+                ctx.fillStyle = 'rgba(0, 120, 255, 0.15)';
+                ctx.strokeStyle = 'rgba(0, 120, 255, 0.8)';
+                ctx.lineWidth = 1.5 / viewport.zoom;
+                ctx.fillRect(bx, by, bw, bh);
+                ctx.strokeRect(bx, by, bw, bh);
+            } else {
+                // Crossing Window: Green background, dashed green border
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+                ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)';
+                ctx.lineWidth = 1.5 / viewport.zoom;
+                ctx.setLineDash([5 / viewport.zoom, 5 / viewport.zoom]);
+                ctx.fillRect(bx, by, bw, bh);
+                ctx.beginPath();
+                ctx.rect(bx, by, bw, bh);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
         ctx.restore();
     };
 

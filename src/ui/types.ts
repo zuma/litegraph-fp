@@ -14,13 +14,24 @@ export interface DraggingConnection {
     cursorY: number; // Current cursor position (in world coordinates)
 }
 
+export interface SelectionBox {
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    active: boolean;
+}
+
 export interface RenderingContext {
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D;
     viewport: Viewport;
     selectedNodeId: string | null;
+    selectedNodeIds: Set<string>;
     hoveredNodeId: string | null;
     hoveredPin: { nodeId: string; pinId: string; isInput: boolean } | null;
     draggingConnection: DraggingConnection | null;
     nodeErrors?: Readonly<Record<string, string>>;
+    selectionBox: SelectionBox | null;
 }
+

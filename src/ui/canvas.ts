@@ -7,9 +7,9 @@ import { NodeDefinition } from '../registry/types.js';
 // ============================================================================
 
 export const NODE_WIDTH = 180;
-export const ROW_HEIGHT = 24;      // Changed to highly composite multiple of 3
-export const HEADER_HEIGHT = 36;    // Changed to highly composite multiple of 3
-export const PIN_RADIUS = 6;        // Changed to multiple of 3
+export const ROW_HEIGHT = 15;      // Spaced by 15px (divisor of 30 and 60) for compact connection points
+export const HEADER_HEIGHT = 30;    // Changed to align input/output pins on 60px grid
+export const PIN_RADIUS = 6;
 
 // Color maps based on PinType (reads dynamically from active theme CSS variables)
 export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration): string {
@@ -33,11 +33,11 @@ export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration):
 
 // Calculate the dimensions of a node based on its registry definition
 export function getNodeHeight(nodeDef?: NodeDefinition): number {
-    if (!nodeDef) return 72; // Default to 1-row node height (36 + 24 + 12)
+    if (!nodeDef) return 75; // Default to 1-row node height (30 + 15 + 30)
     const numInputs = Object.keys(nodeDef.requires).length;
     const numOutputs = Object.keys(nodeDef.provides).length;
     const maxRows = Math.max(numInputs, numOutputs, 1);
-    return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + 12; // Extra padding at bottom
+    return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + 30; // 30px bottom padding to snap total height to multiple of 15
 }
 
 // Get the coordinates for an input pin relative to the node
@@ -46,7 +46,7 @@ export function getInputPinPos(node: NodeState, pinIndex: number): { x: number, 
     const ny = node.ui?.y ?? 0;
     return {
         x: nx,
-        y: ny + HEADER_HEIGHT + 12 + pinIndex * ROW_HEIGHT
+        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT // Pins placed at ny + 60 + pinIndex * 60 (grid aligned)
     };
 }
 
@@ -57,7 +57,7 @@ export function getOutputPinPos(node: NodeState, nodeDef: NodeDefinition | undef
     const nw = node.ui?.width ?? NODE_WIDTH;
     return {
         x: nx + nw,
-        y: ny + HEADER_HEIGHT + 12 + pinIndex * ROW_HEIGHT
+        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT // Pins placed at ny + 60 + pinIndex * 60 (grid aligned)
     };
 }
 
@@ -107,9 +107,10 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
     const w = node.ui?.width ?? NODE_WIDTH;
     const h = getNodeHeight(nodeDef);
 
-    const isSelected = ctx.selectedNodeId === node.id;
+    const isSelected = ctx.selectedNodeId === node.id || (ctx.selectedNodeIds && ctx.selectedNodeIds.has(node.id));
     const isHovered = ctx.hoveredNodeId === node.id;
     const hasError = ctx.nodeErrors && node.id in ctx.nodeErrors;
+
 
     const computedStyle = getComputedStyle(document.body);
     const isLight = document.body.classList.contains('light-theme');
@@ -306,8 +307,11 @@ export function drawEdge(
 
     // 3. Flowing Pulse Animation
     // Create animated dash offsets shifting with the epoch timestamp to show active signal transmission
-    const isSelected = ctx.selectedNodeId === edge.sourceNodeId || ctx.selectedNodeId === edge.targetNodeId;
+    const isSelected = ctx.selectedNodeId === edge.sourceNodeId || 
+                       ctx.selectedNodeId === edge.targetNodeId || 
+                       (ctx.selectedNodeIds && (ctx.selectedNodeIds.has(edge.sourceNodeId) || ctx.selectedNodeIds.has(edge.targetNodeId)));
     context.lineWidth = 2.5;
+
     context.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.7)' : '#ffffff';
     context.globalAlpha = isSelected ? 0.9 : 0.6;
     context.setLineDash([8, 12]);
