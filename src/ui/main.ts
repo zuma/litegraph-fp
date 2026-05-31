@@ -174,12 +174,13 @@ function syncContextState() {
 // ============================================================================
 // Import layout constants from canvas.js
 const NODE_WIDTH = 180;
-const ROW_HEIGHT = 22;
-const HEADER_HEIGHT = 32;
+const ROW_HEIGHT = 24;      // Changed to highly composite multiple of 3
+const HEADER_HEIGHT = 36;    // Changed to highly composite multiple of 3
+const GRID_SIZE = 60;        // Grid spacing for snapping
 
 function getNodeHeight(node: NodeState): number {
     const nodeDef = StandardNodes[node.type];
-    if (!nodeDef) return 70;
+    if (!nodeDef) return 72; // Default to 1-row node height (36 + 24 + 12)
     const numInputs = Object.keys(nodeDef.requires).length;
     const numOutputs = Object.keys(nodeDef.provides).length;
     return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + 12;
@@ -736,8 +737,14 @@ window.addEventListener('DOMContentLoaded', () => {
         // B. Handle node moving
         else if (draggedNodeId && currentGraph.nodes[draggedNodeId]) {
             const node = currentGraph.nodes[draggedNodeId];
-            const newX = Math.round(worldPos.x - dragOffsetX);
-            const newY = Math.round(worldPos.y - dragOffsetY);
+            let newX = Math.round(worldPos.x - dragOffsetX);
+            let newY = Math.round(worldPos.y - dragOffsetY);
+            
+            // Snap to grid if Shift is held down
+            if (e.shiftKey) {
+                newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+                newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
+            }
             
             // Check if node has actually shifted position
             if (newX !== dragNodeOriginalX || newY !== dragNodeOriginalY) {

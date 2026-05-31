@@ -7,9 +7,9 @@ import { NodeDefinition } from '../registry/types.js';
 // ============================================================================
 
 export const NODE_WIDTH = 180;
-export const ROW_HEIGHT = 22;
-export const HEADER_HEIGHT = 32;
-export const PIN_RADIUS = 5;
+export const ROW_HEIGHT = 24;      // Changed to highly composite multiple of 3
+export const HEADER_HEIGHT = 36;    // Changed to highly composite multiple of 3
+export const PIN_RADIUS = 6;        // Changed to multiple of 3
 
 // Color maps based on PinType (reads dynamically from active theme CSS variables)
 export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration): string {
@@ -33,7 +33,7 @@ export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration):
 
 // Calculate the dimensions of a node based on its registry definition
 export function getNodeHeight(nodeDef?: NodeDefinition): number {
-    if (!nodeDef) return 70;
+    if (!nodeDef) return 72; // Default to 1-row node height (36 + 24 + 12)
     const numInputs = Object.keys(nodeDef.requires).length;
     const numOutputs = Object.keys(nodeDef.provides).length;
     const maxRows = Math.max(numInputs, numOutputs, 1);
@@ -77,8 +77,8 @@ export function drawGrid(renderingCtx: RenderingContext) {
     ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Apply grid spacing
-    const gridSize = 40;
+    // Apply grid spacing (60px - chosen as a highly composite multiple of 3)
+    const gridSize = 60;
     const scaledGrid = gridSize * zoom;
 
     // Align start grid position with viewport pan offset
