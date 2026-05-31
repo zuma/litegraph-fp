@@ -522,6 +522,56 @@ window.addEventListener('DOMContentLoaded', () => {
     const renderer = createRenderer(renderingContext, () => currentGraph, StandardNodes);
     renderer.start();
 
+    // Sidebar Collapsible Management
+    const sidebar = document.getElementById('sidebar');
+    const btnSidebar = document.getElementById('btn-sidebar-toggle');
+    
+    const toggleSidebar = () => {
+        if (!sidebar) return;
+        const isCollapsed = sidebar.classList.toggle('collapsed');
+        if (btnSidebar) {
+            btnSidebar.textContent = isCollapsed ? '📋 Panel' : '❌ Panel';
+        }
+        
+        // Animate resize smoothly over transition
+        let startTime = Date.now();
+        const animateResize = () => {
+            resizeCanvas();
+            renderer.triggerSingleFrame();
+            if (Date.now() - startTime < 350) {
+                requestAnimationFrame(animateResize);
+            }
+        };
+        animateResize();
+    };
+    
+    btnSidebar?.addEventListener('click', toggleSidebar);
+
+    // Theme Management initialization and click handler
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    const btnTheme = document.getElementById('btn-theme-toggle');
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+        if (btnTheme) btnTheme.textContent = '🌙 Dark Mode';
+    } else {
+        document.body.classList.remove('light-theme');
+        if (btnTheme) btnTheme.textContent = '☀️ Light Mode';
+    }
+
+    btnTheme?.addEventListener('click', () => {
+        const isCurrentlyLight = document.body.classList.contains('light-theme');
+        if (isCurrentlyLight) {
+            document.body.classList.remove('light-theme');
+            localStorage.setItem('theme', 'dark');
+            if (btnTheme) btnTheme.textContent = '☀️ Light Mode';
+        } else {
+            document.body.classList.add('light-theme');
+            localStorage.setItem('theme', 'light');
+            if (btnTheme) btnTheme.textContent = '🌙 Dark Mode';
+        }
+        renderer.triggerSingleFrame();
+    });
+
     // Trigger initial run
     runExecutionPipeline().catch(console.error);
 
@@ -542,6 +592,9 @@ window.addEventListener('DOMContentLoaded', () => {
             } else if (e.key === 'y' || e.key === 'Y') {
                 e.preventDefault();
                 redo(); // Ctrl+Y = Redo
+            } else if (e.key === 'b' || e.key === 'B') {
+                e.preventDefault();
+                toggleSidebar();
             }
         }
     });
@@ -552,6 +605,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Search element coordinate bounds
     canvas.addEventListener('mousedown', (e) => {
+        // Hide context menu if showing
+        document.getElementById('context-menu')?.classList.add('hidden');
+
+        // Ignore right-clicks to prevent panning and drag-state interference
+        if (e.button === 2) return;
+
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -841,8 +900,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
         const worldPos = screenToWorld(mouseX, mouseY);
         
-        const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-        viewport.zoom = Math.max(0.2, Math.min(3.0, viewport.zoom * zoomFactor));
+        const clampedDelta = Math.max(-120, Math.min(120, e.deltaY));
+        const zoomFactor = Math.exp(-clampedDelta * 0.0007);
+        viewport.zoom = Math.max(0.05, Math.min(3.0, viewport.zoom * zoomFactor));
 
         // Shift Pan offset dynamically to preserve pointer center focal point
         viewport.x = mouseX - worldPos.x * viewport.zoom;
@@ -865,6 +925,83 @@ window.addEventListener('DOMContentLoaded', () => {
         showNodeAdder(mouseX, mouseY);
     });
 
+    // Right-click to open Node context menu or Node Adder
+    canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const worldPos = screenToWorld(mouseX, mouseY);
+
+        // Check if clicked on a node
+        let clickedNodeId: string | null = null;
+        const nodesReversed = Object.values(currentGraph.nodes).reverse();
+        for (const node of nodesReversed) {
+            const w = node.ui?.width ?? NODE_WIDTH;
+            const h = getNodeHeight(node);
+            const nx = node.ui?.x ?? 0;
+            const ny = node.ui?.y ?? 0;
+
+            if (worldPos.x >= nx && worldPos.x <= nx + w && worldPos.y >= ny && worldPos.y <= ny + h) {
+                clickedNodeId = node.id;
+                break;
+            }
+        }
+
+        const ctxMenu = document.getElementById('context-menu');
+        const nodeAdder = document.getElementById('node-adder');
+
+        if (clickedNodeId) {
+            // Right-clicked a node: select it, hide node adder, show context menu
+            selectedNodeId = clickedNodeId;
+            renderingContext.selectedNodeId = selectedNodeId;
+            updateInspector();
+
+            if (nodeAdder) nodeAdder.classList.add('hidden');
+            
+            if (ctxMenu) {
+                ctxMenu.style.left = `${mouseX}px`;
+                ctxMenu.style.top = `${mouseY}px`;
+                ctxMenu.classList.remove('hidden');
+            }
+        } else {
+            // Right-clicked empty canvas: hide context menu, show node adder
+            if (ctxMenu) ctxMenu.classList.add('hidden');
+            
+            spawnX = worldPos.x;
+            spawnY = worldPos.y;
+            showNodeAdder(mouseX, mouseY);
+        }
+    });
+
+    // Context Menu action listeners
+    document.getElementById('ctx-delete-node')?.addEventListener('click', () => {
+        document.getElementById('btn-delete-node')?.click();
+        document.getElementById('context-menu')?.classList.add('hidden');
+    });
+
+    document.getElementById('ctx-disconnect-node')?.addEventListener('click', () => {
+        if (!selectedNodeId) return;
+
+        const idToDisconnect = selectedNodeId;
+        pushToHistory();
+
+        const updatedEdges = currentGraph.edges.filter(
+            e => e.sourceNodeId !== idToDisconnect && e.targetNodeId !== idToDisconnect
+        );
+
+        currentGraph = {
+            ...currentGraph,
+            edges: updatedEdges
+        };
+
+        logToTerminal(`Disconnected all links for node [${idToDisconnect}]`, 'system-msg');
+        document.getElementById('context-menu')?.classList.add('hidden');
+        
+        updateInspector();
+        triggerAutoRun();
+    });
+
     // ========================================================================
     // HEADER AND GLOBAL CONTROL HOOKS
     // ========================================================================
@@ -879,7 +1016,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
-        viewport.zoom = Math.max(0.2, viewport.zoom / 1.2);
+        viewport.zoom = Math.max(0.05, viewport.zoom / 1.2);
         renderingContext.viewport = { ...viewport };
     });
 
@@ -887,6 +1024,57 @@ window.addEventListener('DOMContentLoaded', () => {
         viewport.zoom = 1.0;
         viewport.x = 0;
         viewport.y = 0;
+        renderingContext.viewport = { ...viewport };
+    });
+
+    document.getElementById('btn-zoom-fit')?.addEventListener('click', () => {
+        const nodes = Object.values(currentGraph.nodes);
+        if (nodes.length === 0) {
+            viewport.zoom = 1.0;
+            viewport.x = 0;
+            viewport.y = 0;
+            renderingContext.viewport = { ...viewport };
+            return;
+        }
+
+        // Calculate bounding box in world space
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        nodes.forEach(node => {
+            const x = node.ui?.x ?? 0;
+            const y = node.ui?.y ?? 0;
+            const w = node.ui?.width ?? NODE_WIDTH;
+            const h = getNodeHeight(node);
+
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + w);
+            maxY = Math.max(maxY, y + h);
+        });
+
+        const graphWidth = maxX - minX;
+        const graphHeight = maxY - minY;
+
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+
+        const padding = 60;
+        const availableWidth = canvasWidth - padding * 2;
+        const availableHeight = canvasHeight - padding * 2;
+
+        let targetZoom = Math.min(availableWidth / graphWidth, availableHeight / graphHeight);
+        targetZoom = Math.max(0.05, Math.min(3.0, targetZoom));
+
+        const centerX = minX + graphWidth / 2;
+        const centerY = minY + graphHeight / 2;
+
+        viewport.zoom = targetZoom;
+        viewport.x = canvasWidth / 2 - centerX * targetZoom;
+        viewport.y = canvasHeight / 2 - centerY * targetZoom;
+
         renderingContext.viewport = { ...viewport };
     });
 

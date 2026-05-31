@@ -10,10 +10,12 @@
     --bg-card: hsla(222, 20%, 15%, 0.85);
     --bg-input: hsl(222, 25%, 9%);
     --bg-terminal: hsl(222, 30%, 5%);
+    --bg-helper: rgba(11, 13, 17, 0.7);
     
     --border-glow: hsla(190, 100%, 50%, 0.15);
     --border-panel: hsla(222, 15%, 22%, 0.5);
     --border-panel-hover: hsla(190, 100%, 50%, 0.3);
+    --border-helper: rgba(255, 255, 255, 0.05);
     
     --accent-cyan: hsl(190, 100%, 50%);
     --accent-cyan-glow: hsla(190, 100%, 50%, 0.4);
@@ -29,6 +31,17 @@
     --text-primary: hsl(220, 20%, 94%);
     --text-secondary: hsl(220, 15%, 72%);
     --text-muted: hsl(220, 10%, 46%);
+    --text-btn-primary: hsl(222, 20%, 7%);
+    
+    /* Node categories headers in Dark theme */
+    --node-math-header-start: hsla(275, 80%, 40%, 0.4);
+    --node-math-header-end: hsla(275, 80%, 20%, 0.1);
+    --node-logic-header-start: hsla(145, 80%, 30%, 0.4);
+    --node-logic-header-end: hsla(145, 80%, 15%, 0.1);
+    --node-state-header-start: hsla(32, 80%, 40%, 0.4);
+    --node-state-header-end: hsla(32, 80%, 20%, 0.1);
+    --node-default-header-start: hsla(190, 80%, 30%, 0.4);
+    --node-default-header-end: hsla(190, 80%, 15%, 0.1);
     
     /* Layout constants */
     --header-height: 70px;
@@ -40,6 +53,50 @@
     --neon-shadow-red: 0 0 15px var(--accent-red-glow);
     --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: 'Fira Code', 'Courier New', Courier, monospace;
+}
+
+body.light-theme {
+    --bg-obsidian: hsl(210, 40%, 98%);
+    --bg-panel: hsla(210, 40%, 95%, 0.85);
+    --bg-panel-solid: hsl(210, 40%, 95%);
+    --bg-card: hsla(0, 0%, 100%, 0.9);
+    --bg-input: hsl(210, 30%, 90%);
+    --bg-terminal: hsl(210, 25%, 93%);
+    --bg-helper: rgba(255, 255, 255, 0.85);
+    
+    --border-glow: hsla(210, 100%, 45%, 0.15);
+    --border-panel: hsla(210, 15%, 82%, 0.6);
+    --border-panel-hover: hsla(210, 100%, 45%, 0.35);
+    --border-helper: rgba(0, 0, 0, 0.05);
+    
+    --accent-cyan: hsl(210, 100%, 45%);
+    --accent-cyan-glow: hsla(210, 100%, 45%, 0.3);
+    --accent-purple: hsl(265, 80%, 55%);
+    --accent-purple-glow: hsla(265, 80%, 55%, 0.3);
+    --accent-emerald: hsl(145, 80%, 35%);
+    --accent-emerald-glow: hsla(145, 80%, 35%, 0.3);
+    --accent-orange: hsl(28, 90%, 45%);
+    --accent-orange-glow: hsla(28, 90%, 45%, 0.3);
+    --accent-red: hsl(355, 80%, 50%);
+    --accent-red-glow: hsla(355, 80%, 50%, 0.3);
+    
+    --text-primary: hsl(222, 47%, 12%);
+    --text-secondary: hsl(215, 20%, 35%);
+    --text-muted: hsl(215, 15%, 55%);
+    --text-btn-primary: hsl(0, 0%, 100%);
+    
+    --glass-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
+    --neon-shadow-cyan: 0 0 12px var(--accent-cyan-glow);
+    --neon-shadow-red: 0 0 12px var(--accent-red-glow);
+
+    --node-math-header-start: hsla(275, 85%, 85%, 0.85);
+    --node-math-header-end: hsla(275, 85%, 95%, 0.3);
+    --node-logic-header-start: hsla(145, 85%, 80%, 0.85);
+    --node-logic-header-end: hsla(145, 85%, 95%, 0.3);
+    --node-state-header-start: hsla(28, 90%, 80%, 0.85);
+    --node-state-header-end: hsla(28, 90%, 95%, 0.3);
+    --node-default-header-start: hsla(210, 90%, 80%, 0.85);
+    --node-default-header-end: hsla(210, 90%, 95%, 0.3);
 }
 
 /* ============================================================================
@@ -295,10 +352,10 @@ body, html {
 .helper-text {
     font-size: 12px;
     color: var(--text-muted);
-    background: rgba(11, 13, 17, 0.7);
+    background: var(--bg-helper);
     padding: 6px 12px;
     border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-helper);
     font-weight: 400;
 }
 
@@ -449,6 +506,11 @@ body, html {
     flex-direction: column;
     z-index: 9;
     box-shadow: -4px 0 20px rgba(0,0,0,0.2);
+    transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#sidebar.collapsed {
+    margin-right: calc(-1 * var(--sidebar-width));
 }
 
 .sidebar-section {
@@ -750,11 +812,11 @@ body, html {
 
 .btn-primary {
     background-color: var(--accent-cyan);
-    color: var(--bg-obsidian);
+    color: var(--text-btn-primary);
     box-shadow: var(--neon-shadow-cyan);
 }
 .btn-primary:hover {
-    background-color: hsl(190, 100%, 60%);
+    filter: brightness(1.1);
     box-shadow: 0 0 20px var(--accent-cyan);
     transform: translateY(-1px);
 }
@@ -779,7 +841,7 @@ body, html {
 }
 .btn-danger:hover {
     background-color: var(--accent-red);
-    color: var(--bg-obsidian);
+    color: var(--text-btn-primary);
     box-shadow: var(--neon-shadow-red);
 }
 
@@ -855,5 +917,187 @@ body, html {
     100% {
         box-shadow: 0 0 15px var(--accent-cyan);
         opacity: 1;
+    }
+}
+
+/* ============================================================================
+   RIGHT CLICK CONTEXT MENU STYLING
+   ============================================================================ */
+
+.context-menu {
+    position: absolute;
+    background: var(--bg-panel-solid);
+    border: 1px solid var(--border-panel);
+    border-radius: 8px;
+    box-shadow: var(--glass-shadow);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+    min-width: 170px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.context-menu.hidden {
+    display: none !important;
+}
+
+.context-menu-item {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    padding: 8px 12px;
+    text-align: left;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.context-menu-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--accent-cyan);
+}
+
+body.light-theme .context-menu-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN & MEDIA QUERIES
+   ============================================================================ */
+
+/* 1. Large tablets & laptops */
+@media (max-width: 1024px) {
+    :root {
+        --sidebar-width: 320px;
+    }
+    
+    .logo-area .badge {
+        display: none;
+    }
+    
+    #app-header {
+        padding: 0 16px;
+    }
+}
+
+/* 2. Tablets & small screens */
+@media (max-width: 850px) {
+    .metric-badge {
+        display: none;
+    }
+    
+    #btn-undo, #btn-redo {
+        padding: 4px 6px;
+    }
+    
+    .status-indicator-wrapper {
+        padding: 6px 8px;
+    }
+    
+    .toggle-label {
+        font-size: 11px;
+    }
+}
+
+/* 3. Mobile / Portrait Drawer Mode */
+@media (max-width: 768px) {
+    #main-content {
+        position: relative;
+        overflow: hidden;
+    }
+
+    #sidebar {
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 100%;
+        z-index: 100;
+        border-left: 1px solid var(--border-panel);
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.25);
+    }
+    
+    #sidebar.collapsed {
+        margin-right: 0;
+        transform: translateX(100%);
+    }
+    
+    #sidebar:not(.collapsed) {
+        transform: translateX(0);
+    }
+    
+    #app-header {
+        height: 60px;
+        padding: 0 12px;
+    }
+    
+    #main-content {
+        height: calc(100vh - 60px);
+    }
+    
+    .logo-area h1 {
+        font-size: 16px;
+        letter-spacing: 1px;
+        margin-right: 4px;
+    }
+    
+    .status-text {
+        display: none;
+    }
+    
+    .btn {
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+    
+    #btn-undo, #btn-redo {
+        font-size: 12px;
+    }
+    
+    #btn-run {
+        padding: 6px 10px;
+    }
+    #btn-run span.btn-icon {
+        margin-right: 0;
+    }
+    #btn-run {
+        font-size: 0;
+    }
+    #btn-run::after {
+        content: "⚡ Run";
+        font-size: 12px;
+        font-weight: 600;
+    }
+    
+    .toggle-label {
+        display: none;
+    }
+    
+    .floating-panel {
+        width: 290px;
+    }
+}
+
+/* 4. Very small devices */
+@media (max-width: 480px) {
+    #btn-run::after {
+        content: "⚡";
+        font-size: 12px;
+    }
+    
+    #canvas-overlays {
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+    }
+    
+    .helper-text {
+        display: none;
     }
 }

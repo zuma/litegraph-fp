@@ -11,18 +11,24 @@ export const ROW_HEIGHT = 22;
 export const HEADER_HEIGHT = 32;
 export const PIN_RADIUS = 5;
 
-// Color maps based on PinType
-export function getPinColor(type: PinType): string {
-    if (type === 'number') return 'hsl(190, 100%, 50%)';   // Cyber Cyan
-    if (type === 'boolean') return 'hsl(145, 100%, 50%)';  // Emerald Green
-    if (type === 'string') return 'hsl(32, 100%, 55%)';    // Golden Orange
-    if (type === 'any') return 'hsl(275, 100%, 65%)';      // Neon Purple
+// Color maps based on PinType (reads dynamically from active theme CSS variables)
+export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration): string {
+    const style = computedStyle || (typeof document !== 'undefined' ? getComputedStyle(document.body) : null);
+    
+    const getVar = (varName: string, fallback: string) => {
+        return style ? style.getPropertyValue(varName).trim() : fallback;
+    };
+    
+    if (type === 'number') return getVar('--accent-cyan', 'hsl(190, 100%, 50%)');
+    if (type === 'boolean') return getVar('--accent-emerald', 'hsl(145, 100%, 50%)');
+    if (type === 'string') return getVar('--accent-orange', 'hsl(32, 100%, 55%)');
+    if (type === 'any') return getVar('--accent-purple', 'hsl(275, 100%, 65%)');
     
     // Fallback if type is TensorType or other string
     if (typeof type === 'object' && type !== null && type.type === 'tensor') {
-        return 'hsl(355, 100%, 60%)'; // Coral Pink for tensors
+        return getVar('--accent-red', 'hsl(355, 100%, 60%)');
     }
-    return 'hsl(220, 10%, 60%)'; // Slate Gray fallback
+    return getVar('--text-muted', 'hsl(220, 10%, 60%)');
 }
 
 // Calculate the dimensions of a node based on its registry definition
@@ -65,8 +71,10 @@ export function drawGrid(renderingCtx: RenderingContext) {
 
     ctx.save();
     
-    // Clear screen with solid obsidian
-    ctx.fillStyle = '#090a0f';
+    // Clear screen with theme background color
+    const computedStyle = getComputedStyle(document.body);
+    const canvasBg = computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
+    ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Apply grid spacing
@@ -74,10 +82,12 @@ export function drawGrid(renderingCtx: RenderingContext) {
     const scaledGrid = gridSize * zoom;
 
     // Align start grid position with viewport pan offset
-    const startX = (x * zoom) % scaledGrid;
-    const startY = (y * zoom) % scaledGrid;
+    const startX = ((x % scaledGrid) + scaledGrid) % scaledGrid;
+    const startY = ((y % scaledGrid) + scaledGrid) % scaledGrid;
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    // Adjust grid dot opacity and color based on theme
+    const isLight = document.body.classList.contains('light-theme');
+    ctx.fillStyle = isLight ? 'rgba(0, 0, 0, 0.07)' : 'rgba(255, 255, 255, 0.04)';
     
     for (let gx = startX - scaledGrid; gx < canvas.width + scaledGrid; gx += scaledGrid) {
         for (let gy = startY - scaledGrid; gy < canvas.height + scaledGrid; gy += scaledGrid) {
@@ -101,22 +111,31 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
     const isHovered = ctx.hoveredNodeId === node.id;
     const hasError = ctx.nodeErrors && node.id in ctx.nodeErrors;
 
+    const computedStyle = getComputedStyle(document.body);
+    const isLight = document.body.classList.contains('light-theme');
+    
+    const bgObsidian = computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
+    const accentCyan = computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)';
+    const accentRed = computedStyle.getPropertyValue('--accent-red').trim() || 'hsl(355, 100%, 60%)';
+    const textPrimary = computedStyle.getPropertyValue('--text-primary').trim() || '#ffffff';
+    const textSecondary = computedStyle.getPropertyValue('--text-secondary').trim() || '#b5bac1';
+
     context.save();
 
     // 1. Draw Glowing Backing Shadow for Selection or Error states
     if (hasError) {
-        context.shadowColor = 'rgba(255, 0, 80, 0.4)';
+        context.shadowColor = isLight ? 'rgba(255, 0, 80, 0.25)' : 'rgba(255, 0, 80, 0.4)';
         context.shadowBlur = 15;
     } else if (isSelected) {
-        context.shadowColor = 'rgba(0, 240, 255, 0.3)';
+        context.shadowColor = isLight ? 'rgba(0, 100, 255, 0.2)' : 'rgba(0, 240, 255, 0.3)';
         context.shadowBlur = 15;
     } else if (isHovered) {
-        context.shadowColor = 'rgba(255, 255, 255, 0.05)';
+        context.shadowColor = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)';
         context.shadowBlur = 8;
     }
 
     // 2. Draw Card Body (Glassmorphism card)
-    context.fillStyle = 'rgba(20, 24, 33, 0.85)';
+    context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
     
     // Draw rounded rect path
     context.beginPath();
@@ -129,11 +148,11 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
     // 3. Draw Card Border Outline
     context.lineWidth = isSelected || hasError ? 2 : 1;
     if (hasError) {
-        context.strokeStyle = 'hsl(355, 100%, 60%)';
+        context.strokeStyle = accentRed;
     } else if (isSelected) {
-        context.strokeStyle = 'hsl(190, 100%, 50%)';
+        context.strokeStyle = accentCyan;
     } else {
-        context.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        context.strokeStyle = computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.08)';
     }
     context.stroke();
 
@@ -141,21 +160,28 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
     context.beginPath();
     context.roundRect(x, y, w, HEADER_HEIGHT, [10, 10, 0, 0]);
     
-    // Resolve header color gradient based on category
+    // Resolve header color gradient based on category and theme
     let headerGrad = context.createLinearGradient(x, y, x + w, y);
+    
+    let startVar = '--node-default-header-start';
+    let endVar = '--node-default-header-end';
     if (nodeDef?.category === 'math') {
-        headerGrad.addColorStop(0, 'hsla(275, 80%, 40%, 0.4)');
-        headerGrad.addColorStop(1, 'hsla(275, 80%, 20%, 0.1)');
+        startVar = '--node-math-header-start';
+        endVar = '--node-math-header-end';
     } else if (nodeDef?.category === 'logic') {
-        headerGrad.addColorStop(0, 'hsla(145, 80%, 30%, 0.4)');
-        headerGrad.addColorStop(1, 'hsla(145, 80%, 15%, 0.1)');
+        startVar = '--node-logic-header-start';
+        endVar = '--node-logic-header-end';
     } else if (nodeDef?.category === 'state') {
-        headerGrad.addColorStop(0, 'hsla(32, 80%, 40%, 0.4)');
-        headerGrad.addColorStop(1, 'hsla(32, 80%, 20%, 0.1)');
-    } else { // system / debug / simulation / default
-        headerGrad.addColorStop(0, 'hsla(190, 80%, 30%, 0.4)');
-        headerGrad.addColorStop(1, 'hsla(190, 80%, 15%, 0.1)');
+        startVar = '--node-state-header-start';
+        endVar = '--node-state-header-end';
     }
+    
+    const headerStart = computedStyle.getPropertyValue(startVar).trim() || 'hsla(190, 80%, 30%, 0.4)';
+    const headerEnd = computedStyle.getPropertyValue(endVar).trim() || 'hsla(190, 80%, 15%, 0.1)';
+    
+    headerGrad.addColorStop(0, headerStart);
+    headerGrad.addColorStop(1, headerEnd);
+    
     context.fillStyle = headerGrad;
     context.fill();
     
@@ -163,12 +189,12 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
     context.beginPath();
     context.moveTo(x, y + HEADER_HEIGHT);
     context.lineTo(x + w, y + HEADER_HEIGHT);
-    context.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    context.strokeStyle = computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.06)';
     context.lineWidth = 1;
     context.stroke();
 
     // 5. Draw Title text
-    context.fillStyle = '#ffffff';
+    context.fillStyle = textPrimary;
     context.font = 'bold 12px "Outfit", sans-serif';
     context.textAlign = 'left';
     context.textBaseline = 'middle';
@@ -187,14 +213,14 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
             // Draw pin dot
             context.beginPath();
             context.arc(pos.x, pos.y, isPinHovered ? PIN_RADIUS + 1.5 : PIN_RADIUS, 0, Math.PI * 2);
-            context.fillStyle = getPinColor(pinType);
+            context.fillStyle = getPinColor(pinType, computedStyle);
             context.fill();
-            context.strokeStyle = '#090a0f';
+            context.strokeStyle = bgObsidian;
             context.lineWidth = 1.5;
             context.stroke();
 
             // Label text
-            context.fillStyle = isPinHovered ? '#ffffff' : 'var(--text-secondary)';
+            context.fillStyle = isPinHovered ? (isLight ? '#000000' : '#ffffff') : textSecondary;
             context.font = '500 10px "Fira Code", monospace';
             context.textAlign = 'left';
             context.textBaseline = 'middle';
@@ -212,14 +238,14 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
             // Draw pin dot
             context.beginPath();
             context.arc(pos.x, pos.y, isPinHovered ? PIN_RADIUS + 1.5 : PIN_RADIUS, 0, Math.PI * 2);
-            context.fillStyle = getPinColor(pinType);
+            context.fillStyle = getPinColor(pinType, computedStyle);
             context.fill();
-            context.strokeStyle = '#090a0f';
+            context.strokeStyle = bgObsidian;
             context.lineWidth = 1.5;
             context.stroke();
 
             // Label text
-            context.fillStyle = isPinHovered ? '#ffffff' : 'var(--text-secondary)';
+            context.fillStyle = isPinHovered ? (isLight ? '#000000' : '#ffffff') : textSecondary;
             context.font = '500 10px "Fira Code", monospace';
             context.textAlign = 'right';
             context.textBaseline = 'middle';
@@ -230,7 +256,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
     // 7. Draw Mini Parameters / Value Preview at bottom
     const paramKeys = Object.keys(node.params);
     if (paramKeys.length > 0) {
-        context.fillStyle = 'var(--text-muted)';
+        context.fillStyle = computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)';
         context.font = '9px "Fira Code", monospace';
         context.textAlign = 'center';
         context.textBaseline = 'bottom';
@@ -260,14 +286,16 @@ export function drawEdge(
     const cp2x = targetPos.x - cpOffset;
     const cp2y = targetPos.y;
 
-    const color = getPinColor(pinType);
+    const computedStyle = getComputedStyle(document.body);
+    const color = getPinColor(pinType, computedStyle);
+    const isLight = document.body.classList.contains('light-theme');
 
     // 1. Draw main glowing conduit line background (semi-transparent)
     context.beginPath();
     context.moveTo(sourcePos.x, sourcePos.y);
     context.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, targetPos.x, targetPos.y);
     context.strokeStyle = color;
-    context.globalAlpha = 0.25;
+    context.globalAlpha = isLight ? 0.35 : 0.25;
     context.lineWidth = 4;
     context.stroke();
 
@@ -280,7 +308,7 @@ export function drawEdge(
     // Create animated dash offsets shifting with the epoch timestamp to show active signal transmission
     const isSelected = ctx.selectedNodeId === edge.sourceNodeId || ctx.selectedNodeId === edge.targetNodeId;
     context.lineWidth = 2.5;
-    context.strokeStyle = '#ffffff';
+    context.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.7)' : '#ffffff';
     context.globalAlpha = isSelected ? 0.9 : 0.6;
     context.setLineDash([8, 12]);
     context.lineDashOffset = -(Date.now() / 24) % 20; // Flow direction left-to-right
