@@ -19,15 +19,16 @@ export const sortTopologically = (graph: GraphState): NodeID[][] => {
     const { nodes, edges } = graph;
     
     // Track in-degrees (number of incoming edges) for each node
-    const inDegree: Record<NodeID, number> = {};
+    const inDegree = new Map<NodeID, number>();
     
     // Graph adjacency list: Map of NodeID to array of dependent NodeIDs
-    const adjList: Record<NodeID, NodeID[]> = {};
+    const adjList = new Map<NodeID, NodeID[]>();
 
     // Initialize tracking structures
-    Object.keys(nodes).forEach(nodeId => {
-        inDegree[nodeId] = 0;
-        adjList[nodeId] = [];
+    const nodeIds = Object.keys(nodes);
+    nodeIds.forEach(nodeId => {
+        inDegree.set(nodeId, 0);
+        adjList.set(nodeId, []);
     });
 
     // Populate adjacency list and in-degrees based on edges
@@ -45,12 +46,18 @@ export const sortTopologically = (graph: GraphState): NodeID[][] => {
             return;
         }
 
-        adjList[source].push(target);
-        inDegree[target] += 1;
+        adjList.get(source)!.push(target);
+        inDegree.set(target, inDegree.get(target)! + 1);
     });
 
     // Initial Tier: Nodes with mathematically 0 incoming dependencies
-    let currentTier: NodeID[] = Object.keys(inDegree).filter(nodeId => inDegree[nodeId] === 0);
+    let currentTier: NodeID[] = [];
+    inDegree.forEach((degree, nodeId) => {
+        if (degree === 0) {
+            currentTier.push(nodeId);
+        }
+    });
+
     const executionTiers: NodeID[][] = [];
     let processedNodesCount = 0;
 
@@ -64,11 +71,12 @@ export const sortTopologically = (graph: GraphState): NodeID[][] => {
 
         // For every node in the current parallel batch, discover what unlocks next
         currentTier.forEach(current => {
-            const neighbors = adjList[current] || [];
+            const neighbors = adjList.get(current) ?? [];
             neighbors.forEach(neighbor => {
-                inDegree[neighbor] -= 1;
+                const updatedDegree = inDegree.get(neighbor)! - 1;
+                inDegree.set(neighbor, updatedDegree);
                 // Once a neighbor has all its blocking dependencies met, it joins the NEXT tier
-                if (inDegree[neighbor] === 0) {
+                if (updatedDegree === 0) {
                     nextTier.push(neighbor);
                 }
             });
@@ -79,7 +87,7 @@ export const sortTopologically = (graph: GraphState): NodeID[][] => {
     }
 
     // Safety constraint: If we didn't crunch every node, there is a looping cycle.
-    if (processedNodesCount !== Object.keys(nodes).length) {
+    if (processedNodesCount !== nodeIds.length) {
         throw new Error("Graph Execution Error: Circular dependency detected in graph. Pure evaluation halted.");
     }
 

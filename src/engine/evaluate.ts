@@ -74,10 +74,10 @@ export const evaluateGraph = async (
         const incomingEdges = edgeIndex.get(nodeId) ?? [];
         const resolvedInputs: Record<string, unknown> = {};
         
-        // 1. Initialize strictly with any root inputs from active global state (like manually typed values)
-        Object.keys(activeState).forEach(stateKey => {
-            if (stateKey.startsWith(`${nodeId}.`)) {
-                const pinName = stateKey.split('.')[1];
+        // 1. Initialize strictly with any root inputs from active global state (like manually typed values) (Fix #3)
+        Object.keys(nodeDef.requires).forEach(pinName => {
+            const stateKey = `${nodeId}.${pinName}`;
+            if (stateKey in activeState) {
                 resolvedInputs[pinName] = activeState[stateKey];
             }
         });
@@ -94,7 +94,8 @@ export const evaluateGraph = async (
         //   2. controller.abort() signals the node function to clean up its own
         //      internal async work (timers, fetch requests, etc.)
         const controller = new AbortController();
-        const executionPromise = nodeDef.execute(resolvedInputs, node.params, controller.signal);
+        // Fix #1: Wrap call in async block to catch synchronous node exceptions inside the promise race
+        const executionPromise = (async () => nodeDef.execute(resolvedInputs, node.params, controller.signal))();
         const timeoutMs = config.nodeTimeoutMs ?? 5000;
         
         let timerId: ReturnType<typeof setTimeout>;

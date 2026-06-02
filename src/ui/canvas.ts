@@ -46,7 +46,7 @@ export function getInputPinPos(node: NodeState, pinIndex: number): { x: number, 
     const ny = node.ui?.y ?? 0;
     return {
         x: nx,
-        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT // Pins placed at ny + 60 + pinIndex * 60 (grid aligned)
+        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT // Pins placed at ny + 60 + pinIndex * 15
     };
 }
 
@@ -57,7 +57,7 @@ export function getOutputPinPos(node: NodeState, nodeDef: NodeDefinition | undef
     const nw = node.ui?.width ?? NODE_WIDTH;
     return {
         x: nx + nw,
-        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT // Pins placed at ny + 60 + pinIndex * 60 (grid aligned)
+        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT // Pins placed at ny + 60 + pinIndex * 15
     };
 }
 
@@ -65,14 +65,13 @@ export function getOutputPinPos(node: NodeState, nodeDef: NodeDefinition | undef
 // CORE DRAWING ROUTINES
 // ============================================================================
 
-export function drawGrid(renderingCtx: RenderingContext) {
+export function drawGrid(renderingCtx: RenderingContext, computedStyle: CSSStyleDeclaration) {
     const { ctx, canvas, viewport } = renderingCtx;
     const { x, y, zoom } = viewport;
 
     ctx.save();
     
     // Clear screen with theme background color
-    const computedStyle = getComputedStyle(document.body);
     const canvasBg = computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
     ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -100,7 +99,7 @@ export function drawGrid(renderingCtx: RenderingContext) {
     ctx.restore();
 }
 
-export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeDefinition) {
+export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDefinition | undefined, computedStyle: CSSStyleDeclaration) {
     const context = ctx.ctx;
     const x = node.ui?.x ?? 0;
     const y = node.ui?.y ?? 0;
@@ -110,9 +109,6 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef?: NodeD
     const isSelected = ctx.selectedNodeId === node.id || (ctx.selectedNodeIds && ctx.selectedNodeIds.has(node.id));
     const isHovered = ctx.hoveredNodeId === node.id;
     const hasError = ctx.nodeErrors && node.id in ctx.nodeErrors;
-
-
-    const computedStyle = getComputedStyle(document.body);
     const isLight = document.body.classList.contains('light-theme');
     
     const bgObsidian = computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
@@ -273,7 +269,8 @@ export function drawEdge(
     edge: Edge,
     sourcePos: { x: number, y: number },
     targetPos: { x: number, y: number },
-    pinType: PinType
+    pinType: PinType,
+    computedStyle: CSSStyleDeclaration
 ) {
     const context = ctx.ctx;
     context.save();
@@ -286,8 +283,6 @@ export function drawEdge(
     const cp1y = sourcePos.y;
     const cp2x = targetPos.x - cpOffset;
     const cp2y = targetPos.y;
-
-    const computedStyle = getComputedStyle(document.body);
     const color = getPinColor(pinType, computedStyle);
     const isLight = document.body.classList.contains('light-theme');
 
@@ -321,21 +316,4 @@ export function drawEdge(
     context.restore();
 }
 
-export function drawDraggingConnection(ctx: RenderingContext) {
-    if (!ctx.draggingConnection) return;
-    const context = ctx.ctx;
-    
-    const drag = ctx.draggingConnection;
-    // We need to resolve the pin coordinate to drag from
-    // This is handled in main.ts and fed into draggingConnection as start coordinates.
-    // So we just draw from drag.x/y to the cursor position!
-    context.save();
-    
-    // Draw Bezier to mouse cursor
-    const sourceX = drag.x;
-    const sourceY = drag.y;
-    // Current coordinate is updated in mousemove events and stored in draggingConnection.x/y or elsewhere
-    // Wait! Since drag is updated with mouse movements, drag.x/y will be the start position,
-    // and we can store the current cursor coordinate in a secondary field. Let's make sure we draw to cursor!
-    context.restore();
-}
+

@@ -58,8 +58,19 @@ export const validateGraph = (graph: GraphState, registry: NodeRegistry): void =
             throw new Error(`Invalid edge ${edge.id}: Node definition missing from registry.`);
         }
 
-        const sourceType = sourceDef.provides[edge.sourcePinId] ?? 'any';
-        const targetType = targetDef.requires[edge.targetPinId] ?? 'any';
+        const sourceType = sourceDef.provides[edge.sourcePinId];
+        const targetType = targetDef.requires[edge.targetPinId];
+
+        if (sourceType === undefined) {
+            throw new Error(
+                `Type validation failed at edge ${edge.id}: Source pin '${edge.sourcePinId}' does not exist on node definition '${sourceNode.type}'.`
+            );
+        }
+        if (targetType === undefined) {
+            throw new Error(
+                `Type validation failed at edge ${edge.id}: Target pin '${edge.targetPinId}' does not exist on node definition '${targetNode.type}'.`
+            );
+        }
 
         if (!isCompatible(sourceType, targetType)) {
             throw new Error(

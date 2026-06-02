@@ -119,6 +119,11 @@ body, html {
     -webkit-font-smoothing: antialiased;
 }
 
+/* Generic visibility utility */
+.hidden {
+    display: none !important;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 8px;

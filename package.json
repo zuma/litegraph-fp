@@ -6,6 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsx test.ts",
+    "test:unit": "vitest run",
+    "test:e2e": "tsx test.ts",
     "build": "tsc",
     "watch": "tsc -w",
     "dev": "node scripts/dev_server.js"

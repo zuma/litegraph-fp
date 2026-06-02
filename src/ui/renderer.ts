@@ -18,8 +18,10 @@ export const createRenderer = (
     const renderFrame = () => {
         const { ctx, canvas, viewport } = context;
         
+        const computedStyle = getComputedStyle(document.body);
+
         // 1. Draw background and grid in screen space
-        drawGrid(context);
+        drawGrid(context, computedStyle);
 
         const state = getGraphState();
 
@@ -53,7 +55,7 @@ export const createRenderer = (
             const targetPos = getInputPinPos(targetNode, inIndex);
             const pinType = sourceDef.provides[edge.sourcePinId];
 
-            drawEdge(context, edge, sourcePos, targetPos, pinType);
+            drawEdge(context, edge, sourcePos, targetPos, pinType, computedStyle);
         });
 
         // 4. Draw Dragging Connection Line
@@ -88,7 +90,7 @@ export const createRenderer = (
         for (const nodeId in state.nodes) {
             const node = state.nodes[nodeId];
             const nodeDef = registry[node.type];
-            drawNode(context, node, nodeDef);
+            drawNode(context, node, nodeDef, computedStyle);
         }
 
         // 6. Draw Selection Box (if active)
