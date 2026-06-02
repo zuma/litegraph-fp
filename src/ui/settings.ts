@@ -10,13 +10,14 @@ export interface AppSettings {
     };
     canvas: {
         autoRun: boolean;
+        snapToGrid: boolean;
         camera: { x: number; y: number; zoom: number };
     };
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
     ui: {
-        theme: 'dark',
+        theme: 'light',
     },
     layout: {
         sidebarPinned: false,
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     canvas: {
         autoRun: true,
+        snapToGrid: false,
         camera: { x: 0, y: 0, zoom: 1.0 },
     },
 };

@@ -114,51 +114,122 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Initialize and bind Pin-sidebar toggle state
     const chkPinSidebar = document.getElementById('chk-pin-sidebar') as HTMLInputElement | null;
+    const menuChkPinSidebar = document.getElementById('menu-chk-pin-sidebar-opt') as HTMLInputElement | null;
+    
     if (chkPinSidebar) {
         chkPinSidebar.checked = settings.layout.sidebarPinned;
     }
-    chkPinSidebar?.addEventListener('change', () => {
-        if (chkPinSidebar) {
-            updateSetting('layout', 'sidebarPinned', chkPinSidebar.checked);
-        }
+    if (menuChkPinSidebar) {
+        menuChkPinSidebar.checked = settings.layout.sidebarPinned;
+    }
+
+    function setPinSidebar(enabled: boolean) {
+        if (chkPinSidebar) chkPinSidebar.checked = enabled;
+        if (menuChkPinSidebar) menuChkPinSidebar.checked = enabled;
+        updateSetting('layout', 'sidebarPinned', enabled);
         import('./inspector.js').then(mod => {
             mod.updateInspector();
         });
+    }
+
+    chkPinSidebar?.addEventListener('change', () => {
+        if (chkPinSidebar) setPinSidebar(chkPinSidebar.checked);
+    });
+
+    const menuTogglePin = document.getElementById('menu-toggle-pin-sidebar');
+    menuTogglePin?.addEventListener('click', (e) => {
+        if (e.target !== menuChkPinSidebar) {
+            e.preventDefault();
+            if (menuChkPinSidebar) menuChkPinSidebar.checked = !menuChkPinSidebar.checked;
+        }
+        if (menuChkPinSidebar) setPinSidebar(menuChkPinSidebar.checked);
     });
 
     // Initialize and bind Auto-Run state
     const chkAutoRun = document.getElementById('chk-auto-run') as HTMLInputElement | null;
+    const menuChkAutoRun = document.getElementById('menu-chk-autorun') as HTMLInputElement | null;
+    
     if (chkAutoRun) {
         chkAutoRun.checked = settings.canvas.autoRun;
     }
-    chkAutoRun?.addEventListener('change', () => {
-        if (chkAutoRun) {
-            updateSetting('canvas', 'autoRun', chkAutoRun.checked);
-        }
-    });
-
-    // Theme Management initialization and click handler
-    const btnTheme = document.getElementById('btn-theme-toggle');
-    if (settings.ui.theme === 'light') {
-        document.body.classList.add('light-theme');
-        if (btnTheme) btnTheme.textContent = '🌙 Dark Mode';
-    } else {
-        document.body.classList.remove('light-theme');
-        if (btnTheme) btnTheme.textContent = '☀️ Light Mode';
+    if (menuChkAutoRun) {
+        menuChkAutoRun.checked = settings.canvas.autoRun;
     }
 
-    btnTheme?.addEventListener('click', () => {
-        const isCurrentlyLight = document.body.classList.contains('light-theme');
-        if (isCurrentlyLight) {
-            document.body.classList.remove('light-theme');
-            updateSetting('ui', 'theme', 'dark');
-            if (btnTheme) btnTheme.textContent = '☀️ Light Mode';
-        } else {
-            document.body.classList.add('light-theme');
-            updateSetting('ui', 'theme', 'light');
-            if (btnTheme) btnTheme.textContent = '🌙 Dark Mode';
+    function setAutoRun(enabled: boolean) {
+        if (chkAutoRun) chkAutoRun.checked = enabled;
+        if (menuChkAutoRun) menuChkAutoRun.checked = enabled;
+        updateSetting('canvas', 'autoRun', enabled);
+    }
+
+    chkAutoRun?.addEventListener('change', () => {
+        if (chkAutoRun) setAutoRun(chkAutoRun.checked);
+    });
+
+    const menuToggleAuto = document.getElementById('menu-toggle-autorun');
+    menuToggleAuto?.addEventListener('click', (e) => {
+        if (e.target !== menuChkAutoRun) {
+            e.preventDefault();
+            if (menuChkAutoRun) menuChkAutoRun.checked = !menuChkAutoRun.checked;
         }
+        if (menuChkAutoRun) setAutoRun(menuChkAutoRun.checked);
+    });
+
+    // Initialize and bind Snap to Grid state
+    const chkSnapGrid = document.getElementById('chk-snap-grid') as HTMLInputElement | null;
+    const menuChkSnapGrid = document.getElementById('menu-chk-snap-grid-opt') as HTMLInputElement | null;
+
+    if (chkSnapGrid) {
+        chkSnapGrid.checked = settings.canvas.snapToGrid;
+    }
+    if (menuChkSnapGrid) {
+        menuChkSnapGrid.checked = settings.canvas.snapToGrid;
+    }
+
+    function setSnapGrid(enabled: boolean) {
+        if (chkSnapGrid) chkSnapGrid.checked = enabled;
+        if (menuChkSnapGrid) menuChkSnapGrid.checked = enabled;
+        updateSetting('canvas', 'snapToGrid', enabled);
+    }
+
+    chkSnapGrid?.addEventListener('change', () => {
+        if (chkSnapGrid) setSnapGrid(chkSnapGrid.checked);
+    });
+
+    const menuToggleSnap = document.getElementById('menu-toggle-snap-grid');
+    menuToggleSnap?.addEventListener('click', (e) => {
+        if (e.target !== menuChkSnapGrid) {
+            e.preventDefault();
+            if (menuChkSnapGrid) menuChkSnapGrid.checked = !menuChkSnapGrid.checked;
+        }
+        if (menuChkSnapGrid) setSnapGrid(menuChkSnapGrid.checked);
+    });
+
+    // Theme Management initialization and click handlers
+    const chkDarkMode = document.getElementById('menu-chk-darkmode') as HTMLInputElement | null;
+
+    function applyTheme(theme: 'light' | 'dark') {
+        if (theme === 'light') {
+            document.body.classList.add('light-theme');
+            if (chkDarkMode) chkDarkMode.checked = false;
+        } else {
+            document.body.classList.remove('light-theme');
+            if (chkDarkMode) chkDarkMode.checked = true;
+        }
+        updateSetting('ui', 'theme', theme);
         renderer.triggerSingleFrame();
+    }
+
+    // Initialize theme state
+    applyTheme(settings.ui.theme);
+
+    const menuToggleDark = document.getElementById('menu-toggle-darkmode');
+    menuToggleDark?.addEventListener('click', (e) => {
+        if (e.target !== chkDarkMode) {
+            e.preventDefault();
+            if (chkDarkMode) chkDarkMode.checked = !chkDarkMode.checked;
+        }
+        applyTheme(chkDarkMode?.checked ? 'dark' : 'light');
     });
 
     // Trigger initial layout resize once DOM state is finalized
@@ -332,6 +403,32 @@ window.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('click', () => {
         mainDropdownMenu?.classList.add('hidden');
         btnMainMenu?.classList.remove('active');
+        if (submenuCloseTimer) {
+            clearTimeout(submenuCloseTimer);
+            submenuCloseTimer = null;
+        }
+        submenu?.classList.remove('open');
+    });
+
+    // Submenu hover intent delay (accessibility help for jittery hands)
+    const submenuParent = document.querySelector('.dropdown-submenu-parent');
+    const submenu = document.querySelector('.dropdown-submenu');
+    let submenuCloseTimer: any = null;
+
+    submenuParent?.addEventListener('mouseenter', () => {
+        if (submenuCloseTimer) {
+            clearTimeout(submenuCloseTimer);
+            submenuCloseTimer = null;
+        }
+        submenu?.classList.add('open');
+    });
+
+    submenuParent?.addEventListener('mouseleave', () => {
+        if (submenuCloseTimer) clearTimeout(submenuCloseTimer);
+        submenuCloseTimer = setTimeout(() => {
+            submenu?.classList.remove('open');
+            submenuCloseTimer = null;
+        }, 300); // 300ms grace period before closing
     });
 
     // 1. Load Demo Graph

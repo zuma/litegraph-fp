@@ -77,7 +77,7 @@ async function executeBulletproofTest() {
     console.log("\n🔍 AUTOMATED VERIFICATION RESULTS:");
     if (finalResult.state['nodeA.out'] === 15) console.log("✅ Math Pipeline survived rogue node explosion.");
     if (finalResult.state['nodeC.out'] === 600) console.log("✅ Tier 2 execution completed safely.");
-    if (finalResult.errors['nodeRogue']?.includes("Timeout")) console.log("🚨 Watchdog successfully assassinated nodeRogue before it could freeze the system!");
+    if (finalResult.errors['nodeRogue']?.includes("Timeout")) console.log("🚨 Watchdog successfully terminated nodeRogue before it could freeze the system!");
     if (!finalResult.state['nodeLog.$commands']) console.log("✅ $commands no longer pollute the execution state.");
     if (finalResult.commands['nodeLog']?.length > 0) console.log("✅ Commands extracted into first-class result field.");
 

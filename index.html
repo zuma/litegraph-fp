@@ -19,8 +19,8 @@
         (function() {
             try {
                 const settings = JSON.parse(localStorage.getItem('litegraph-fp-settings') || '{}');
-                const theme = (settings.ui && settings.ui.theme) || 'dark';
-                if (theme === 'light') {
+                const theme = (settings.ui && settings.ui.theme) || 'light';
+                if (theme !== 'dark') {
                     document.body.classList.add('light-theme');
                 }
             } catch (e) {}
@@ -39,6 +39,34 @@
                     <button class="dropdown-item" id="menu-load-demo">📁 Load Demo Graph</button>
                     <button class="dropdown-item" id="menu-import-json">📥 Import JSON AST</button>
                     <button class="dropdown-item" id="menu-export-json">💾 Export JSON AST</button>
+                    
+                    <div class="dropdown-divider"></div>
+                    
+                    <!-- Settings Submenu -->
+                    <div class="dropdown-submenu-parent">
+                        <button class="dropdown-item" id="menu-settings-trigger">
+                            ⚙️ Settings <span style="margin-left: auto; font-size: 10px; color: var(--text-muted);">▶</span>
+                        </button>
+                        <div class="dropdown-submenu">
+                            <button class="dropdown-item" id="menu-toggle-darkmode">
+                                <span>🌙 Dark Mode</span>
+                                <input type="checkbox" id="menu-chk-darkmode" style="margin-left: auto; cursor: pointer;">
+                            </button>
+                            <button class="dropdown-item" id="menu-toggle-autorun">
+                                <span>⚡ Auto-Run</span>
+                                <input type="checkbox" id="menu-chk-autorun" style="margin-left: auto; cursor: pointer;">
+                            </button>
+                            <button class="dropdown-item" id="menu-toggle-snap-grid">
+                                <span>📐 Snap to Grid</span>
+                                <input type="checkbox" id="menu-chk-snap-grid-opt" style="margin-left: auto; cursor: pointer;">
+                            </button>
+                            <button class="dropdown-item" id="menu-toggle-pin-sidebar">
+                                <span>📌 Pin Sidebar</span>
+                                <input type="checkbox" id="menu-chk-pin-sidebar-opt" style="margin-left: auto; cursor: pointer;">
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="dropdown-divider"></div>
                     <button class="dropdown-item text-danger" id="menu-clear-workspace">🗑️ Clear Workspace</button>
                 </div>
@@ -76,9 +104,12 @@
                         <span class="toggle-label">Auto-Run</span>
                     </label>
                     <div style="width: 1px; height: 20px; background: var(--border-panel); margin: 0 4px;"></div>
-                    <button id="btn-theme-toggle" class="btn btn-secondary btn-sm" title="Toggle Light/Dark Theme">
-                        ☀️ Light Mode
-                    </button>
+                    <label class="toggle-switch" title="Snap nodes to grid (30px) during drags or spawns">
+                        <input type="checkbox" id="chk-snap-grid">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Snap to Grid</span>
+                    </label>
+
                 </div>
             </div>
         </header>

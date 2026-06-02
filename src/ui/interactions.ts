@@ -6,7 +6,7 @@ import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
 import { StandardNodes } from '../registry/index.js';
 import { isCompatible } from '../engine/validation.js';
-import { updateSetting } from './settings.js';
+import { updateSetting, loadSettings } from './settings.js';
 
 // ============================================================================
 // DELETE SELECTED NODES
@@ -309,8 +309,9 @@ export function setupInteractions() {
             let newX = Math.round(worldPos.x - appState.dragOffsetX);
             let newY = Math.round(worldPos.y - appState.dragOffsetY);
             
-            // Snap to grid if Shift is held down
-            if (e.shiftKey) {
+            // Snap to grid if Shift is held down or if snap-to-grid setting is enabled
+            const snapEnabled = loadSettings().canvas.snapToGrid || e.shiftKey;
+            if (snapEnabled) {
                 newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
                 newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
             }
@@ -772,13 +773,21 @@ export function addNewNode(type: string) {
         }
     }
 
+    const snapEnabled = loadSettings().canvas.snapToGrid;
+    let spawnX = Math.round(appState.spawnX - NODE_WIDTH / 2);
+    let spawnY = Math.round(appState.spawnY - 20);
+    if (snapEnabled) {
+        spawnX = Math.round(spawnX / GRID_SIZE) * GRID_SIZE;
+        spawnY = Math.round(spawnY / GRID_SIZE) * GRID_SIZE;
+    }
+
     const newNode: NodeState = {
         id: uniqueId,
         type,
         params: initialParams,
         ui: {
-            x: Math.round(appState.spawnX - NODE_WIDTH / 2),
-            y: Math.round(appState.spawnY - 20),
+            x: spawnX,
+            y: spawnY,
             title: uniqueId.toUpperCase()
         }
     };
