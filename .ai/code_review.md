@@ -222,7 +222,7 @@ For an open-source project, this is the front door.
 
 ---
 
-### 20. No `.editorconfig` or formatting configuration
+### 20. [RESOLVED] No `.editorconfig` or formatting configuration
 
 No Prettier, ESLint, or `.editorconfig` is set up. Contributors will inevitably introduce inconsistent formatting.
 
