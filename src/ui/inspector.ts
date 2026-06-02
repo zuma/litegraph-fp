@@ -186,5 +186,8 @@ export function updateNodeParam(nodeId: string, paramKey: string, value: any) {
             [nodeId]: updatedNode
         }
     };
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
     triggerAutoRun();
 }

@@ -44,6 +44,10 @@ export async function runExecutionPipeline() {
     // Save state
     appState.latestExecutionState = result.state;
     appState.nodeErrors = { ...result.errors };
+    if (appState.renderingContext) {
+        appState.renderingContext.lastExecutionTime = Date.now();
+        appState.renderingContext.needsRedraw = true;
+    }
     syncContextState();
 
     // Update controls UI

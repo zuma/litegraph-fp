@@ -283,6 +283,9 @@ export function setupInteractions() {
             appState.viewportStartY = appState.viewport.y;
         }
         updateCursor();
+        if (appState.renderingContext) {
+            appState.renderingContext.needsRedraw = true;
+        }
     });
 
     canvas.addEventListener('mousemove', (e) => {
@@ -407,6 +410,9 @@ export function setupInteractions() {
             appState.renderingContext.hoveredPin = appState.hoveredPin;
         }
         updateCursor();
+        if (appState.renderingContext) {
+            appState.renderingContext.needsRedraw = true;
+        }
     });
 
     canvas.addEventListener('mouseup', (e) => {
@@ -551,6 +557,9 @@ export function setupInteractions() {
         appState.draggedNodeId = null;
         appState.isPanning = false;
         updateCursor();
+        if (appState.renderingContext) {
+            appState.renderingContext.needsRedraw = true;
+        }
     });
 
     // Zooming handler
@@ -572,6 +581,7 @@ export function setupInteractions() {
 
         if (appState.renderingContext) {
             appState.renderingContext.viewport = { ...appState.viewport };
+            appState.renderingContext.needsRedraw = true;
         }
     }, { passive: false });
 

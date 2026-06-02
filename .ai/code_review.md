@@ -163,7 +163,7 @@ Since the graph is a plain JSON-serializable object, `structuredClone(currentGra
 
 ---
 
-### 14. Edge animation forces continuous repaints
+### 14. [RESOLVED] Edge animation forces continuous repaints
 
 The flowing pulse animation at [canvas.ts:318](file:///workspaces/litegraph-fp/src/ui/canvas.ts#L318) (`Date.now() / 24`) means the canvas is **always dirty** — the render loop can never skip a frame because the dashes are always moving. This burns CPU even when the user is idle.
 
@@ -249,6 +249,7 @@ No Prettier, ESLint, or `.editorconfig` is set up. Contributors will inevitably 
 | 🟢 Low | #5 Dead `drawDraggingConnection` | Small | ✅ Resolved |
 | 🟢 Low | #12 Unbounded terminal DOM | Small | ✅ Resolved |
 | 🟢 Low | #13 `structuredClone` | Small | ✅ Resolved |
+| 🟢 Low | #14 Edge animation repaints | Small | ✅ Resolved |
 | 🟢 Low | #4 Stale comments | Small | ✅ Resolved |
 | 🔵 Polish | #15 Fit-to-screen button | Medium | ✅ Resolved |
 | 🔵 Polish | #19 README enhancement | Medium | ⏳ Pending |

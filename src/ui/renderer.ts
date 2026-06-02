@@ -133,7 +133,15 @@ export const createRenderer = (
 
     const renderLoop = () => {
         if (!isRunning) return;
-        renderFrame();
+
+        const lastExec = context.lastExecutionTime ?? 0;
+        const isAnimatingPulse = (Date.now() - lastExec) < 1500;
+
+        if (context.needsRedraw || isAnimatingPulse) {
+            context.needsRedraw = false;
+            renderFrame();
+        }
+
         requestAnimationFrame(renderLoop);
     };
 

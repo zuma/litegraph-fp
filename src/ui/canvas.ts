@@ -310,7 +310,15 @@ export function drawEdge(
     context.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.7)' : '#ffffff';
     context.globalAlpha = isSelected ? 0.9 : 0.6;
     context.setLineDash([8, 12]);
-    context.lineDashOffset = -(Date.now() / 24) % 20; // Flow direction left-to-right
+    
+    // Fix #14: Only animate dashes during the 1.5s post-execution window to avoid idle CPU usage
+    const lastExec = ctx.lastExecutionTime ?? 0;
+    const timeSinceExec = Date.now() - lastExec;
+    if (timeSinceExec < 1500) {
+        context.lineDashOffset = -(Date.now() / 24) % 20; // Flow direction left-to-right
+    } else {
+        context.lineDashOffset = 0; // Static dashes when idle
+    }
     context.stroke();
 
     context.restore();

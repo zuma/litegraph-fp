@@ -36,7 +36,9 @@ window.addEventListener('DOMContentLoaded', () => {
         hoveredPin: appState.hoveredPin,
         draggingConnection: null,
         nodeErrors: appState.nodeErrors,
-        selectionBox: null
+        selectionBox: null,
+        lastExecutionTime: 0,
+        needsRedraw: true
     };
 
     appState.renderingContext = renderingContext;
@@ -112,19 +114,28 @@ window.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
         appState.viewport.zoom = Math.min(3.0, appState.viewport.zoom * 1.2);
-        if (appState.renderingContext) appState.renderingContext.viewport = { ...appState.viewport };
+        if (appState.renderingContext) {
+            appState.renderingContext.viewport = { ...appState.viewport };
+            appState.renderingContext.needsRedraw = true;
+        }
     });
 
     document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
         appState.viewport.zoom = Math.max(0.05, appState.viewport.zoom / 1.2);
-        if (appState.renderingContext) appState.renderingContext.viewport = { ...appState.viewport };
+        if (appState.renderingContext) {
+            appState.renderingContext.viewport = { ...appState.viewport };
+            appState.renderingContext.needsRedraw = true;
+        }
     });
 
     document.getElementById('btn-zoom-reset')?.addEventListener('click', () => {
         appState.viewport.zoom = 1.0;
         appState.viewport.x = 0;
         appState.viewport.y = 0;
-        if (appState.renderingContext) appState.renderingContext.viewport = { ...appState.viewport };
+        if (appState.renderingContext) {
+            appState.renderingContext.viewport = { ...appState.viewport };
+            appState.renderingContext.needsRedraw = true;
+        }
     });
 
     // Fit Graph to Screen (Fixes #15)
@@ -176,7 +187,10 @@ window.addEventListener('DOMContentLoaded', () => {
         appState.viewport.x = canvasWidth / 2 - centerX * targetZoom;
         appState.viewport.y = canvasHeight / 2 - centerY * targetZoom;
 
-        if (appState.renderingContext) appState.renderingContext.viewport = { ...appState.viewport };
+        if (appState.renderingContext) {
+            appState.renderingContext.viewport = { ...appState.viewport };
+            appState.renderingContext.needsRedraw = true;
+        }
     });
 
     // Undo/Redo Button clicks

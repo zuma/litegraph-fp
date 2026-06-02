@@ -33,5 +33,7 @@ export interface RenderingContext {
     draggingConnection: DraggingConnection | null;
     nodeErrors?: Readonly<Record<string, string>>;
     selectionBox: SelectionBox | null;
+    lastExecutionTime?: number;
+    needsRedraw?: boolean;
 }
 

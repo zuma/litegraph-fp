@@ -108,6 +108,7 @@ export function syncContextState() {
         appState.renderingContext.selectedNodeId = appState.selectedNodeId;
         appState.renderingContext.selectedNodeIds = appState.selectedNodeIds;
         appState.renderingContext.nodeErrors = appState.nodeErrors;
+        appState.renderingContext.needsRedraw = true;
     }
 }
 
@@ -116,6 +117,9 @@ export function syncContextState() {
 // ============================================================================
 
 export function updateCursor() {
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
     if (!appState.canvas) return;
 
     // 1. Connection drag

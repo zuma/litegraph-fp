@@ -38,44 +38,78 @@ export const isCompatible = (source: PinType, target: PinType): boolean => {
 };
 
 /**
- * Validates the graph edges based on pin types using isCompatible.
- * Throws an error if any edge connects incompatible pins.
+ * Static graph validation.
+ * Performs deep checks for node existence, pin existence, single-source connections, and type safety.
+ * Returns a dictionary of errors mapped to NodeIDs.
  */
-export const validateGraph = (graph: GraphState, registry: NodeRegistry): void => {
-    // Check all edges for type compatibility
+export const getGraphValidationErrors = (
+    graph: GraphState,
+    registry: NodeRegistry
+): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    const seenTargets = new Set<string>();
+
     for (const edge of graph.edges) {
         const sourceNode = graph.nodes[edge.sourceNodeId];
         const targetNode = graph.nodes[edge.targetNodeId];
 
-        if (!sourceNode || !targetNode) {
-            throw new Error(`Invalid edge ${edge.id}: Node not found.`);
+        if (!sourceNode) {
+            errors[edge.sourceNodeId] = `Invalid edge ${edge.id}: Source node not found.`;
+            continue;
+        }
+        if (!targetNode) {
+            errors[edge.targetNodeId] = `Invalid edge ${edge.id}: Target node not found.`;
+            continue;
         }
 
         const sourceDef = registry[sourceNode.type];
         const targetDef = registry[targetNode.type];
 
-        if (!sourceDef || !targetDef) {
-            throw new Error(`Invalid edge ${edge.id}: Node definition missing from registry.`);
+        if (!sourceDef) {
+            errors[edge.sourceNodeId] = `Invalid edge ${edge.id}: Node definition for '${sourceNode.type}' missing from registry.`;
+            continue;
         }
+        if (!targetDef) {
+            errors[edge.targetNodeId] = `Invalid edge ${edge.id}: Node definition for '${targetNode.type}' missing from registry.`;
+            continue;
+        }
+
+        // Check for multiple inputs to the same pin (single-source dataflow invariant)
+        const targetPinKey = `${edge.targetNodeId}.${edge.targetPinId}`;
+        if (seenTargets.has(targetPinKey)) {
+            errors[edge.targetNodeId] = `Conflict: Input pin '${edge.targetPinId}' has multiple incoming connections.`;
+            continue;
+        }
+        seenTargets.add(targetPinKey);
 
         const sourceType = sourceDef.provides[edge.sourcePinId];
         const targetType = targetDef.requires[edge.targetPinId];
 
         if (sourceType === undefined) {
-            throw new Error(
-                `Type validation failed at edge ${edge.id}: Source pin '${edge.sourcePinId}' does not exist on node definition '${sourceNode.type}'.`
-            );
+            errors[edge.sourceNodeId] = `Invalid edge ${edge.id}: Source pin '${edge.sourcePinId}' does not exist on definition '${sourceNode.type}'.`;
+            continue;
         }
         if (targetType === undefined) {
-            throw new Error(
-                `Type validation failed at edge ${edge.id}: Target pin '${edge.targetPinId}' does not exist on node definition '${targetNode.type}'.`
-            );
+            errors[edge.targetNodeId] = `Invalid edge ${edge.id}: Target pin '${edge.targetPinId}' does not exist on definition '${targetNode.type}'.`;
+            continue;
         }
 
         if (!isCompatible(sourceType, targetType)) {
-            throw new Error(
-                `Type validation failed at edge ${edge.id}: Source pin '${edge.sourcePinId}' (${JSON.stringify(sourceType)}) is incompatible with target pin '${edge.targetPinId}' (${JSON.stringify(targetType)}).`
-            );
+            errors[edge.targetNodeId] = `Type validation failed at edge ${edge.id}: Source pin '${edge.sourcePinId}' (${JSON.stringify(sourceType)}) is incompatible with target pin '${edge.targetPinId}' (${JSON.stringify(targetType)}).`;
         }
+    }
+
+    return errors;
+};
+
+/**
+ * Validates the graph edges based on pin types using isCompatible.
+ * Throws an error if any edge connects incompatible pins.
+ */
+export const validateGraph = (graph: GraphState, registry: NodeRegistry): void => {
+    const errors = getGraphValidationErrors(graph, registry);
+    const firstError = Object.values(errors)[0];
+    if (firstError) {
+        throw new Error(firstError);
     }
 };
