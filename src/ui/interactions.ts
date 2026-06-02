@@ -6,6 +6,7 @@ import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
 import { StandardNodes } from '../registry/index.js';
 import { isCompatible } from '../engine/validation.js';
+import { updateSetting } from './settings.js';
 
 // ============================================================================
 // DELETE SELECTED NODES
@@ -560,6 +561,11 @@ export function setupInteractions() {
         if (appState.renderingContext) {
             appState.renderingContext.needsRedraw = true;
         }
+        updateSetting('canvas', 'camera', {
+            x: appState.viewport.x,
+            y: appState.viewport.y,
+            zoom: appState.viewport.zoom
+        });
     });
 
     // Zooming handler
@@ -583,6 +589,11 @@ export function setupInteractions() {
             appState.renderingContext.viewport = { ...appState.viewport };
             appState.renderingContext.needsRedraw = true;
         }
+        updateSetting('canvas', 'camera', {
+            x: appState.viewport.x,
+            y: appState.viewport.y,
+            zoom: appState.viewport.zoom
+        });
     }, { passive: false });
 
     // Double-click to open Node Adder

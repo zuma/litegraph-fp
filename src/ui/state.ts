@@ -2,6 +2,7 @@ import { GraphState, NodeState } from '../core/ast.js';
 import { RenderingContext, Viewport } from './types.js';
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
 import { StandardNodes } from '../registry/index.js';
+import { loadSettings } from './settings.js';
 
 // ============================================================================
 // GRID CONSTANT
@@ -12,7 +13,7 @@ export const GRID_SIZE = 30;        // Grid spacing for snapping (half the 60px 
 // ============================================================================
 // DEFAULT GRAPH STATE
 // ============================================================================
-const defaultGraph: GraphState = {
+export const defaultGraph: GraphState = {
     nodes: {
         'nodeA': {
             id: 'nodeA',
@@ -48,9 +49,11 @@ const defaultGraph: GraphState = {
 // ============================================================================
 // APP STATE SINGLETON
 // ============================================================================
+const initialSettings = loadSettings();
+
 export const appState = {
     currentGraph: defaultGraph as GraphState,
-    viewport: { x: 0, y: 0, zoom: 1.0 } as Viewport,
+    viewport: { ...initialSettings.canvas.camera } as Viewport,
     selectedNodeId: null as string | null,
     selectedNodeIds: new Set<string>(),
 

@@ -14,10 +14,35 @@
     <link rel="stylesheet" href="/src/ui/style.css">
 </head>
 <body>
+    <!-- Inline blocking script to prevent unstyled theme flashing (FOUC) -->
+    <script>
+        (function() {
+            try {
+                const settings = JSON.parse(localStorage.getItem('litegraph-fp-settings') || '{}');
+                const theme = (settings.ui && settings.ui.theme) || 'dark';
+                if (theme === 'light') {
+                    document.body.classList.add('light-theme');
+                }
+            } catch (e) {}
+        })();
+    </script>
     <div id="app-container">
         <!-- 1. HEADER BAR -->
         <header id="app-header">
             <div class="logo-area">
+                <button id="btn-main-menu" class="btn-menu-toggle">
+                    ☰
+                </button>
+                
+                <!-- Main Dropdown Menu -->
+                <div id="main-dropdown-menu" class="main-dropdown hidden">
+                    <button class="dropdown-item" id="menu-load-demo">📁 Load Demo Graph</button>
+                    <button class="dropdown-item" id="menu-import-json">📥 Import JSON AST</button>
+                    <button class="dropdown-item" id="menu-export-json">💾 Export JSON AST</button>
+                    <div class="dropdown-divider"></div>
+                    <button class="dropdown-item text-danger" id="menu-clear-workspace">🗑️ Clear Workspace</button>
+                </div>
+
                 <span class="logo-glow"></span>
                 <h1>LITEGRAPH-FP</h1>
                 <span class="badge">Headless Functional Engine</span>
