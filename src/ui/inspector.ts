@@ -13,14 +13,24 @@ export function updateInspector() {
     
     if (!content || !placeholder) return;
 
+    const chkPinSidebar = document.getElementById('chk-pin-sidebar') as HTMLInputElement | null;
+    const isPinned = chkPinSidebar ? chkPinSidebar.checked : false;
+    const shouldAutoCollapse = !isPinned;
+
     if (!appState.selectedNodeId || !appState.currentGraph.nodes[appState.selectedNodeId]) {
         content.classList.add('hidden');
         placeholder.classList.remove('hidden');
+        if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
+            (window as any).setSidebarCollapsed(true);
+        }
         return;
     }
 
     placeholder.classList.add('hidden');
     content.classList.remove('hidden');
+    if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
+        (window as any).setSidebarCollapsed(false);
+    }
 
     const node = appState.currentGraph.nodes[appState.selectedNodeId];
     const nodeDef = StandardNodes[node.type];

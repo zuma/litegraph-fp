@@ -52,11 +52,19 @@ window.addEventListener('DOMContentLoaded', () => {
     const sidebar = document.getElementById('sidebar');
     const btnSidebar = document.getElementById('btn-sidebar-toggle');
     
-    const toggleSidebar = () => {
+    const setSidebarCollapsed = (collapsed: boolean) => {
         if (!sidebar) return;
-        const isCollapsed = sidebar.classList.toggle('collapsed');
+        const isCurrentlyCollapsed = sidebar.classList.contains('collapsed');
+        if (isCurrentlyCollapsed === collapsed) return;
+
+        if (collapsed) {
+            sidebar.classList.add('collapsed');
+        } else {
+            sidebar.classList.remove('collapsed');
+        }
+
         if (btnSidebar) {
-            btnSidebar.textContent = isCollapsed ? '📋 Panel' : '❌ Panel';
+            btnSidebar.textContent = collapsed ? '📋' : '❌';
         }
         
         // Animate resize smoothly over transition
@@ -71,7 +79,23 @@ window.addEventListener('DOMContentLoaded', () => {
         animateResize();
     };
     
+    (window as any).setSidebarCollapsed = setSidebarCollapsed;
+
+    const toggleSidebar = () => {
+        if (!sidebar) return;
+        const isCollapsed = !sidebar.classList.contains('collapsed');
+        setSidebarCollapsed(isCollapsed);
+    };
+    
     btnSidebar?.addEventListener('click', toggleSidebar);
+
+    // Pin-sidebar toggle listener to immediately sync panel state when activated
+    const chkPinSidebar = document.getElementById('chk-pin-sidebar') as HTMLInputElement | null;
+    chkPinSidebar?.addEventListener('change', () => {
+        import('./inspector.js').then(mod => {
+            mod.updateInspector();
+        });
+    });
 
     // Theme Management initialization and click handler
     const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -170,8 +194,9 @@ window.addEventListener('DOMContentLoaded', () => {
         const graphWidth = maxX - minX;
         const graphHeight = maxY - minY;
 
-        const canvasWidth = canvas.width;
-        const canvasHeight = canvas.height;
+        const rect = canvas.getBoundingClientRect();
+        const canvasWidth = rect.width;
+        const canvasHeight = rect.height;
 
         const padding = 60;
         const availableWidth = canvasWidth - padding * 2;
@@ -208,6 +233,13 @@ window.addEventListener('DOMContentLoaded', () => {
             consoleView.replaceChildren();
             logToTerminal(`Console cleared.`, 'system-msg');
         }
+    });
+
+    // Toggle Node Inspector Collapsible block
+    const inspectorHeader = document.getElementById('inspector-header');
+    const inspectorSection = document.getElementById('inspector-section');
+    inspectorHeader?.addEventListener('click', () => {
+        inspectorSection?.classList.toggle('expanded');
     });
 
     // Toggle AST JSON Collapsible block

@@ -501,6 +501,7 @@ body, html {
    ============================================================================ */
 
 #sidebar {
+    position: relative; /* Enable absolute positioning for tab handle child */
     width: var(--sidebar-width);
     height: 100%;
     background: var(--bg-panel);
@@ -526,9 +527,30 @@ body, html {
 }
 
 #inspector-section {
+    flex: 0;
+    min-height: 50px;
+    overflow: hidden;
+    transition: flex 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#inspector-section.expanded {
     flex: 2;
-    overflow-y: auto;
+}
+
+.inspector-section-body {
+    display: none;
     padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+    flex-direction: column;
+}
+
+#inspector-section.expanded .inspector-section-body {
+    display: flex;
+}
+
+#inspector-section.expanded .toggle-icon {
+    transform: rotate(180deg);
 }
 
 #logs-section {
@@ -1105,4 +1127,145 @@ body.light-theme .context-menu-item:hover {
     .helper-text {
         display: none;
     }
+}
+
+/* ============================================================================
+   SIDEBAR DRAWER TAB HANDLE (CONNECTED TO DRAWER - PORTRAIT)
+   ============================================================================ */
+
+.sidebar-handle {
+    position: absolute;
+    right: 100%;
+    top: 20px;
+    display: flex;
+    flex-direction: column; /* Portrait stack */
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-panel);
+    border-right: none; /* Visually merges the tab outline with the sidebar border */
+    border-radius: 8px 0 0 8px; /* Rounded only on the protruding edge */
+    padding: 12px 8px; /* Adjusted padding for vertical layout */
+    z-index: 10;
+    box-shadow: -4px 2px 10px rgba(0,0,0,0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    pointer-events: auto;
+}
+
+.sidebar-handle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 16px; /* Clean larger icon size */
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+}
+
+.sidebar-handle-btn:hover {
+    color: var(--accent-cyan);
+    background: rgba(255,255,255,0.05);
+}
+
+.handle-divider {
+    width: 16px; /* Horizontal divider line */
+    height: 1px;
+    background: var(--border-panel);
+}
+
+.sidebar-handle-pin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.sidebar-handle-pin:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.sidebar-handle-pin input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.pin-icon {
+    font-size: 14px;
+    transition: transform 0.2s ease, filter 0.2s ease, opacity 0.2s ease;
+    transform: rotate(45deg);
+    opacity: 0.4;
+    filter: grayscale(100%);
+}
+
+.sidebar-handle-pin input:checked + .pin-icon {
+    transform: rotate(0deg);
+    opacity: 1;
+    filter: grayscale(0%) drop-shadow(0 0 6px var(--accent-cyan));
+}
+
+/* ============================================================================
+   CUSTOM PREMIUM HOVER TOOLTIPS
+   ============================================================================ */
+
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: 125%; /* Position to the left of the tab handle bar */
+    top: 50%;
+    transform: translateY(-50%) scale(0.95);
+    background: var(--bg-panel-solid);
+    border: 1px solid var(--border-panel);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-tooltip]::before {
+    content: "";
+    position: absolute;
+    right: 115%;
+    top: 50%;
+    transform: translateY(-50%) scale(0.95);
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent transparent var(--border-panel);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 100;
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:hover::before {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
 }
