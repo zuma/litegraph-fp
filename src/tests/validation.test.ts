@@ -44,6 +44,13 @@ describe('Type Validation', () => {
             const t2: PinType = { type: 'tensor', dtype: 'float32', shape: [100, 5] };
             expect(isCompatible(t1, t2)).toBe(false);
         });
+
+        it('should match dynamic tensor dimensions using wildcards (-1, null, undefined)', () => {
+            const tDynamic: PinType = { type: 'tensor', dtype: 'float32', shape: [-1, null, undefined, 256] };
+            const tConcrete: PinType = { type: 'tensor', dtype: 'float32', shape: [32, 100, 50, 256] };
+            expect(isCompatible(tDynamic, tConcrete)).toBe(true);
+            expect(isCompatible(tConcrete, tDynamic)).toBe(true);
+        });
     });
 
     describe('validateGraph', () => {

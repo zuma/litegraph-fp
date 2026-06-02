@@ -5,12 +5,26 @@ import { Command } from '../events/types.js';
 // 2. EXECUTION & STATE DICTIONARIES
 // ============================================================================
 
+export type NodeExecuteFn = (
+    inputs: Record<string, unknown>,
+    params: Record<string, unknown>,
+    signal?: AbortSignal
+) => Promise<Record<string, unknown>>;
+
+export type Middleware = (
+    nodeId: NodeID,
+    nodeType: string,
+    next: NodeExecuteFn
+) => NodeExecuteFn;
+
 /**
  * Configuration options for the graph evaluation engine.
  */
 export interface EngineConfig {
     readonly executionMode: 'serial' | 'parallel';
     readonly nodeTimeoutMs?: number; // Mars-grade timeout watchdog
+    readonly middlewares?: ReadonlyArray<Middleware>;
+    readonly cache?: Map<string, { inputs: any; params: any; outputs: any }>;
 }
 
 /**

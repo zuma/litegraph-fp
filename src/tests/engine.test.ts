@@ -75,4 +75,116 @@ describe('Engine Feedback Loops', () => {
         await expect(evaluateGraph(graph, {}, StandardNodes, { executionMode: 'serial', nodeTimeoutMs: 1000 }))
             .resolves.not.toThrow();
     });
+
+    it('should catch static validation errors before execution and return them', async () => {
+        const graph: GraphState = {
+            nodes: {
+                'nodeC': { id: 'nodeC', type: 'math/multiply', params: {} },
+                'nodeD': { id: 'nodeD', type: 'logic/not', params: {} }
+            },
+            edges: [
+                { id: 'edge3', sourceNodeId: 'nodeC', sourcePinId: 'out', targetNodeId: 'nodeD', targetPinId: 'a' }
+            ]
+        };
+
+        const result = await evaluateGraph(graph, {}, StandardNodes, { executionMode: 'serial' });
+        expect(result.errors['nodeD']).toContain('Type validation failed');
+    });
+
+    it('should catch circular dependency cycle errors and place them under __global__', async () => {
+        const graph: GraphState = {
+            nodes: {
+                'nodeA': { id: 'nodeA', type: 'math/add', params: {} },
+                'nodeB': { id: 'nodeB', type: 'math/add', params: {} }
+            },
+            edges: [
+                { id: 'e1', sourceNodeId: 'nodeA', sourcePinId: 'out', targetNodeId: 'nodeB', targetPinId: 'a' },
+                { id: 'e2', sourceNodeId: 'nodeB', sourcePinId: 'out', targetNodeId: 'nodeA', targetPinId: 'a' }
+            ]
+        };
+
+        const result = await evaluateGraph(graph, {}, StandardNodes, { executionMode: 'serial' });
+        expect(result.errors['__global__']).toContain('Circular dependency detected');
+    });
+
+    it('should propagate upstream failures and skip downstream evaluations', async () => {
+        const faultyRegistry = {
+            ...StandardNodes,
+            'math/add': {
+                ...StandardNodes['math/add'],
+                execute: () => { throw new Error('Add exploded!'); }
+            }
+        };
+
+        const graph: GraphState = {
+            nodes: {
+                'nodeA': { id: 'nodeA', type: 'math/add', params: {} },
+                'nodeB': { id: 'nodeB', type: 'math/multiply', params: {} }
+            },
+            edges: [
+                { id: 'e1', sourceNodeId: 'nodeA', sourcePinId: 'out', targetNodeId: 'nodeB', targetPinId: 'a' }
+            ]
+        };
+
+        const result = await evaluateGraph(graph, {}, faultyRegistry, { executionMode: 'serial' });
+        expect(result.errors['nodeA']).toBe('Add exploded!');
+        expect(result.errors['nodeB']).toContain("Skipped: Upstream dependency 'nodeA' failed");
+    });
+
+    it('should default missing provides pins to null and throw on non-object returns', async () => {
+        const customRegistry = {
+            'custom/faulty': {
+                namespace: 'custom',
+                category: 'test',
+                name: 'faulty',
+                requires: {},
+                provides: { val1: 'number', val2: 'string' },
+                execute: () => ({ val1: 42 }) as any
+            },
+            'custom/invalid': {
+                namespace: 'custom',
+                category: 'test',
+                name: 'invalid',
+                requires: {},
+                provides: { val: 'any' },
+                execute: () => ("not an object" as any)
+            }
+        };
+
+        const graph1: GraphState = {
+            nodes: { 'n1': { id: 'n1', type: 'custom/faulty', params: {} } },
+            edges: []
+        };
+        const result1 = await evaluateGraph(graph1, {}, customRegistry, { executionMode: 'serial' });
+        expect(result1.state['n1.val1']).toBe(42);
+        expect(result1.state['n1.val2']).toBeNull();
+
+        const graph2: GraphState = {
+            nodes: { 'n2': { id: 'n2', type: 'custom/invalid', params: {} } },
+            edges: []
+        };
+        const result2 = await evaluateGraph(graph2, {}, customRegistry, { executionMode: 'serial' });
+        expect(result2.errors['n2']).toContain('returned invalid value');
+    });
+
+    it('should garbage collect stale activeState keys of deleted/renamed elements', async () => {
+        const graph: GraphState = {
+            nodes: {
+                'nodeA': { id: 'nodeA', type: 'math/add', params: {} }
+            },
+            edges: []
+        };
+
+        const initialInputs = {
+            'nodeA.a': 5,
+            'nodeA.b': 10,
+            'nodeDeleted.out': 99
+        };
+
+        const result = await evaluateGraph(graph, initialInputs, StandardNodes, { executionMode: 'serial' });
+        
+        expect(result.state['nodeA.a']).toBe(5);
+        expect(result.state['nodeA.b']).toBe(10);
+        expect(result.state['nodeDeleted.out']).toBeUndefined();
+    });
 });

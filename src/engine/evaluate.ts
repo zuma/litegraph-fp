@@ -1,8 +1,9 @@
 import { GraphState, NodeID, Edge } from '../core/ast.js';
-import { ExecutionState, EngineConfig, ExecutionResult } from './types.js';
+import { ExecutionState, EngineConfig, ExecutionResult, Middleware, NodeExecuteFn } from './types.js';
 import { NodeRegistry } from '../registry/types.js';
 import { Command } from '../events/types.js';
 import { sortTopologically } from './topology.js';
+import { getGraphValidationErrors } from './validation.js';
 
 // ============================================================================
 // CORE EXECUTION ENGINE (Primary Entry Point)
@@ -25,6 +26,92 @@ const buildEdgeIndex = (edges: ReadonlyArray<Edge>): Map<NodeID, Edge[]> => {
     return index;
 };
 
+// ============================================================================
+// ENGINE MIDDLEWARE UTILITIES
+// ============================================================================
+
+const isEqual = (a: any, b: any): boolean => {
+    if (a === b) return true;
+    if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+    for (const key of keysA) {
+        const valA = a[key];
+        const valB = b[key];
+        if (typeof valA === 'object' && valA !== null && typeof valB === 'object' && valB !== null) {
+            if (valA.type === 'tensor' && valB.type === 'tensor') {
+                if (valA.dtype !== valB.dtype) return false;
+                if (valA.shape.length !== valB.shape.length) return false;
+                for (let i = 0; i < valA.shape.length; i++) {
+                    if (valA.shape[i] !== valB.shape[i]) return false;
+                }
+                continue;
+            }
+        }
+        if (valA !== valB) return false;
+    }
+    return true;
+};
+
+export const createWatchdogMiddleware = (timeoutMs: number): Middleware => {
+    return (nodeId, nodeType, next) => {
+        return async (inputs, params, signal) => {
+            const controller = new AbortController();
+            if (signal) {
+                if (signal.aborted) {
+                    controller.abort();
+                } else {
+                    signal.addEventListener('abort', () => controller.abort());
+                }
+            }
+            const executionPromise = next(inputs, params, controller.signal);
+            let timerId: ReturnType<typeof setTimeout>;
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                timerId = setTimeout(() => {
+                    controller.abort();
+                    reject(new Error(`Timeout: Node exceeded ${timeoutMs}ms watchdog limit.`));
+                }, timeoutMs);
+            });
+            try {
+                return await Promise.race([executionPromise, timeoutPromise]);
+            } finally {
+                clearTimeout(timerId!);
+            }
+        };
+    };
+};
+
+export const createCacheMiddleware = (cache: Map<string, { inputs: any; params: any; outputs: any }>): Middleware => {
+    return (nodeId, nodeType, next) => {
+        return async (inputs, params, signal) => {
+            if (nodeType === 'system/state' || nodeType === 'system/delay') {
+                return next(inputs, params, signal);
+            }
+            const cached = cache.get(nodeId);
+            if (cached && isEqual(cached.inputs, inputs) && isEqual(cached.params, params)) {
+                return cached.outputs;
+            }
+            const outputs = await next(inputs, params, signal);
+            cache.set(nodeId, { inputs, params, outputs });
+            return outputs;
+        };
+    };
+};
+
+const composeMiddlewares = (
+    middlewares: ReadonlyArray<Middleware>,
+    coreExecute: NodeExecuteFn,
+    nodeId: NodeID,
+    nodeType: string
+): NodeExecuteFn => {
+    let execute = coreExecute;
+    for (let i = middlewares.length - 1; i >= 0; i--) {
+        execute = middlewares[i](nodeId, nodeType, execute);
+    }
+    return execute;
+};
+
 /**
  * The core Functional Execution Reducer.
  * Maps over the topological graph sequence and resolves nodes concurrently or sequentially
@@ -42,8 +129,27 @@ export const evaluateGraph = async (
     registry: NodeRegistry,
     config: EngineConfig
 ): Promise<ExecutionResult> => {
-    // 1. Calculate our Tiered topological order maps
-    const executionTiers = sortTopologically(graph);
+    // 1. Pre-flight static validation check
+    const validationErrors = getGraphValidationErrors(graph, registry);
+    if (Object.keys(validationErrors).length > 0) {
+        return {
+            state: Object.freeze({ ...initialInputs }) as ExecutionState,
+            errors: Object.freeze(validationErrors),
+            commands: Object.freeze({})
+        };
+    }
+
+    // 2. Calculate our Tiered topological order maps with circular dependency protection
+    let executionTiers: NodeID[][];
+    try {
+        executionTiers = sortTopologically(graph);
+    } catch (cycleError: any) {
+        return {
+            state: Object.freeze({ ...initialInputs }) as ExecutionState,
+            errors: Object.freeze({ __global__: cycleError?.message || "Circular dependency detected in graph." }),
+            commands: Object.freeze({})
+        };
+    }
 
     // 2. Pre-compute the edge index (single O(E) pass, all future lookups are O(1))
     const edgeIndex = buildEdgeIndex(graph.edges);
@@ -72,6 +178,13 @@ export const evaluateGraph = async (
 
         // Pull required inputs via the pre-computed edge index (O(1) lookup)
         const incomingEdges = edgeIndex.get(nodeId) ?? [];
+
+        // Upstream failure check (short-circuit / propagate skip status)
+        const failedUpstreamEdge = incomingEdges.find(edge => edge.sourceNodeId in runtimeErrors);
+        if (failedUpstreamEdge) {
+            throw new Error(`Skipped: Upstream dependency '${failedUpstreamEdge.sourceNodeId}' failed.`);
+        }
+
         const resolvedInputs: Record<string, unknown> = {};
         
         // 1. Initialize strictly with any root inputs from active global state (like manually typed values) (Fix #3)
@@ -82,49 +195,49 @@ export const evaluateGraph = async (
             }
         });
 
+        // For system/state nodes, also initialize inputs with the previous 'value' from activeState
+        if (node.type === 'system/state') {
+            const stateKey = `${nodeId}.value`;
+            if (stateKey in activeState) {
+                resolvedInputs['value'] = activeState[stateKey];
+            }
+        }
+
         // 2. Override with live Edge Data (Cables always win over typed values)
         incomingEdges.forEach(edge => {
             const stateKey = `${edge.sourceNodeId}.${edge.sourcePinId}`;
             resolvedInputs[edge.targetPinId] = activeState[stateKey];
         });
 
-        // Mars-Grade Watchdog: Timeout Protection with AbortController.
-        // The AbortController serves two purposes:
-        //   1. clearTimeout prevents the watchdog timer from leaking
-        //   2. controller.abort() signals the node function to clean up its own
-        //      internal async work (timers, fetch requests, etc.)
-        const controller = new AbortController();
-        // Fix #1: Wrap call in async block to catch synchronous node exceptions inside the promise race
-        const executionPromise = (async () => nodeDef.execute(resolvedInputs, node.params, controller.signal))();
-        const timeoutMs = config.nodeTimeoutMs ?? 5000;
-        
-        let timerId: ReturnType<typeof setTimeout>;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-            timerId = setTimeout(() => {
-                controller.abort(); // Signal the node to clean up
-                reject(new Error(`Timeout: Node exceeded ${timeoutMs}ms watchdog limit.`));
-            }, timeoutMs);
-        });
+        const coreExecute: NodeExecuteFn = async (inputs, params, signal) => {
+            return nodeDef.execute(inputs, params, signal) as Promise<Record<string, unknown>>;
+        };
 
-        try {
-            // Race the raw logic against the hard watchdog limit
-            const computedOutput = await Promise.race([executionPromise, timeoutPromise]) as Record<string, unknown>;
-
-            // Extract $commands into the dedicated commands dictionary (keeps state clean)
-            if (Array.isArray(computedOutput.$commands)) {
-                collectedCommands[nodeId] = computedOutput.$commands as Command[];
-            }
-
-            // Map output values globally into the execution dictionary (excluding $commands)
-            Object.entries(computedOutput).forEach(([outputPin, value]) => {
-                if (outputPin !== '$commands') {
-                    activeState[`${nodeId}.${outputPin}`] = value;
-                }
-            });
-        } finally {
-            // Always clean up the timer — whether the node succeeded, failed, or timed out.
-            clearTimeout(timerId!);
+        const pipeline: Middleware[] = [];
+        if (config.middlewares) {
+            pipeline.push(...config.middlewares);
         }
+        if (config.cache) {
+            pipeline.push(createCacheMiddleware(config.cache));
+        }
+        const timeoutMs = config.nodeTimeoutMs ?? 5000;
+        pipeline.push(createWatchdogMiddleware(timeoutMs));
+
+        const composedExecute = composeMiddlewares(pipeline, coreExecute, nodeId, node.type);
+        const computedOutput = await composedExecute(resolvedInputs, node.params);
+
+        if (!computedOutput || typeof computedOutput !== 'object') {
+            throw new Error(`Node execution returned invalid value: expected an object, got ${typeof computedOutput}`);
+        }
+
+        if (Array.isArray((computedOutput as any).$commands)) {
+            collectedCommands[nodeId] = (computedOutput as any).$commands as Command[];
+        }
+
+        Object.keys(nodeDef.provides).forEach(outputPin => {
+            const value = (computedOutput as any)[outputPin] !== undefined ? (computedOutput as any)[outputPin] : null;
+            activeState[`${nodeId}.${outputPin}`] = value;
+        });
     };
 
     // Helper to safely wrap execution and catch isolated node explosion
@@ -133,7 +246,15 @@ export const evaluateGraph = async (
             await evaluateNode(nodeId);
         } catch (error: any) {
             // Graceful Degradation: Flag error without crashing topological layer
-            runtimeErrors[nodeId] = error?.message || "Unknown fatal error occurred.";
+            let errorMessage = "Unknown fatal error occurred.";
+            if (error instanceof Error) {
+                errorMessage = error.message;
+            } else if (typeof error === 'string') {
+                errorMessage = error;
+            } else if (error && typeof error === 'object') {
+                errorMessage = error.message || JSON.stringify(error);
+            }
+            runtimeErrors[nodeId] = errorMessage;
         }
     };
 
@@ -182,9 +303,26 @@ export const evaluateGraph = async (
         }
     });
 
+    // Garbage Collection of Stale State Keys
+    const validKeys = new Set<string>();
+    Object.entries(graph.nodes).forEach(([nodeId, node]) => {
+        const def = registry[node.type];
+        if (def) {
+            Object.keys(def.provides).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
+            Object.keys(def.requires).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
+        }
+    });
+
+    const cleanedState: Record<string, unknown> = {};
+    Object.entries(activeState).forEach(([key, value]) => {
+        if (validKeys.has(key)) {
+            cleanedState[key] = value;
+        }
+    });
+
     // Return frozen execution outputs, separated error log, and extracted commands
     return {
-        state: Object.freeze(activeState) as ExecutionState,
+        state: Object.freeze(cleanedState) as ExecutionState,
         errors: Object.freeze(runtimeErrors),
         commands: Object.freeze(collectedCommands)
     };

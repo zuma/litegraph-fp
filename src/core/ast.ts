@@ -10,7 +10,7 @@ export type NodeID = string;
 export interface TensorType {
     type: 'tensor';
     dtype: string;
-    shape: number[];
+    shape: (number | null | undefined)[];
 }
 
 /**

@@ -17,7 +17,7 @@ const mockGraph: GraphState = {
         'nodeA': { id: 'nodeA', type: 'math/add', params: {} },
         'nodeB': { id: 'nodeB', type: 'math/add', params: {} },
         'nodeC': { id: 'nodeC', type: 'math/multiply', params: {} },
-        'nodeD': { id: 'nodeD', type: 'logic/not', params: {} },
+        'nodeD': { id: 'nodeD', type: 'math/round', params: {} },
         'nodeRogue': { id: 'nodeRogue', type: 'system/delay', params: { ms: 999999 } }, // Infinite hang!
         'nodeLog': { id: 'nodeLog', type: 'system/log', params: {} },
     },

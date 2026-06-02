@@ -26,7 +26,11 @@ export const isCompatible = (source: PinType, target: PinType): boolean => {
                 return false;
             }
             for (let i = 0; i < source.shape.length; i++) {
-                if (source.shape[i] !== target.shape[i]) {
+                const sDim = source.shape[i];
+                const tDim = target.shape[i];
+                const isDynamicSource = sDim === -1 || sDim === null || sDim === undefined;
+                const isDynamicTarget = tDim === -1 || tDim === null || tDim === undefined;
+                if (!isDynamicSource && !isDynamicTarget && sDim !== tDim) {
                     return false;
                 }
             }
