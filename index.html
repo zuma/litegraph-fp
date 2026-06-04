@@ -30,45 +30,47 @@
         <!-- 1. HEADER BAR -->
         <header id="app-header">
             <div class="logo-area">
-                <button id="btn-main-menu" class="btn-menu-toggle">
-                    ☰
-                </button>
-                
-                <!-- Main Dropdown Menu -->
-                <div id="main-dropdown-menu" class="main-dropdown hidden">
-                    <button class="dropdown-item" id="menu-load-demo">📁 Load Demo Graph</button>
-                    <button class="dropdown-item" id="menu-import-json">📥 Import JSON AST</button>
-                    <button class="dropdown-item" id="menu-export-json">💾 Export JSON AST</button>
+                <div class="main-menu-container">
+                    <button id="btn-main-menu" class="btn-menu-toggle">
+                        ☰
+                    </button>
                     
-                    <div class="dropdown-divider"></div>
-                    
-                    <!-- Settings Submenu -->
-                    <div class="dropdown-submenu-parent">
-                        <button class="dropdown-item" id="menu-settings-trigger">
-                            ⚙️ Settings <span style="margin-left: auto; font-size: 10px; color: var(--text-muted);">▶</span>
-                        </button>
-                        <div class="dropdown-submenu">
-                            <button class="dropdown-item" id="menu-toggle-darkmode">
-                                <span>🌙 Dark Mode</span>
-                                <input type="checkbox" id="menu-chk-darkmode" style="margin-left: auto; cursor: pointer;">
+                    <!-- Main Dropdown Menu -->
+                    <div id="main-dropdown-menu" class="main-dropdown hidden">
+                        <button class="dropdown-item" id="menu-load-demo">📁 Load Demo Graph</button>
+                        <button class="dropdown-item" id="menu-import-json">📥 Import JSON AST</button>
+                        <button class="dropdown-item" id="menu-export-json">💾 Export JSON AST</button>
+                        
+                        <div class="dropdown-divider"></div>
+                        
+                        <!-- Settings Submenu -->
+                        <div class="dropdown-submenu-parent">
+                            <button class="dropdown-item" id="menu-settings-trigger">
+                                ⚙️ Settings <span style="margin-left: auto; font-size: 10px; color: var(--text-muted);">▶</span>
                             </button>
-                            <button class="dropdown-item" id="menu-toggle-autorun">
-                                <span>⚡ Auto-Run</span>
-                                <input type="checkbox" id="menu-chk-autorun" style="margin-left: auto; cursor: pointer;">
-                            </button>
-                            <button class="dropdown-item" id="menu-toggle-snap-grid">
-                                <span>📐 Snap to Grid</span>
-                                <input type="checkbox" id="menu-chk-snap-grid-opt" style="margin-left: auto; cursor: pointer;">
-                            </button>
-                            <button class="dropdown-item" id="menu-toggle-pin-sidebar">
-                                <span>📌 Pin Sidebar</span>
-                                <input type="checkbox" id="menu-chk-pin-sidebar-opt" style="margin-left: auto; cursor: pointer;">
-                            </button>
+                            <div class="dropdown-submenu">
+                                <button class="dropdown-item" id="menu-toggle-darkmode">
+                                    <span>🌙 Dark Mode</span>
+                                    <input type="checkbox" id="menu-chk-darkmode" style="margin-left: auto; cursor: pointer;">
+                                </button>
+                                <button class="dropdown-item" id="menu-toggle-autorun">
+                                    <span>⚡ Auto-Run</span>
+                                    <input type="checkbox" id="menu-chk-autorun" style="margin-left: auto; cursor: pointer;">
+                                </button>
+                                <button class="dropdown-item" id="menu-toggle-snap-grid">
+                                    <span>📐 Snap to Grid</span>
+                                    <input type="checkbox" id="menu-chk-snap-grid-opt" style="margin-left: auto; cursor: pointer;">
+                                </button>
+                                <button class="dropdown-item" id="menu-toggle-pin-sidebar">
+                                    <span>📌 Pin Sidebar</span>
+                                    <input type="checkbox" id="menu-chk-pin-sidebar-opt" style="margin-left: auto; cursor: pointer;">
+                                </button>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="dropdown-divider"></div>
-                    <button class="dropdown-item text-danger" id="menu-clear-workspace">🗑️ Clear Workspace</button>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item text-danger" id="menu-clear-workspace">🗑️ Clear Workspace</button>
+                    </div>
                 </div>
 
                 <span class="logo-glow"></span>
@@ -89,21 +91,21 @@
                 
                 <div class="control-button-group">
                     <button id="btn-undo" class="btn btn-secondary btn-sm" disabled title="Undo last action (Ctrl+Z)">
-                        ↩️ Undo
+                        ↩️ <span class="btn-text">Undo</span>
                     </button>
                     <button id="btn-redo" class="btn btn-secondary btn-sm" disabled title="Redo last action (Ctrl+Y)">
-                        ↪️ Redo
+                        ↪️ <span class="btn-text">Redo</span>
                     </button>
-                    <div style="width: 1px; height: 20px; background: var(--border-panel); margin: 0 4px;"></div>
+                    <div style="width: 1.5px; height: 21px; background: var(--border-panel); margin: 0 6px;"></div>
                     <button id="btn-run" class="btn btn-primary" title="Execute current graph state">
-                        <span class="btn-icon">⚡</span> Run Graph
+                        <span class="btn-icon">⚡</span> <span class="btn-text">Run<span class="btn-text-extra"> Graph</span></span>
                     </button>
                     <label class="toggle-switch" title="Auto-run graph on drag, connection, or parameter change">
                         <input type="checkbox" id="chk-auto-run" checked>
                         <span class="toggle-slider"></span>
                         <span class="toggle-label">Auto-Run</span>
                     </label>
-                    <div style="width: 1px; height: 20px; background: var(--border-panel); margin: 0 4px;"></div>
+                    <div style="width: 1.5px; height: 21px; background: var(--border-panel); margin: 0 6px;"></div>
                     <label class="toggle-switch" title="Snap nodes to grid (30px) during drags or spawns">
                         <input type="checkbox" id="chk-snap-grid">
                         <span class="toggle-slider"></span>

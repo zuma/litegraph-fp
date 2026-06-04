@@ -138,6 +138,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const menuTogglePin = document.getElementById('menu-toggle-pin-sidebar');
     menuTogglePin?.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (e.target !== menuChkPinSidebar) {
             e.preventDefault();
             if (menuChkPinSidebar) menuChkPinSidebar.checked = !menuChkPinSidebar.checked;
@@ -168,6 +169,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const menuToggleAuto = document.getElementById('menu-toggle-autorun');
     menuToggleAuto?.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (e.target !== menuChkAutoRun) {
             e.preventDefault();
             if (menuChkAutoRun) menuChkAutoRun.checked = !menuChkAutoRun.checked;
@@ -198,6 +200,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const menuToggleSnap = document.getElementById('menu-toggle-snap-grid');
     menuToggleSnap?.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (e.target !== menuChkSnapGrid) {
             e.preventDefault();
             if (menuChkSnapGrid) menuChkSnapGrid.checked = !menuChkSnapGrid.checked;
@@ -225,6 +228,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const menuToggleDark = document.getElementById('menu-toggle-darkmode');
     menuToggleDark?.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (e.target !== chkDarkMode) {
             e.preventDefault();
             if (chkDarkMode) chkDarkMode.checked = !chkDarkMode.checked;
@@ -392,6 +396,8 @@ window.addEventListener('DOMContentLoaded', () => {
     // ========================================================================
     const btnMainMenu = document.getElementById('btn-main-menu');
     const mainDropdownMenu = document.getElementById('main-dropdown-menu');
+    const menuContainer = document.querySelector('.main-menu-container');
+    let mainControlCloseTimer: any = null;
 
     btnMainMenu?.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -429,6 +435,24 @@ window.addEventListener('DOMContentLoaded', () => {
             submenu?.classList.remove('open');
             submenuCloseTimer = null;
         }, 300); // 300ms grace period before closing
+    });
+
+    // Main dropdown menu hover intent delay - close when cursor leaves container
+    menuContainer?.addEventListener('mouseleave', () => {
+        if (mainControlCloseTimer) clearTimeout(mainControlCloseTimer);
+        mainControlCloseTimer = setTimeout(() => {
+            mainDropdownMenu?.classList.add('hidden');
+            btnMainMenu?.classList.remove('active');
+            submenu?.classList.remove('open');
+            mainControlCloseTimer = null;
+        }, 300); // 300ms grace period
+    });
+
+    menuContainer?.addEventListener('mouseenter', () => {
+        if (mainControlCloseTimer) {
+            clearTimeout(mainControlCloseTimer);
+            mainControlCloseTimer = null;
+        }
     });
 
     // 1. Load Demo Graph

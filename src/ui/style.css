@@ -44,8 +44,8 @@
     --node-default-header-end: hsla(190, 80%, 15%, 0.1);
     
     /* Layout constants */
-    --header-height: 70px;
-    --sidebar-width: 380px;
+    --header-height: 72px;
+    --sidebar-width: 381px;
     
     /* Effects */
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
@@ -161,13 +161,13 @@ body, html {
     background: var(--bg-panel);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border-panel);
+    border-bottom: 1.5px solid var(--border-panel);
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0 24px;
     z-index: 10;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
 }
 
 .logo-area {
@@ -182,18 +182,18 @@ body, html {
     width: 30px;
     height: 30px;
     background: var(--accent-cyan);
-    filter: blur(20px);
+    filter: blur(21px);
     border-radius: 50%;
-    left: -10px;
+    left: -9px;
     opacity: 0.6;
     pointer-events: none;
     z-index: 0;
 }
 
 .logo-area h1 {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 700;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
     background: linear-gradient(90deg, var(--text-primary) 0%, var(--accent-cyan) 100%);
     -webkit-background-clip: text;
     background-clip: text;
@@ -204,43 +204,43 @@ body, html {
 
 .badge {
     background: hsla(190, 100%, 50%, 0.1);
-    border: 1px solid hsla(190, 100%, 50%, 0.35);
+    border: 1.5px solid hsla(190, 100%, 50%, 0.35);
     color: var(--accent-cyan);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 4px;
+    padding: 3px 9px;
+    border-radius: 6px;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     font-family: var(--font-sans);
 }
 
 #global-controls {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 21px;
 }
 
 .status-indicator-wrapper {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     background: var(--bg-input);
     padding: 6px 12px;
     border-radius: 6px;
-    border: 1px solid var(--border-panel);
+    border: 1.5px solid var(--border-panel);
 }
 
 .status-dot {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     display: inline-block;
 }
 
 .status-dot.idle {
     background-color: var(--text-muted);
-    box-shadow: 0 0 8px var(--text-muted);
+    box-shadow: 0 0 9px var(--text-muted);
 }
 .status-dot.running {
     background-color: var(--accent-cyan);
@@ -253,7 +253,7 @@ body, html {
 }
 
 .status-text {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
     font-weight: 500;
 }
@@ -262,9 +262,9 @@ body, html {
     display: flex;
     flex-direction: column;
     background: var(--bg-input);
-    padding: 4px 12px;
+    padding: 6px 12px;
     border-radius: 6px;
-    border: 1px solid var(--border-panel);
+    border: 1.5px solid var(--border-panel);
     align-items: center;
 }
 
@@ -276,7 +276,7 @@ body, html {
 }
 
 .metric-value {
-    font-size: 14px;
+    font-size: 15px;
     font-family: var(--font-mono);
     color: var(--accent-cyan);
     font-weight: 500;
@@ -823,14 +823,14 @@ body, html {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 9px;
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
-    padding: 8px 16px;
-    border-radius: 8px;
+    padding: 9px 18px;
+    border-radius: 9px;
     cursor: pointer;
-    border: 1px solid transparent;
+    border: 1.5px solid transparent;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
 }
@@ -848,7 +848,7 @@ body, html {
 }
 .btn-primary:hover {
     filter: brightness(1.1);
-    box-shadow: 0 0 20px var(--accent-cyan);
+    box-shadow: 0 0 21px var(--accent-cyan);
     transform: translateY(-1px);
 }
 .btn-primary:active {
@@ -877,18 +877,19 @@ body, html {
 }
 
 .btn-sm {
-    padding: 4px 8px;
-    font-size: 11px;
-    border-radius: 4px;
+    padding: 6px 9px;
+    font-size: 12px;
+    border-radius: 6px;
 }
 
 /* Toggle Switch styling */
 .toggle-switch {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     cursor: pointer;
     user-select: none;
+    flex-shrink: 0;
 }
 
 .toggle-switch input {
@@ -901,20 +902,22 @@ body, html {
 .toggle-slider {
     position: relative;
     width: 36px;
-    height: 20px;
+    height: 21px;
     background-color: var(--border-panel);
-    border-radius: 10px;
+    border: 1.5px solid var(--border-panel);
+    border-radius: 10.5px;
     transition: 0.3s;
     display: inline-block;
+    flex-shrink: 0;
 }
 
 .toggle-slider:before {
     position: absolute;
     content: "";
-    height: 14px;
-    width: 14px;
-    left: 3px;
-    bottom: 3px;
+    height: 15px;
+    width: 15px;
+    left: 1.5px;
+    bottom: 1.5px;
     background-color: var(--text-muted);
     border-radius: 50%;
     transition: 0.3s;
@@ -922,18 +925,19 @@ body, html {
 
 .toggle-switch input:checked + .toggle-slider {
     background-color: var(--accent-cyan-glow);
-    border: 1px solid var(--accent-cyan-glow);
+    border-color: var(--accent-cyan-glow);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
-    transform: translateX(16px);
+    transform: translateX(15px);
     background-color: var(--accent-cyan);
 }
 
 .toggle-label {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
     font-weight: 500;
+    white-space: nowrap;
 }
 
 /* ============================================================================
@@ -1006,7 +1010,7 @@ body.light-theme .context-menu-item:hover {
 /* 1. Large tablets & laptops */
 @media (max-width: 1024px) {
     :root {
-        --sidebar-width: 320px;
+        --sidebar-width: 318px;
     }
     
     .logo-area .badge {
@@ -1014,7 +1018,7 @@ body.light-theme .context-menu-item:hover {
     }
     
     #app-header {
-        padding: 0 16px;
+        padding: 0 18px;
     }
 }
 
@@ -1024,16 +1028,21 @@ body.light-theme .context-menu-item:hover {
         display: none;
     }
     
+    #btn-undo .btn-text,
+    #btn-redo .btn-text {
+        display: none;
+    }
+    
+    #btn-run .btn-text-extra {
+        display: none;
+    }
+    
     #btn-undo, #btn-redo {
-        padding: 4px 6px;
+        padding: 6px 9px;
     }
     
     .status-indicator-wrapper {
-        padding: 6px 8px;
-    }
-    
-    .toggle-label {
-        font-size: 11px;
+        padding: 6px 9px;
     }
 }
 
@@ -1075,7 +1084,7 @@ body.light-theme .context-menu-item:hover {
     .logo-area h1 {
         font-size: 16px;
         letter-spacing: 1px;
-        margin-right: 4px;
+        margin-right: 3px;
     }
     
     .status-text {
@@ -1083,7 +1092,7 @@ body.light-theme .context-menu-item:hover {
     }
     
     .btn {
-        padding: 6px 8px;
+        padding: 6px 9px;
         font-size: 12px;
     }
     
@@ -1092,18 +1101,10 @@ body.light-theme .context-menu-item:hover {
     }
     
     #btn-run {
-        padding: 6px 10px;
+        padding: 6px 9px;
     }
     #btn-run span.btn-icon {
         margin-right: 0;
-    }
-    #btn-run {
-        font-size: 0;
-    }
-    #btn-run::after {
-        content: "⚡ Run";
-        font-size: 12px;
-        font-weight: 600;
     }
     
     .toggle-label {
@@ -1111,15 +1112,14 @@ body.light-theme .context-menu-item:hover {
     }
     
     .floating-panel {
-        width: 290px;
+        width: 288px;
     }
 }
 
 /* 4. Very small devices */
 @media (max-width: 480px) {
-    #btn-run::after {
-        content: "⚡";
-        font-size: 12px;
+    #btn-run .btn-text {
+        display: none;
     }
     
     #canvas-overlays {
@@ -1278,13 +1278,20 @@ body.light-theme .context-menu-item:hover {
    MAIN MENU DROPDOWN
    ============================================================================ */
 
+.main-menu-container {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
 .btn-menu-toggle {
     background: transparent;
     border: none;
     color: var(--text-secondary);
     font-size: 18px;
     cursor: pointer;
-    padding: 6px 8px;
+    padding: 6px 9px;
     border-radius: 6px;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
@@ -1296,14 +1303,14 @@ body.light-theme .context-menu-item:hover {
 
 .btn-menu-toggle:hover {
     color: var(--accent-cyan);
-    background: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.06);
 }
 
 .btn-menu-toggle.active {
     background: var(--accent-cyan-glow);
     color: var(--accent-cyan);
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 0 8px var(--accent-cyan-glow);
-    transform: scale(0.95) translateY(1px);
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.2), 0 0 9px var(--accent-cyan-glow);
+    transform: scale(0.95) translateY(1.5px);
 }
 
 .btn-menu-toggle.active:hover {
@@ -1318,13 +1325,13 @@ body.light-theme .context-menu-item:hover {
     display: flex;
     flex-direction: column;
     background: var(--bg-panel-solid);
-    border: 1px solid var(--border-panel);
+    border: 1.5px solid var(--border-panel);
     border-top: none;
-    border-radius: 0 0 8px 8px;
+    border-radius: 0 0 9px 9px;
     padding: 6px 0;
-    width: 200px;
+    width: 201px;
     z-index: 100;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    box-shadow: 0 9px 27px rgba(0,0,0,0.4);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
 }
@@ -1344,12 +1351,12 @@ body.light-theme .context-menu-item:hover {
     left: 100%;
     flex-direction: column;
     background: var(--bg-panel-solid);
-    border: 1px solid var(--border-panel);
-    border-radius: 8px;
+    border: 1.5px solid var(--border-panel);
+    border-radius: 9px;
     padding: 6px 0;
-    width: 190px;
+    width: 192px;
     z-index: 101;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    box-shadow: 0 9px 27px rgba(0,0,0,0.4);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
 }
@@ -1362,16 +1369,16 @@ body.light-theme .context-menu-item:hover {
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: 10px 16px;
+    padding: 9px 18px;
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     text-align: left;
     cursor: pointer;
     transition: all 0.15s ease;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     width: 100%;
 }
 
@@ -1385,12 +1392,12 @@ body.light-theme .context-menu-item:hover {
 }
 
 .dropdown-item.text-danger:hover {
-    background: rgba(255, 90, 90, 0.05);
+    background: rgba(255, 90, 90, 0.06);
     color: var(--accent-red);
 }
 
 .dropdown-divider {
-    height: 1px;
+    height: 1.5px;
     background: var(--border-panel);
-    margin: 4px 0;
+    margin: 6px 0;
 }
