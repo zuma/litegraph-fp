@@ -65,15 +65,23 @@ export const createRenderer = (
             ctx.beginPath();
             ctx.moveTo(drag.x, drag.y);
             
-            // Draw smooth Bezier curve to cursor
-            const dx = Math.abs(drag.cursorX - drag.x);
-            const cpOffset = Math.max(40, dx * 0.4);
-            const cp1x = drag.isInput ? drag.x - cpOffset : drag.x + cpOffset;
-            const cp1y = drag.y;
-            const cp2x = drag.isInput ? drag.cursorX + cpOffset : drag.cursorX - cpOffset;
-            const cp2y = drag.cursorY;
+            const edgeStyle = context.edgeStyle || 'spline';
+            if (edgeStyle === 'orthogonal') {
+                const midX = (drag.x + drag.cursorX) / 2;
+                ctx.lineTo(midX, drag.y);
+                ctx.lineTo(midX, drag.cursorY);
+                ctx.lineTo(drag.cursorX, drag.cursorY);
+            } else {
+                // Draw smooth Bezier curve to cursor
+                const dx = Math.abs(drag.cursorX - drag.x);
+                const cpOffset = Math.max(40, dx * 0.4);
+                const cp1x = drag.isInput ? drag.x - cpOffset : drag.x + cpOffset;
+                const cp1y = drag.y;
+                const cp2x = drag.isInput ? drag.cursorX + cpOffset : drag.cursorX - cpOffset;
+                const cp2y = drag.cursorY;
+                ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, drag.cursorX, drag.cursorY);
+            }
             
-            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, drag.cursorX, drag.cursorY);
             ctx.strokeStyle = drag.isInput ? 'hsl(275, 100%, 65%)' : 'hsl(190, 100%, 50%)'; // Purple or Cyan
             ctx.lineWidth = 2;
             ctx.stroke();

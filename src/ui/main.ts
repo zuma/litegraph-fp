@@ -17,6 +17,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const settings = loadSettings();
 
+    // Differentiate shortcut hints depending on the platform (Mac vs Win/Linux) (Fixes #18)
+    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform) || (navigator.userAgent && /Mac/.test(navigator.userAgent));
+    if (isMac) {
+        const btnUndo = document.getElementById('btn-undo');
+        const btnRedo = document.getElementById('btn-redo');
+        const btnSidebarToggle = document.getElementById('btn-sidebar-toggle');
+
+        if (btnUndo) btnUndo.setAttribute('title', 'Undo last action (⌘Z)');
+        if (btnRedo) btnRedo.setAttribute('title', 'Redo last action (⌘Y)');
+        if (btnSidebarToggle) btnSidebarToggle.setAttribute('data-tooltip', 'Toggle Panel (⌘B) - Manually show or hide the sidebar panel');
+    }
+
     // Handle resize with DPR support (Fixes #17)
     const resizeCanvas = () => {
         const rect = canvas.getBoundingClientRect();
@@ -206,6 +218,53 @@ window.addEventListener('DOMContentLoaded', () => {
             if (menuChkSnapGrid) menuChkSnapGrid.checked = !menuChkSnapGrid.checked;
         }
         if (menuChkSnapGrid) setSnapGrid(menuChkSnapGrid.checked);
+    });
+
+    // Initialize and bind Auto Bring to Front state
+    const menuChkAutoFront = document.getElementById('menu-chk-auto-front-opt') as HTMLInputElement | null;
+
+    if (menuChkAutoFront) {
+        menuChkAutoFront.checked = settings.canvas.autoBringToFront;
+    }
+
+    function setAutoFront(enabled: boolean) {
+        if (menuChkAutoFront) menuChkAutoFront.checked = enabled;
+        updateSetting('canvas', 'autoBringToFront', enabled);
+    }
+
+    const menuToggleAutoFront = document.getElementById('menu-toggle-auto-front');
+    menuToggleAutoFront?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (e.target !== menuChkAutoFront) {
+            e.preventDefault();
+            if (menuChkAutoFront) menuChkAutoFront.checked = !menuChkAutoFront.checked;
+        }
+        if (menuChkAutoFront) setAutoFront(menuChkAutoFront.checked);
+    });
+
+    // Initialize and bind Edge Style state
+    const menuLblEdgeStyle = document.getElementById('menu-lbl-edge-style');
+    const menuToggleEdgeStyle = document.getElementById('menu-toggle-edge-style');
+
+    function updateEdgeStyleLabel(style: 'spline' | 'orthogonal') {
+        if (menuLblEdgeStyle) {
+            menuLblEdgeStyle.textContent = `🔌 Edge Style: ${style === 'orthogonal' ? 'Orthogonal' : 'Spline'}`;
+        }
+    }
+
+    // Set initial label
+    updateEdgeStyleLabel(settings.canvas.edgeStyle || 'spline');
+
+    menuToggleEdgeStyle?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const currentSettings = loadSettings();
+        const newStyle = currentSettings.canvas.edgeStyle === 'orthogonal' ? 'spline' : 'orthogonal';
+        updateSetting('canvas', 'edgeStyle', newStyle);
+        updateEdgeStyleLabel(newStyle);
+        if (appState.renderingContext) {
+            appState.renderingContext.edgeStyle = newStyle;
+            appState.renderingContext.needsRedraw = true;
+        }
     });
 
     // Theme Management initialization and click handlers

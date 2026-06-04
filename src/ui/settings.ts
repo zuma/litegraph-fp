@@ -11,6 +11,8 @@ export interface AppSettings {
     canvas: {
         autoRun: boolean;
         snapToGrid: boolean;
+        autoBringToFront: boolean;
+        edgeStyle: 'spline' | 'orthogonal';
         camera: { x: number; y: number; zoom: number };
     };
 }
@@ -28,6 +30,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     canvas: {
         autoRun: true,
         snapToGrid: false,
+        autoBringToFront: true,
+        edgeStyle: 'spline',
         camera: { x: 0, y: 0, zoom: 1.0 },
     },
 };

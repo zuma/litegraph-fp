@@ -250,15 +250,134 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         });
     }
 
-    // 7. Draw Mini Parameters / Value Preview at bottom
+    // 7. Draw Mini Parameters Preview at bottom of node body (if any)
     const paramKeys = Object.keys(node.params);
-    if (paramKeys.length > 0) {
+    const hasParams = paramKeys.length > 0;
+    if (hasParams) {
         context.fillStyle = computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)';
-        context.font = '9px "Fira Code", monospace';
+        context.font = '8px "Fira Code", monospace';
         context.textAlign = 'center';
         context.textBaseline = 'bottom';
         const preview = paramKeys.map(k => `${k}:${node.params[k]}`).join(' | ');
-        context.fillText(preview.length > 25 ? preview.slice(0, 22) + '...' : preview, x + w / 2, y + h - 6);
+        context.fillText(preview.length > 25 ? preview.slice(0, 22) + '...' : preview, x + w / 2, y + h - 8);
+    }
+
+    // 8. Expandable Node ID Drawer (Dynamo style)
+    const isEllipsisHovered = ctx.hoveredEllipsisNodeId === node.id;
+    const isPinned = ctx.pinnedDrawerNodeIds?.has(node.id) ?? false;
+    const isDrawerOpen = ctx.hoveredDrawerNodeId === node.id || isPinned;
+
+    // Draw ellipsis button at the bottom center of the node body
+    context.save();
+    context.beginPath();
+    
+    const btnW = 30;
+    const btnH = 12;
+    const btnX = x + w / 2 - btnW / 2;
+    const btnY = y + h - btnH / 2;
+    
+    context.roundRect(btnX, btnY, btnW, btnH, 6);
+    context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
+    context.fill();
+    
+    context.lineWidth = 1;
+    context.strokeStyle = isEllipsisHovered || isPinned 
+        ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
+        : (computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.08)');
+    context.stroke();
+    
+    // Draw ellipsis dots text
+    context.fillStyle = isEllipsisHovered || isPinned
+        ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
+        : (computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)');
+    context.font = 'bold 10px "Outfit", sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText('...', x + w / 2, y + h);
+    context.restore();
+
+    // Draw the drawer if open
+    if (isDrawerOpen) {
+        context.save();
+        
+        const drawerW = 144;
+        const drawerH = 24;
+        const drawerX = x + w / 2 - drawerW / 2;
+        const drawerY = y + h + 6;
+        
+        // Draw drawer body (glassmorphism)
+        context.beginPath();
+        context.roundRect(drawerX, drawerY, drawerW, drawerH, 6);
+        context.fillStyle = computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
+        context.globalAlpha = 0.95;
+        context.fill();
+        context.globalAlpha = 1.0;
+        
+        context.lineWidth = 1;
+        context.strokeStyle = isPinned 
+            ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
+            : (computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.08)');
+        context.stroke();
+        
+        // Draw Node ID text
+        context.fillStyle = computedStyle.getPropertyValue('--text-primary').trim() || '#ffffff';
+        context.font = '9px "Fira Code", monospace';
+        context.textAlign = 'left';
+        context.textBaseline = 'middle';
+        context.fillText(node.id, drawerX + 10, drawerY + drawerH / 2);
+        
+        // Draw Thumbtack/Pin button area
+        const pinCX = drawerX + drawerW - 18;
+        const pinCY = drawerY + drawerH / 2;
+        const isPinHovered = ctx.hoveredPinNodeId === node.id;
+        
+        if (isPinHovered) {
+            context.beginPath();
+            context.arc(pinCX, pinCY, 8, 0, Math.PI * 2);
+            context.fillStyle = 'rgba(255, 255, 255, 0.08)';
+            context.fill();
+        }
+        
+        // Draw thumbtack icon
+        const pinColor = isPinned 
+            ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
+            : (isPinHovered ? '#ffffff' : (computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)'));
+            
+        context.strokeStyle = pinColor;
+        context.fillStyle = pinColor;
+        context.lineWidth = 1.5;
+        
+        context.translate(pinCX, pinCY);
+        if (!isPinned) {
+            context.rotate(Math.PI / 4); // Rotated 45 degrees when unpinned
+        }
+        
+        // Draw cap
+        context.beginPath();
+        context.moveTo(-4, -4);
+        context.lineTo(4, -4);
+        context.stroke();
+        
+        // Draw body
+        context.beginPath();
+        context.moveTo(-3, -4);
+        context.lineTo(-3, 1);
+        context.lineTo(3, 1);
+        context.lineTo(3, -4);
+        context.closePath();
+        if (isPinned) {
+            context.fill();
+        } else {
+            context.stroke();
+        }
+        
+        // Draw needle point
+        context.beginPath();
+        context.moveTo(0, 1);
+        context.lineTo(0, 6);
+        context.stroke();
+        
+        context.restore();
     }
 
     context.restore();
@@ -275,27 +394,35 @@ export function drawEdge(
     const context = ctx.ctx;
     context.save();
 
-    // Create a smooth horizontal Bezier curve between outputs and inputs
-    const dx = Math.abs(targetPos.x - sourcePos.x);
-    const cpOffset = Math.max(40, dx * 0.4);
-
-    const cp1x = sourcePos.x + cpOffset;
-    const cp1y = sourcePos.y;
-    const cp2x = targetPos.x - cpOffset;
-    const cp2y = targetPos.y;
     const color = getPinColor(pinType, computedStyle);
     const isLight = document.body.classList.contains('light-theme');
+    const edgeStyle = ctx.edgeStyle || 'spline';
+
+    const buildPath = () => {
+        context.beginPath();
+        context.moveTo(sourcePos.x, sourcePos.y);
+        if (edgeStyle === 'orthogonal') {
+            const midX = (sourcePos.x + targetPos.x) / 2;
+            context.lineTo(midX, sourcePos.y);
+            context.lineTo(midX, targetPos.y);
+            context.lineTo(targetPos.x, targetPos.y);
+        } else {
+            const dx = Math.abs(targetPos.x - sourcePos.x);
+            const cpOffset = Math.max(40, dx * 0.4);
+            context.bezierCurveTo(sourcePos.x + cpOffset, sourcePos.y, targetPos.x - cpOffset, targetPos.y, targetPos.x, targetPos.y);
+        }
+    };
 
     // 1. Draw main glowing conduit line background (semi-transparent)
-    context.beginPath();
-    context.moveTo(sourcePos.x, sourcePos.y);
-    context.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, targetPos.x, targetPos.y);
+    buildPath();
     context.strokeStyle = color;
     context.globalAlpha = isLight ? 0.35 : 0.25;
     context.lineWidth = 4;
     context.stroke();
 
     // 2. Draw sharp internal edge path
+    buildPath();
+    context.strokeStyle = color;
     context.globalAlpha = 0.85;
     context.lineWidth = 2;
     context.stroke();
@@ -305,6 +432,7 @@ export function drawEdge(
     const isSelected = ctx.selectedNodeId === edge.sourceNodeId || 
                        ctx.selectedNodeId === edge.targetNodeId || 
                        (ctx.selectedNodeIds && (ctx.selectedNodeIds.has(edge.sourceNodeId) || ctx.selectedNodeIds.has(edge.targetNodeId)));
+    buildPath();
     context.lineWidth = 2.5;
 
     context.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.7)' : '#ffffff';

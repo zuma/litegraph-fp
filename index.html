@@ -65,6 +65,13 @@
                                     <span>📌 Pin Sidebar</span>
                                     <input type="checkbox" id="menu-chk-pin-sidebar-opt" style="margin-left: auto; cursor: pointer;">
                                 </button>
+                                <button class="dropdown-item" id="menu-toggle-auto-front">
+                                    <span>🔝 Auto Bring to Front</span>
+                                    <input type="checkbox" id="menu-chk-auto-front-opt" style="margin-left: auto; cursor: pointer;">
+                                </button>
+                                <button class="dropdown-item" id="menu-toggle-edge-style">
+                                    <span id="menu-lbl-edge-style">🔌 Edge Style: Spline</span>
+                                </button>
                             </div>
                         </div>
 
@@ -75,20 +82,9 @@
 
                 <span class="logo-glow"></span>
                 <h1>LITEGRAPH-FP</h1>
-                <span class="badge">Headless Functional Engine</span>
             </div>
             
-            <!-- Dashboard / Status Controls -->
             <div id="global-controls">
-                <div class="status-indicator-wrapper">
-                    <span id="engine-status-dot" class="status-dot idle"></span>
-                    <span id="engine-status-text" class="status-text">Engine: Idle</span>
-                </div>
-                <div class="metric-badge">
-                    <span class="metric-label">Execution Time</span>
-                    <span id="execution-time-value" class="metric-value">0ms</span>
-                </div>
-                
                 <div class="control-button-group">
                     <button id="btn-undo" class="btn btn-secondary btn-sm" disabled title="Undo last action (Ctrl+Z)">
                         ↩️ <span class="btn-text">Undo</span>
@@ -134,9 +130,7 @@
                         </button>
                         <button id="btn-zoom-out" title="Zoom Out">-</button>
                     </div>
-                    <div class="helper-text">
-                        Drag to pan (middle-click/Space+drag) • Scroll to zoom • Double-click canvas to add nodes
-                    </div>
+
                 </div>
 
                 <!-- Double click / Right click Node Adder Panel -->
@@ -157,6 +151,9 @@
                 <div id="context-menu" class="context-menu hidden">
                     <button class="context-menu-item" id="ctx-delete-node">🗑️ Delete Node</button>
                     <button class="context-menu-item" id="ctx-disconnect-node">🔌 Disconnect All</button>
+                    <div class="context-menu-divider"></div>
+                    <button class="context-menu-item" id="ctx-bring-to-front">🔝 Bring to Front</button>
+                    <button class="context-menu-item" id="ctx-send-to-back">🔀 Send to Back</button>
                 </div>
             </section>
 
@@ -192,6 +189,10 @@
                             <div class="inspector-field-group">
                                 <span class="inspector-label">Type</span>
                                 <span id="inspect-node-type" class="inspector-value badge"></span>
+                            </div>
+                            <div class="inspector-field-group">
+                                <span class="inspector-label">Title</span>
+                                <input type="text" id="inspect-node-title" class="input-field" style="width: 120px; text-align: left; padding: 3px 6px; font-size: 12px; border-radius: 6px;" autocomplete="off">
                             </div>
                             
                             <div class="divider"></div>
@@ -243,6 +244,28 @@
                 </section>
             </aside>
         </main>
+        <!-- 3. FOOTER STATUS BAR -->
+        <footer id="app-footer">
+            <div class="footer-left">
+                <div class="status-indicator-wrapper">
+                    <span id="engine-status-dot" class="status-dot idle"></span>
+                    <span id="engine-status-text" class="status-text">Engine: Idle</span>
+                </div>
+            </div>
+            
+            <div class="footer-center">
+                <div class="helper-text-bar">
+                    Drag to pan (middle-click/Space+drag) • Scroll to zoom • Double-click canvas to add nodes
+                </div>
+            </div>
+
+            <div class="footer-right">
+                <div class="metric-badge">
+                    <span class="metric-label">Execution Time</span>
+                    <span id="execution-time-value" class="metric-value">0ms</span>
+                </div>
+            </div>
+        </footer>
     </div>
 
     <!-- Script loading: loads compiled typescript main -->

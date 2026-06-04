@@ -15,34 +15,34 @@ export const GRID_SIZE = 30;        // Grid spacing for snapping (half the 60px 
 // ============================================================================
 export const defaultGraph: GraphState = {
     nodes: {
-        'nodeA': {
-            id: 'nodeA',
+        'add_4012': {
+            id: 'add_4012',
             type: 'math/add',
             params: { a: 10, b: 20 },
             ui: { x: 100, y: 80, title: 'Input Adder' }
         },
-        'nodeB': {
-            id: 'nodeB',
+        'multiply_8930': {
+            id: 'multiply_8930',
             type: 'math/multiply',
             params: { b: 5 },
             ui: { x: 380, y: 150, title: 'Scaling Node' }
         },
-        'nodeLog': {
-            id: 'nodeLog',
+        'log_1052': {
+            id: 'log_1052',
             type: 'system/log',
             params: {},
             ui: { x: 650, y: 180, title: 'Output Logger' }
         },
-        'nodeRogue': {
-            id: 'nodeRogue',
+        'delay_7701': {
+            id: 'delay_7701',
             type: 'system/delay',
             params: { ms: 999999 }, // High delay to demonstrate watchdog cull!
             ui: { x: 100, y: 350, title: 'Rogue Delayer' }
         }
     },
     edges: [
-        { id: 'edge1', sourceNodeId: 'nodeA', sourcePinId: 'out', targetNodeId: 'nodeB', targetPinId: 'a' },
-        { id: 'edge2', sourceNodeId: 'nodeB', sourcePinId: 'out', targetNodeId: 'nodeLog', targetPinId: 'msg' }
+        { id: 'edge1', sourceNodeId: 'add_4012', sourcePinId: 'out', targetNodeId: 'multiply_8930', targetPinId: 'a' },
+        { id: 'edge2', sourceNodeId: 'multiply_8930', sourcePinId: 'out', targetNodeId: 'log_1052', targetPinId: 'msg' }
     ]
 };
 
@@ -88,6 +88,10 @@ export const appState = {
     dragNodeOriginalY: 0,
     dragNodesOriginalPositions: new Map<string, { x: number, y: number }>(),
     preEditGraphState: null as GraphState | null,
+    pinnedDrawerNodeIds: new Set<string>(),
+    hoveredDrawerNodeId: null as string | null,
+    hoveredEllipsisNodeId: null as string | null,
+    hoveredPinNodeId: null as string | null,
 };
 
 // ============================================================================
@@ -111,6 +115,11 @@ export function syncContextState() {
         appState.renderingContext.selectedNodeId = appState.selectedNodeId;
         appState.renderingContext.selectedNodeIds = appState.selectedNodeIds;
         appState.renderingContext.nodeErrors = appState.nodeErrors;
+        appState.renderingContext.pinnedDrawerNodeIds = appState.pinnedDrawerNodeIds;
+        appState.renderingContext.hoveredDrawerNodeId = appState.hoveredDrawerNodeId;
+        appState.renderingContext.hoveredEllipsisNodeId = appState.hoveredEllipsisNodeId;
+        appState.renderingContext.hoveredPinNodeId = appState.hoveredPinNodeId;
+        appState.renderingContext.edgeStyle = loadSettings().canvas.edgeStyle || 'spline';
         appState.renderingContext.needsRedraw = true;
     }
 }
@@ -151,8 +160,8 @@ export function updateCursor() {
         return;
     }
 
-    // 5. Hovering a pin
-    if (appState.hoveredPin) {
+    // 5. Hovering a pin or ellipsis or thumbtack button
+    if (appState.hoveredPin || appState.hoveredEllipsisNodeId || appState.hoveredPinNodeId) {
         appState.canvas.style.cursor = 'pointer';
         return;
     }

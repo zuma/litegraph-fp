@@ -46,6 +46,38 @@ export function deleteSelectedNodes() {
     triggerAutoRun();
 }
 
+export function bringNodeToFront(nodeId: string) {
+    const nodes = appState.currentGraph.nodes;
+    if (nodes[nodeId]) {
+        const updatedNodes = { ...nodes };
+        const node = updatedNodes[nodeId];
+        delete (updatedNodes as any)[nodeId];
+        (updatedNodes as any)[nodeId] = node;
+        appState.currentGraph = {
+            ...appState.currentGraph,
+            nodes: updatedNodes
+        };
+        syncContextState();
+    }
+}
+
+export function sendNodeToBack(nodeId: string) {
+    const nodes = appState.currentGraph.nodes;
+    if (nodes[nodeId]) {
+        const updatedNodes = { [nodeId]: nodes[nodeId] }; // Put target node first
+        for (const id in nodes) {
+            if (id !== nodeId) {
+                (updatedNodes as any)[id] = nodes[id];
+            }
+        }
+        appState.currentGraph = {
+            ...appState.currentGraph,
+            nodes: updatedNodes as any
+        };
+        syncContextState();
+    }
+}
+
 // ============================================================================
 // INTERACTIONS INITIALIZATION
 // ============================================================================
@@ -63,19 +95,20 @@ export function setupInteractions() {
             updateCursor();
         }
 
-        const isCtrlCmd = e.ctrlKey || e.metaKey;
+        const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform) || (navigator.userAgent && /Mac/.test(navigator.userAgent));
+        const isShortcutModifier = isMac ? e.metaKey : e.ctrlKey;
         
-        if (isCtrlCmd) {
+        if (isShortcutModifier) {
             if (e.key === 'z' || e.key === 'Z') {
                 e.preventDefault();
                 if (e.shiftKey) {
-                    redo(); // Ctrl+Shift+Z = Redo
+                    redo(); // Cmd/Ctrl+Shift+Z = Redo
                 } else {
-                    undo(); // Ctrl+Z = Undo
+                    undo(); // Cmd/Ctrl+Z = Undo
                 }
             } else if (e.key === 'y' || e.key === 'Y') {
                 e.preventDefault();
-                redo(); // Ctrl+Y = Redo
+                redo(); // Cmd/Ctrl+Y = Redo
             } else if (e.key === 'b' || e.key === 'B') {
                 e.preventDefault();
                 // Find and click sidebar button
@@ -122,6 +155,65 @@ export function setupInteractions() {
         const mouseY = e.clientY - rect.top;
         const worldPos = screenToWorld(mouseX, mouseY);
 
+        // Check if clicked the ellipsis button, drawer body, or thumbtack button of any node
+        const nodesReversedClick = Object.values(appState.currentGraph.nodes).reverse(); // Topmost first
+        for (const node of nodesReversedClick) {
+            const w = node.ui?.width ?? NODE_WIDTH;
+            const h = getNodeHeight(node);
+            const nx = node.ui?.x ?? 0;
+            const ny = node.ui?.y ?? 0;
+
+            const isPinned = appState.pinnedDrawerNodeIds.has(node.id);
+            const isDrawerOpen = appState.hoveredDrawerNodeId === node.id || isPinned;
+
+            if (isDrawerOpen) {
+                // Check click on thumbtack button
+                const pinCX = nx + w / 2 + 54;
+                const pinCY = ny + h + 18;
+                if (Math.hypot(worldPos.x - pinCX, worldPos.y - pinCY) <= 10) {
+                    if (isPinned) {
+                        appState.pinnedDrawerNodeIds.delete(node.id);
+                    } else {
+                        appState.pinnedDrawerNodeIds.add(node.id);
+                    }
+                    syncContextState();
+                    updateCursor();
+                    if (appState.renderingContext) {
+                        appState.renderingContext.needsRedraw = true;
+                    }
+                    return;
+                }
+
+                // Check click inside the drawer body (to prevent node dragging or background panning)
+                const drawerW = 144;
+                const drawerH = 24;
+                const drawerX = nx + w / 2 - drawerW / 2;
+                const drawerY = ny + h + 6;
+                if (worldPos.x >= drawerX && worldPos.x <= drawerX + drawerW && worldPos.y >= drawerY && worldPos.y <= drawerY + drawerH) {
+                    return;
+                }
+            }
+
+            // Check click on ellipsis button
+            const btnW = 30;
+            const btnH = 12;
+            const btnX = nx + w / 2 - btnW / 2;
+            const btnY = ny + h - btnH / 2;
+            if (worldPos.x >= btnX && worldPos.x <= btnX + btnW && worldPos.y >= btnY && worldPos.y <= btnY + btnH) {
+                if (isPinned) {
+                    appState.pinnedDrawerNodeIds.delete(node.id);
+                } else {
+                    appState.pinnedDrawerNodeIds.add(node.id);
+                }
+                syncContextState();
+                updateCursor();
+                if (appState.renderingContext) {
+                    appState.renderingContext.needsRedraw = true;
+                }
+                return;
+            }
+        }
+
         // 1. Check if clicked a pin dot
         let pinClicked = false;
         
@@ -137,6 +229,9 @@ export function setupInteractions() {
                 const dist = Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y);
                 if (dist <= 12) {
                     pinClicked = true;
+                    if (loadSettings().canvas.autoBringToFront) {
+                        bringNodeToFront(node.id);
+                    }
                     // Start dragging from an input pin (reversing connection or link dragging)
                     if (appState.renderingContext) {
                         appState.renderingContext.draggingConnection = {
@@ -161,6 +256,9 @@ export function setupInteractions() {
                 const dist = Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y);
                 if (dist <= 12) {
                     pinClicked = true;
+                    if (loadSettings().canvas.autoBringToFront) {
+                        bringNodeToFront(node.id);
+                    }
                     if (appState.renderingContext) {
                         appState.renderingContext.draggingConnection = {
                             sourceNodeId: node.id,
@@ -200,6 +298,11 @@ export function setupInteractions() {
         }
 
         if (clickedNodeId) {
+            // Bring clicked node to front
+            if (loadSettings().canvas.autoBringToFront) {
+                bringNodeToFront(clickedNodeId);
+            }
+
             // Toggle or set selection
             if (e.shiftKey) {
                 if (appState.selectedNodeIds.has(clickedNodeId)) {
@@ -362,12 +465,15 @@ export function setupInteractions() {
             }
         }
 
-        // D. Calculate pin / node hover states
+        // D. Calculate pin / node hover states (and drawer/ellipsis/pin states)
         let hNodeId: string | null = null;
         let hPin: typeof appState.hoveredPin = null;
+        let hEllipsisNodeId: string | null = null;
+        let hPinNodeId: string | null = null;
+        let hDrawerNodeId: string | null = null;
 
-        for (const nodeId in appState.currentGraph.nodes) {
-            const node = appState.currentGraph.nodes[nodeId];
+        const nodesReversedHover = Object.values(appState.currentGraph.nodes).reverse(); // Topmost first
+        for (const node of nodesReversedHover) {
             const nodeDef = StandardNodes[node.type];
             if (!nodeDef) continue;
 
@@ -376,15 +482,51 @@ export function setupInteractions() {
             const nx = node.ui?.x ?? 0;
             const ny = node.ui?.y ?? 0;
 
+            const isPinned = appState.pinnedDrawerNodeIds.has(node.id);
+            const isDrawerOpen = appState.hoveredDrawerNodeId === node.id || isPinned;
+
+            if (isDrawerOpen) {
+                // Check if hovering thumbtack button
+                const pinCX = nx + w / 2 + 54;
+                const pinCY = ny + h + 18;
+                if (Math.hypot(worldPos.x - pinCX, worldPos.y - pinCY) <= 10) {
+                    hPinNodeId = node.id;
+                    hDrawerNodeId = node.id;
+                    break;
+                }
+
+                // Check if hovering drawer body
+                const drawerW = 144;
+                const drawerH = 24;
+                const drawerX = nx + w / 2 - drawerW / 2;
+                const drawerY = ny + h + 6;
+                if (worldPos.x >= drawerX && worldPos.x <= drawerX + drawerW && worldPos.y >= drawerY && worldPos.y <= drawerY + drawerH) {
+                    hDrawerNodeId = node.id;
+                    break;
+                }
+            }
+
+            // Check if hovering ellipsis button
+            const btnW = 30;
+            const btnH = 12;
+            const btnX = nx + w / 2 - btnW / 2;
+            const btnY = ny + h - btnH / 2;
+            if (worldPos.x >= btnX && worldPos.x <= btnX + btnW && worldPos.y >= btnY && worldPos.y <= btnY + btnH) {
+                hEllipsisNodeId = node.id;
+                hDrawerNodeId = node.id;
+                break;
+            }
+
+            // Check if hovering node body or pins
             if (worldPos.x >= nx && worldPos.x <= nx + w && worldPos.y >= ny && worldPos.y <= ny + h) {
-                hNodeId = nodeId;
+                hNodeId = node.id;
 
                 // Inputs
                 const inputs = Object.keys(nodeDef.requires);
                 for (let i = 0; i < inputs.length; i++) {
                     const pos = getInputPinCoords(node, inputs[i]);
                     if (Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y) <= 12) {
-                        hPin = { nodeId, pinId: inputs[i], isInput: true };
+                        hPin = { nodeId: node.id, pinId: inputs[i], isInput: true };
                         break;
                     }
                 }
@@ -395,7 +537,7 @@ export function setupInteractions() {
                     for (let i = 0; i < outputs.length; i++) {
                         const pos = getOutputPinCoords(node, outputs[i]);
                         if (Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y) <= 12) {
-                            hPin = { nodeId, pinId: outputs[i], isInput: false };
+                            hPin = { nodeId: node.id, pinId: outputs[i], isInput: false };
                             break;
                         }
                     }
@@ -406,10 +548,16 @@ export function setupInteractions() {
 
         appState.hoveredNodeId = hNodeId;
         appState.hoveredPin = hPin;
+        appState.hoveredEllipsisNodeId = hEllipsisNodeId;
+        appState.hoveredPinNodeId = hPinNodeId;
+        appState.hoveredDrawerNodeId = hDrawerNodeId;
         
         if (appState.renderingContext) {
             appState.renderingContext.hoveredNodeId = appState.hoveredNodeId;
             appState.renderingContext.hoveredPin = appState.hoveredPin;
+            appState.renderingContext.hoveredEllipsisNodeId = appState.hoveredEllipsisNodeId;
+            appState.renderingContext.hoveredPinNodeId = appState.hoveredPinNodeId;
+            appState.renderingContext.hoveredDrawerNodeId = appState.hoveredDrawerNodeId;
         }
         updateCursor();
         if (appState.renderingContext) {
@@ -639,6 +787,9 @@ export function setupInteractions() {
 
         if (clickedNodeId) {
             // Right-clicked a node: select it, hide node adder, show context menu
+            if (loadSettings().canvas.autoBringToFront) {
+                bringNodeToFront(clickedNodeId);
+            }
             appState.selectedNodeId = clickedNodeId;
             if (appState.renderingContext) {
                 appState.renderingContext.selectedNodeId = appState.selectedNodeId;
@@ -688,6 +839,20 @@ export function setupInteractions() {
         
         updateInspector();
         triggerAutoRun();
+    });
+
+    document.getElementById('ctx-bring-to-front')?.addEventListener('click', () => {
+        if (appState.selectedNodeId) {
+            bringNodeToFront(appState.selectedNodeId);
+        }
+        document.getElementById('context-menu')?.classList.add('hidden');
+    });
+
+    document.getElementById('ctx-send-to-back')?.addEventListener('click', () => {
+        if (appState.selectedNodeId) {
+            sendNodeToBack(appState.selectedNodeId);
+        }
+        document.getElementById('context-menu')?.classList.add('hidden');
     });
 
     // Node search input listener
@@ -788,7 +953,7 @@ export function addNewNode(type: string) {
         ui: {
             x: spawnX,
             y: spawnY,
-            title: uniqueId.toUpperCase()
+            title: baseId.toUpperCase()
         }
     };
 

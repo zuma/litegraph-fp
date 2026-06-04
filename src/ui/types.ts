@@ -35,5 +35,10 @@ export interface RenderingContext {
     selectionBox: SelectionBox | null;
     lastExecutionTime?: number;
     needsRedraw?: boolean;
+    pinnedDrawerNodeIds?: Set<string>;
+    hoveredDrawerNodeId?: string | null;
+    hoveredEllipsisNodeId?: string | null;
+    hoveredPinNodeId?: string | null;
+    edgeStyle?: 'spline' | 'orthogonal';
 }
 

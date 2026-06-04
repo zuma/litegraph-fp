@@ -45,6 +45,31 @@ export function updateInspector() {
         nodeTypeText.className = `inspector-value badge`;
     }
 
+    // Title input field binding
+    const nodeTitleInput = document.getElementById('inspect-node-title') as HTMLInputElement | null;
+    if (nodeTitleInput) {
+        nodeTitleInput.value = node.ui?.title ?? '';
+        
+        // Clone input element to clear previous event listeners
+        const newTitleInput = nodeTitleInput.cloneNode(true) as HTMLInputElement;
+        nodeTitleInput.parentNode?.replaceChild(newTitleInput, nodeTitleInput);
+        
+        newTitleInput.addEventListener('focus', () => {
+            appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
+        });
+        
+        newTitleInput.addEventListener('input', () => {
+            if (appState.preEditGraphState) {
+                undoStack.push(appState.preEditGraphState);
+                if (undoStack.length > 50) undoStack.shift();
+                redoStack.length = 0;
+                updateUndoRedoButtons();
+                appState.preEditGraphState = null;
+            }
+            updateNodeTitle(node.id, newTitleInput.value);
+        });
+    }
+
     // 1. Rebuild Parameter Editor Container
     const paramsContainer = document.getElementById('inspect-parameters-container');
     if (paramsContainer && nodeDef) {
@@ -200,4 +225,27 @@ export function updateNodeParam(nodeId: string, paramKey: string, value: any) {
         appState.renderingContext.needsRedraw = true;
     }
     triggerAutoRun();
+}
+
+export function updateNodeTitle(nodeId: string, title: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+
+    const updatedNode = {
+        ...node,
+        ui: {
+            ...(node.ui ?? { x: 0, y: 0 }),
+            title: title
+        }
+    };
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: updatedNode
+        }
+    };
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
 }
