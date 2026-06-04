@@ -59,6 +59,8 @@ export const appState = {
 
     hoveredNodeId: null as string | null,
     hoveredPin: null as { nodeId: string; pinId: string; isInput: boolean } | null,
+    hoveredEdgeId: null as string | null,
+    hoveredEdgePos: null as { x: number; y: number } | null,
     nodeErrors: {} as Record<string, string>,
     latestExecutionState: {} as Record<string, any>,
 
@@ -119,6 +121,8 @@ export function syncContextState() {
         appState.renderingContext.hoveredDrawerNodeId = appState.hoveredDrawerNodeId;
         appState.renderingContext.hoveredEllipsisNodeId = appState.hoveredEllipsisNodeId;
         appState.renderingContext.hoveredPinNodeId = appState.hoveredPinNodeId;
+        appState.renderingContext.hoveredEdgeId = appState.hoveredEdgeId;
+        appState.renderingContext.hoveredEdgePos = appState.hoveredEdgePos;
         appState.renderingContext.edgeStyle = loadSettings().canvas.edgeStyle || 'spline';
         appState.renderingContext.needsRedraw = true;
     }
@@ -160,8 +164,8 @@ export function updateCursor() {
         return;
     }
 
-    // 5. Hovering a pin or ellipsis or thumbtack button
-    if (appState.hoveredPin || appState.hoveredEllipsisNodeId || appState.hoveredPinNodeId) {
+    // 5. Hovering a pin or ellipsis or thumbtack button or edge
+    if (appState.hoveredPin || appState.hoveredEllipsisNodeId || appState.hoveredPinNodeId || appState.hoveredEdgeId) {
         appState.canvas.style.cursor = 'pointer';
         return;
     }

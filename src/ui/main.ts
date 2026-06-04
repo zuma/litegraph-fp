@@ -7,6 +7,7 @@ import { runExecutionPipeline, logToTerminal } from './execution.js';
 import { setupInteractions, deleteSelectedNodes, zoomExtents } from './interactions.js';
 import { undo, redo, pushToHistory } from './history.js';
 import { loadSettings, updateSetting } from './settings.js';
+import { autoLayoutGraph } from './layout.js';
 
 window.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('graph-canvas') as HTMLCanvasElement;
@@ -353,6 +354,14 @@ window.addEventListener('DOMContentLoaded', () => {
     // Undo/Redo Button clicks
     document.getElementById('btn-undo')?.addEventListener('click', undo);
     document.getElementById('btn-redo')?.addEventListener('click', redo);
+
+    document.getElementById('btn-auto-layout')?.addEventListener('click', () => {
+        pushToHistory();
+        appState.currentGraph = autoLayoutGraph(appState.currentGraph);
+        syncContextState();
+        runExecutionPipeline().catch(console.error);
+        logToTerminal("Auto-layout applied topologically.", "system-msg");
+    });
 
     // Sidebar Hooks
     document.getElementById('btn-delete-node')?.addEventListener('click', () => {

@@ -2,6 +2,7 @@ import { GraphState } from '../core/ast.js';
 import { RenderingContext } from './types.js';
 import { drawGrid, drawNode, drawEdge, getInputPinPos, getOutputPinPos } from './canvas.js';
 import { NodeRegistry } from '../registry/types.js';
+import { appState } from './state.js';
 
 /**
  * Impure rendering loop that binds Graph State to a Canvas.
@@ -99,6 +100,65 @@ export const createRenderer = (
             const node = state.nodes[nodeId];
             const nodeDef = registry[node.type];
             drawNode(context, node, nodeDef, computedStyle);
+        }
+
+        // 5.5. Draw Hovered Edge Telemetry Tooltip
+        if (context.hoveredEdgeId && context.hoveredEdgePos) {
+            const edge = state.edges.find(e => e.id === context.hoveredEdgeId);
+            if (edge) {
+                const pos = context.hoveredEdgePos;
+                const valueKey = `${edge.sourceNodeId}.${edge.sourcePinId}`;
+                const value = appState.latestExecutionState[valueKey];
+                
+                let valueStr = 'undefined';
+                if (value !== undefined) {
+                    if (value === null) {
+                        valueStr = 'null';
+                    } else if (typeof value === 'object') {
+                        try {
+                            valueStr = JSON.stringify(value);
+                            if (valueStr.length > 30) {
+                                valueStr = valueStr.slice(0, 27) + '...';
+                            }
+                        } catch (e) {
+                            valueStr = '[Object]';
+                        }
+                    } else {
+                        valueStr = String(value);
+                        if (valueStr.length > 25) {
+                            valueStr = valueStr.slice(0, 22) + '...';
+                        }
+                    }
+                }
+
+                ctx.save();
+                
+                ctx.font = '500 10px "Fira Code", monospace';
+                const textWidth = ctx.measureText(valueStr).width;
+                const paddingX = 8;
+                const paddingY = 4;
+                const tooltipW = textWidth + paddingX * 2;
+                const tooltipH = 16 + paddingY * 2;
+                
+                const tx = pos.x - tooltipW / 2;
+                const ty = pos.y - tooltipH - 8;
+                
+                ctx.beginPath();
+                ctx.roundRect(tx, ty, tooltipW, tooltipH, 6);
+                ctx.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.95)';
+                ctx.fill();
+                
+                ctx.strokeStyle = computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                ctx.fillStyle = computedStyle.getPropertyValue('--text-primary').trim() || '#ffffff';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(valueStr, tx + paddingX, ty + paddingY + 3);
+                
+                ctx.restore();
+            }
         }
 
         // 6. Draw Selection Box (if active)

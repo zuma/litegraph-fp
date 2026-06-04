@@ -413,18 +413,20 @@ export function drawEdge(
         }
     };
 
+    const isHovered = ctx.hoveredEdgeId === edge.id;
+
     // 1. Draw main glowing conduit line background (semi-transparent)
     buildPath();
     context.strokeStyle = color;
-    context.globalAlpha = isLight ? 0.35 : 0.25;
-    context.lineWidth = 4;
+    context.globalAlpha = isHovered ? (isLight ? 0.6 : 0.5) : (isLight ? 0.35 : 0.25);
+    context.lineWidth = isHovered ? 6 : 4;
     context.stroke();
 
     // 2. Draw sharp internal edge path
     buildPath();
     context.strokeStyle = color;
-    context.globalAlpha = 0.85;
-    context.lineWidth = 2;
+    context.globalAlpha = isHovered ? 1.0 : 0.85;
+    context.lineWidth = isHovered ? 3 : 2;
     context.stroke();
 
     // 3. Flowing Pulse Animation
@@ -436,13 +438,13 @@ export function drawEdge(
     context.lineWidth = 2.5;
 
     context.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.7)' : '#ffffff';
-    context.globalAlpha = isSelected ? 0.9 : 0.6;
+    context.globalAlpha = isSelected || isHovered ? 0.9 : 0.6;
     context.setLineDash([8, 12]);
     
-    // Fix #14: Only animate dashes during the 1.5s post-execution window to avoid idle CPU usage
+    // Fix #14: Only animate dashes during the 1.5s post-execution window to avoid idle CPU usage, or if edge is hovered
     const lastExec = ctx.lastExecutionTime ?? 0;
     const timeSinceExec = Date.now() - lastExec;
-    if (timeSinceExec < 1500) {
+    if (isHovered || timeSinceExec < 1500) {
         context.lineDashOffset = -(Date.now() / 24) % 20; // Flow direction left-to-right
     } else {
         context.lineDashOffset = 0; // Static dashes when idle

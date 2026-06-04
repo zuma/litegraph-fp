@@ -46,6 +46,123 @@ export function deleteSelectedNodes() {
     triggerAutoRun();
 }
 
+function isEditingText(): boolean {
+    const activeEl = document.activeElement;
+    return !!(activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.getAttribute('contenteditable') === 'true'
+    ));
+}
+
+export async function copySelectedNodes() {
+    const selectedIds = appState.selectedNodeIds;
+    if (selectedIds.size === 0) return;
+
+    const nodesToCopy: Record<string, any> = {};
+    selectedIds.forEach(id => {
+        const node = appState.currentGraph.nodes[id];
+        if (node) {
+            nodesToCopy[id] = node;
+        }
+    });
+
+    const edgesToCopy = appState.currentGraph.edges.filter(
+        edge => selectedIds.has(edge.sourceNodeId) && selectedIds.has(edge.targetNodeId)
+    );
+
+    const payload = {
+        type: 'litegraph-fp-subgraph',
+        nodes: nodesToCopy,
+        edges: edgesToCopy
+    };
+
+    try {
+        await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+        logToTerminal(`Copied ${Object.keys(nodesToCopy).length} node(s) to clipboard.`, 'system-msg');
+    } catch (err) {
+        logToTerminal(`Failed to copy to clipboard: ${err}`, 'terminal-line effect-msg');
+    }
+}
+
+export async function pasteNodes() {
+    try {
+        const text = await navigator.clipboard.readText();
+        let payload: any;
+        try {
+            payload = JSON.parse(text);
+        } catch (e) {
+            return;
+        }
+
+        if (payload?.type !== 'litegraph-fp-subgraph' || !payload.nodes || !payload.edges) {
+            return;
+        }
+
+        pushToHistory();
+
+        const idMap = new Map<string, string>();
+        const updatedNodes = { ...appState.currentGraph.nodes } as Record<string, any>;
+        const offset = 60; 
+
+        Object.entries(payload.nodes).forEach(([oldId, node]: [string, any]) => {
+            const baseId = node.type.split('/')[1] || 'node';
+            const newId = `${baseId}_${Date.now().toString().slice(-4)}_${Math.floor(Math.random() * 100)}`;
+            idMap.set(oldId, newId);
+
+            const snapEnabled = loadSettings().canvas.snapToGrid;
+            let px = (node.ui?.x ?? 0) + offset;
+            let py = (node.ui?.y ?? 0) + offset;
+            if (snapEnabled) {
+                px = Math.round(px / GRID_SIZE) * GRID_SIZE;
+                py = Math.round(py / GRID_SIZE) * GRID_SIZE;
+            }
+
+            updatedNodes[newId] = {
+                ...node,
+                id: newId,
+                ui: {
+                    ...(node.ui ?? {}),
+                    x: px,
+                    y: py
+                }
+            };
+        });
+
+        const newEdges = payload.edges.map((edge: any) => {
+            const newSourceId = idMap.get(edge.sourceNodeId);
+            const newTargetId = idMap.get(edge.targetNodeId);
+            if (newSourceId && newTargetId) {
+                return {
+                    id: `edge_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+                    sourceNodeId: newSourceId,
+                    sourcePinId: edge.sourcePinId,
+                    targetNodeId: newTargetId,
+                    targetPinId: edge.targetPinId
+                };
+            }
+            return null;
+        }).filter((e: any) => e !== null);
+
+        appState.currentGraph = {
+            nodes: updatedNodes,
+            edges: [...appState.currentGraph.edges, ...newEdges]
+        };
+
+        appState.selectedNodeIds.clear();
+        idMap.forEach(newId => appState.selectedNodeIds.add(newId));
+        appState.selectedNodeId = Array.from(idMap.values())[0] || null;
+
+        syncContextState();
+        updateInspector();
+        triggerAutoRun();
+        logToTerminal(`Pasted ${idMap.size} node(s) successfully.`, 'system-msg');
+    } catch (err) {
+        logToTerminal(`Failed to paste from clipboard: ${err}`, 'terminal-line effect-msg');
+    }
+}
+
+
 export function zoomExtents() {
     const canvas = appState.canvas;
     if (!canvas) return;
@@ -177,6 +294,16 @@ export function setupInteractions() {
                 // Find and click sidebar button
                 const btnSidebar = document.getElementById('btn-sidebar-toggle');
                 btnSidebar?.click();
+            } else if (e.key === 'c' || e.key === 'C') {
+                if (!isEditingText()) {
+                    e.preventDefault();
+                    copySelectedNodes();
+                }
+            } else if (e.key === 'v' || e.key === 'V') {
+                if (!isEditingText()) {
+                    e.preventDefault();
+                    pasteNodes();
+                }
             }
         } else {
             if (e.key === 'Delete') {
@@ -608,6 +735,45 @@ export function setupInteractions() {
                 break;
             }
         }
+
+        // E. Calculate edge hover state
+        let hEdgeId: string | null = null;
+        let hEdgePos: { x: number; y: number } | null = null;
+
+        if (!hNodeId && !hPin && !hEllipsisNodeId && !hPinNodeId && !hDrawerNodeId) {
+            const edgeStyle = loadSettings().canvas.edgeStyle || 'spline';
+            let minDistance = Infinity;
+
+            for (const edge of appState.currentGraph.edges) {
+                const sourceNode = appState.currentGraph.nodes[edge.sourceNodeId];
+                const targetNode = appState.currentGraph.nodes[edge.targetNodeId];
+                if (!sourceNode || !targetNode) continue;
+
+                const sourceDef = StandardNodes[sourceNode.type];
+                const targetDef = StandardNodes[targetNode.type];
+                if (!sourceDef || !targetDef) continue;
+
+                const outPinNames = Object.keys(sourceDef.provides);
+                const inPinNames = Object.keys(targetDef.requires);
+                const outIndex = outPinNames.indexOf(edge.sourcePinId);
+                const inIndex = inPinNames.indexOf(edge.targetPinId);
+
+                if (outIndex === -1 || inIndex === -1) continue;
+
+                const sourcePos = getOutputPinCoords(sourceNode, edge.sourcePinId);
+                const targetPos = getInputPinCoords(targetNode, edge.targetPinId);
+
+                const { distance, midpoint } = getDistanceToEdge(worldPos.x, worldPos.y, sourcePos, targetPos, edgeStyle);
+                if (distance <= 8 && distance < minDistance) {
+                    minDistance = distance;
+                    hEdgeId = edge.id;
+                    hEdgePos = midpoint;
+                }
+            }
+        }
+
+        appState.hoveredEdgeId = hEdgeId;
+        appState.hoveredEdgePos = hEdgePos;
 
         appState.hoveredNodeId = hNodeId;
         appState.hoveredPin = hPin;
@@ -1061,3 +1227,72 @@ export function addNewNode(type: string) {
     updateInspector();
     triggerAutoRun();
 }
+
+function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+    
+    let t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+export function getDistanceToEdge(
+    px: number,
+    py: number,
+    sourcePos: { x: number; y: number },
+    targetPos: { x: number; y: number },
+    edgeStyle: 'spline' | 'orthogonal'
+): { distance: number; midpoint: { x: number; y: number } } {
+    if (edgeStyle === 'orthogonal') {
+        const midX = (sourcePos.x + targetPos.x) / 2;
+        const d1 = distToSegment(px, py, sourcePos.x, sourcePos.y, midX, sourcePos.y);
+        const d2 = distToSegment(px, py, midX, sourcePos.y, midX, targetPos.y);
+        const d3 = distToSegment(px, py, midX, targetPos.y, targetPos.x, targetPos.y);
+        
+        const minDistance = Math.min(d1, d2, d3);
+        const midpoint = { x: midX, y: (sourcePos.y + targetPos.y) / 2 };
+        return { distance: minDistance, midpoint };
+    } else {
+        const dx = Math.abs(targetPos.x - sourcePos.x);
+        const cpOffset = Math.max(40, dx * 0.4);
+        const P0 = sourcePos;
+        const P1 = { x: sourcePos.x + cpOffset, y: sourcePos.y };
+        const P2 = { x: targetPos.x - cpOffset, y: targetPos.y };
+        const P3 = targetPos;
+
+        const numPoints = 12;
+        let minDistance = Infinity;
+        let prevPoint = P0;
+        
+        let midX = 0;
+        let midY = 0;
+
+        for (let i = 1; i < numPoints; i++) {
+            const t = i / (numPoints - 1);
+            const mt = 1 - t;
+            
+            const x = mt * mt * mt * P0.x + 3 * mt * mt * t * P1.x + 3 * mt * t * t * P2.x + t * t * t * P3.x;
+            const y = mt * mt * mt * P0.y + 3 * mt * mt * t * P1.y + 3 * mt * t * t * P2.y + t * t * t * P3.y;
+            const currentPoint = { x, y };
+
+            const dist = distToSegment(px, py, prevPoint.x, prevPoint.y, currentPoint.x, currentPoint.y);
+            if (dist < minDistance) {
+                minDistance = dist;
+            }
+            
+            if (i === Math.floor(numPoints / 2)) {
+                midX = x;
+                midY = y;
+            }
+            
+            prevPoint = currentPoint;
+        }
+
+        return { distance: minDistance, midpoint: { x: midX, y: midY } };
+    }
+}
+

@@ -39,6 +39,8 @@ export interface RenderingContext {
     hoveredDrawerNodeId?: string | null;
     hoveredEllipsisNodeId?: string | null;
     hoveredPinNodeId?: string | null;
+    hoveredEdgeId?: string | null;
+    hoveredEdgePos?: { x: number; y: number } | null;
     edgeStyle?: 'spline' | 'orthogonal';
 }
 
