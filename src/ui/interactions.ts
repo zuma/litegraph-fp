@@ -46,6 +46,69 @@ export function deleteSelectedNodes() {
     triggerAutoRun();
 }
 
+export function zoomExtents() {
+    const canvas = appState.canvas;
+    if (!canvas) return;
+
+    const nodes = Object.values(appState.currentGraph.nodes);
+    if (nodes.length === 0) {
+        appState.viewport.zoom = 1.0;
+        appState.viewport.x = 0;
+        appState.viewport.y = 0;
+        if (appState.renderingContext) {
+            appState.renderingContext.viewport = { ...appState.viewport };
+            appState.renderingContext.needsRedraw = true;
+        }
+        updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
+        return;
+    }
+
+    // Calculate bounding box in world space
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    nodes.forEach(node => {
+        const x = node.ui?.x ?? 0;
+        const y = node.ui?.y ?? 0;
+        const w = node.ui?.width ?? NODE_WIDTH;
+        const h = getNodeHeight(node);
+
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w);
+        maxY = Math.max(maxY, y + h);
+    });
+
+    const graphWidth = maxX - minX;
+    const graphHeight = maxY - minY;
+
+    const rect = canvas.getBoundingClientRect();
+    const canvasWidth = rect.width;
+    const canvasHeight = rect.height;
+
+    const padding = 60;
+    const availableWidth = canvasWidth - padding * 2;
+    const availableHeight = canvasHeight - padding * 2;
+
+    let targetZoom = Math.min(availableWidth / graphWidth, availableHeight / graphHeight);
+    targetZoom = Math.max(0.05, Math.min(3.0, targetZoom));
+
+    const centerX = minX + graphWidth / 2;
+    const centerY = minY + graphHeight / 2;
+
+    appState.viewport.zoom = targetZoom;
+    appState.viewport.x = canvasWidth / 2 - centerX * targetZoom;
+    appState.viewport.y = canvasHeight / 2 - centerY * targetZoom;
+
+    if (appState.renderingContext) {
+        appState.renderingContext.viewport = { ...appState.viewport };
+        appState.renderingContext.needsRedraw = true;
+    }
+    updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
+}
+
 export function bringNodeToFront(nodeId: string) {
     const nodes = appState.currentGraph.nodes;
     if (nodes[nodeId]) {
@@ -745,18 +808,31 @@ export function setupInteractions() {
         });
     }, { passive: false });
 
-    // Double-click to open Node Adder
+    // Double-click to zoom extents
     canvas.addEventListener('dblclick', (e) => {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         const worldPos = screenToWorld(mouseX, mouseY);
 
-        // Store spawn coordinates in world space
-        appState.spawnX = worldPos.x;
-        appState.spawnY = worldPos.y;
+        // Check if clicked on a node
+        let clickedNodeId: string | null = null;
+        const nodesReversed = Object.values(appState.currentGraph.nodes).reverse();
+        for (const node of nodesReversed) {
+            const w = node.ui?.width ?? NODE_WIDTH;
+            const h = getNodeHeight(node);
+            const nx = node.ui?.x ?? 0;
+            const ny = node.ui?.y ?? 0;
 
-        showNodeAdder(mouseX, mouseY);
+            if (worldPos.x >= nx && worldPos.x <= nx + w && worldPos.y >= ny && worldPos.y <= ny + h) {
+                clickedNodeId = node.id;
+                break;
+            }
+        }
+
+        if (!clickedNodeId) {
+            zoomExtents();
+        }
     });
 
     // Right-click to open Node context menu or Node Adder
@@ -799,8 +875,13 @@ export function setupInteractions() {
             if (nodeAdder) nodeAdder.classList.add('hidden');
             
             if (ctxMenu) {
-                ctxMenu.style.left = `${mouseX}px`;
-                ctxMenu.style.top = `${mouseY}px`;
+                const rect = canvas.getBoundingClientRect();
+                const menuWidth = 180;
+                const menuHeight = 160;
+                const posX = Math.max(10, Math.min(mouseX, rect.width - menuWidth - 10));
+                const posY = Math.max(10, Math.min(mouseY, rect.height - menuHeight - 10));
+                ctxMenu.style.left = `${posX}px`;
+                ctxMenu.style.top = `${posY}px`;
                 ctxMenu.classList.remove('hidden');
             }
         } else {
@@ -873,8 +954,15 @@ export function showNodeAdder(screenX: number, screenY: number) {
     
     if (!adder || !searchInput) return;
 
-    adder.style.left = `${screenX}px`;
-    adder.style.top = `${screenY}px`;
+    const canvas = appState.canvas;
+    const rect = canvas ? canvas.getBoundingClientRect() : { width: window.innerWidth, height: window.innerHeight };
+    const adderWidth = 320;
+    const adderHeight = 360;
+    const posX = Math.max(10, Math.min(screenX, rect.width - adderWidth - 10));
+    const posY = Math.max(10, Math.min(screenY, rect.height - adderHeight - 10));
+
+    adder.style.left = `${posX}px`;
+    adder.style.top = `${posY}px`;
     adder.classList.remove('hidden');
     
     searchInput.value = '';

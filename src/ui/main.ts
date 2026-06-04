@@ -4,7 +4,7 @@ import { StandardNodes } from '../registry/index.js';
 import { NODE_WIDTH } from './canvas.js';
 import { appState, syncContextState, updateCursor, getNodeHeight } from './state.js';
 import { runExecutionPipeline, logToTerminal } from './execution.js';
-import { setupInteractions, deleteSelectedNodes } from './interactions.js';
+import { setupInteractions, deleteSelectedNodes, zoomExtents } from './interactions.js';
 import { undo, redo, pushToHistory } from './history.js';
 import { loadSettings, updateSetting } from './settings.js';
 
@@ -99,6 +99,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Initialize Sidebar Collapsed state from settings
     if (sidebar) {
+        sidebar.classList.add('no-transition');
         if (settings.layout.sidebarCollapsed) {
             sidebar.classList.add('collapsed');
             if (btnSidebar) btnSidebar.textContent = '📋';
@@ -106,6 +107,9 @@ window.addEventListener('DOMContentLoaded', () => {
             sidebar.classList.remove('collapsed');
             if (btnSidebar) btnSidebar.textContent = '❌';
         }
+        // Force reflow to apply styles instantly
+        void sidebar.offsetHeight;
+        sidebar.classList.remove('no-transition');
     }
 
     const toggleSidebar = () => {
@@ -343,59 +347,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Fit Graph to Screen (Fixes #15)
     document.getElementById('btn-zoom-fit')?.addEventListener('click', () => {
-        const nodes = Object.values(appState.currentGraph.nodes);
-        if (nodes.length === 0) {
-            appState.viewport.zoom = 1.0;
-            appState.viewport.x = 0;
-            appState.viewport.y = 0;
-            if (appState.renderingContext) appState.renderingContext.viewport = { ...appState.viewport };
-            return;
-        }
-
-        // Calculate bounding box in world space
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-
-        nodes.forEach(node => {
-            const x = node.ui?.x ?? 0;
-            const y = node.ui?.y ?? 0;
-            const w = node.ui?.width ?? NODE_WIDTH;
-            const h = getNodeHeight(node);
-
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x + w);
-            maxY = Math.max(maxY, y + h);
-        });
-
-        const graphWidth = maxX - minX;
-        const graphHeight = maxY - minY;
-
-        const rect = canvas.getBoundingClientRect();
-        const canvasWidth = rect.width;
-        const canvasHeight = rect.height;
-
-        const padding = 60;
-        const availableWidth = canvasWidth - padding * 2;
-        const availableHeight = canvasHeight - padding * 2;
-
-        let targetZoom = Math.min(availableWidth / graphWidth, availableHeight / graphHeight);
-        targetZoom = Math.max(0.05, Math.min(3.0, targetZoom));
-
-        const centerX = minX + graphWidth / 2;
-        const centerY = minY + graphHeight / 2;
-
-        appState.viewport.zoom = targetZoom;
-        appState.viewport.x = canvasWidth / 2 - centerX * targetZoom;
-        appState.viewport.y = canvasHeight / 2 - centerY * targetZoom;
-
-        if (appState.renderingContext) {
-            appState.renderingContext.viewport = { ...appState.viewport };
-            appState.renderingContext.needsRedraw = true;
-        }
-        updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
+        zoomExtents();
     });
 
     // Undo/Redo Button clicks

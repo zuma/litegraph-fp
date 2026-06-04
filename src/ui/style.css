@@ -389,9 +389,6 @@ body, html {
 
 .floating-panel {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     width: 320px;
     background: var(--bg-panel-solid);
     border: 1px solid var(--border-panel);
@@ -536,6 +533,10 @@ body, html {
 
 #sidebar.collapsed {
     margin-right: calc(-1 * var(--sidebar-width));
+}
+
+.no-transition, .no-transition * {
+    transition: none !important;
 }
 
 .sidebar-section {

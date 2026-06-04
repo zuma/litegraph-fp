@@ -242,6 +242,30 @@
                         <pre><code id="ast-json-preview">{}</code></pre>
                     </div>
                 </section>
+                <!-- Inline script to prevent sidebar transition flash/glitch on page load -->
+                <script>
+                    (function() {
+                        try {
+                            const raw = localStorage.getItem('litegraph-fp-settings');
+                            const settings = raw ? JSON.parse(raw) : null;
+                            const collapsed = (settings && settings.layout && typeof settings.layout.sidebarCollapsed === 'boolean') 
+                                ? settings.layout.sidebarCollapsed 
+                                : true; // Default settings.layout.sidebarCollapsed is true
+                            const sidebar = document.getElementById('sidebar');
+                            if (sidebar) {
+                                if (collapsed) {
+                                    sidebar.classList.add('collapsed');
+                                    const btn = document.getElementById('btn-sidebar-toggle');
+                                    if (btn) btn.textContent = '📋';
+                                } else {
+                                    sidebar.classList.remove('collapsed');
+                                    const btn = document.getElementById('btn-sidebar-toggle');
+                                    if (btn) btn.textContent = '❌';
+                                }
+                            }
+                        } catch (e) {}
+                    })();
+                </script>
             </aside>
         </main>
         <!-- 3. FOOTER STATUS BAR -->
@@ -255,7 +279,7 @@
             
             <div class="footer-center">
                 <div class="helper-text-bar">
-                    Drag to pan (middle-click/Space+drag) • Scroll to zoom • Double-click canvas to add nodes
+                    Drag to pan (middle-click/Space+drag) • Scroll to zoom • Double-click canvas to zoom extents • Right-click canvas to add nodes
                 </div>
             </div>
 
