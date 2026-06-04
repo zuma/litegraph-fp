@@ -65,7 +65,7 @@ const server = http.createServer((req, res) => {
         res.setHeader('Content-Type', contentType);
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-        res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;");
+        res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'sha256-YwFlYxkPxuBJxjACWjzWRNXUgyijAQonlKkGmGSjpKg=' 'sha256-chfApzb7BD0tN3ELSGpRhGx/h/P7joyUVv2lagHf738='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;");
 
         const stream = fs.createReadStream(resolvedPath);
         stream.on('error', () => {
