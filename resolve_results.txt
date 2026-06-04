@@ -1,0 +1,4 @@
+Starting resolve and scan...
+Resolved sweet-panini.orb.local to 192.168.138.10
+Resolved sweet-swirles.orb.local to 192.168.138.13
+Resolve and scan complete.

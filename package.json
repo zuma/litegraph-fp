@@ -10,7 +10,8 @@
     "test:e2e": "tsx test.ts",
     "build": "tsc",
     "watch": "tsc -w",
-    "dev": "node scripts/dev_server.js"
+    "dev": "node scripts/dev_server.js",
+    "postinstall": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
