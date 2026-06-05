@@ -166,22 +166,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     // Reset shadow for subsequent drawings
     context.shadowBlur = 0;
 
-    // 3. Draw Card Border Outline
-    context.beginPath();
-    context.roundRect(x, y, w, h, 10);
-    context.lineWidth = isSelected || hasError ? 2 : 1;
-    if (hasError) {
-        context.strokeStyle = accentRed;
-    } else if (isSelected) {
-        context.strokeStyle = accentCyan;
-    } else {
-        // Uniform glass highlight border with a very subtle top-to-bottom light falloff (macOS style)
-        let borderGrad = context.createLinearGradient(x, y, x, y + h);
-        borderGrad.addColorStop(0, isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.16)');
-        borderGrad.addColorStop(1, isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.04)');
-        context.strokeStyle = borderGrad;
-    }
-    context.stroke();
+
 
     // 4. Draw Header Bar
     context.beginPath();
@@ -432,6 +417,30 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
             context.restore();
         }
     }
+    // 9. Draw Card Border Outline last so it overlays the Header Bar fill consistently
+    context.beginPath();
+    context.roundRect(x, y, w, h, 10);
+    context.lineWidth = isSelected || hasError ? 2.5 : 1;
+    if (hasError) {
+        let borderGrad = context.createLinearGradient(x, y, x, y + h);
+        borderGrad.addColorStop(0, 'rgba(255, 0, 80, 1.0)');
+        borderGrad.addColorStop(1, 'rgba(255, 0, 80, 0.7)');
+        context.strokeStyle = borderGrad;
+    } else if (isSelected) {
+        let borderGrad = context.createLinearGradient(x, y, x, y + h);
+        borderGrad.addColorStop(0, isLight ? 'rgba(0, 100, 255, 1.0)' : 'rgba(0, 145, 255, 1.0)');
+        borderGrad.addColorStop(1, isLight ? 'rgba(0, 60, 255, 0.7)' : 'rgba(0, 100, 255, 0.7)');
+        context.strokeStyle = borderGrad;
+    } else {
+        // Uniform glass highlight border with a very subtle top-to-bottom light falloff (macOS style)
+        let borderGrad = context.createLinearGradient(x, y, x, y + h);
+        const topOpacity = isHovered ? 0.3 : 0.16;
+        const bottomOpacity = isHovered ? 0.12 : 0.04;
+        borderGrad.addColorStop(0, isLight ? `rgba(0, 0, 0, ${topOpacity})` : `rgba(255, 255, 255, ${topOpacity})`);
+        borderGrad.addColorStop(1, isLight ? `rgba(0, 0, 0, ${bottomOpacity})` : `rgba(255, 255, 255, ${bottomOpacity})`);
+        context.strokeStyle = borderGrad;
+    }
+    context.stroke();
 
     context.restore();
 }
