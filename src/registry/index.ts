@@ -50,6 +50,16 @@ export const StandardNodes: NodeRegistry = Object.freeze({
     'system/log': logToConsole,
     'system/state': state,
 
+    'molecule/unconfigured': {
+        namespace: 'molecule',
+        category: 'molecule',
+        name: 'unconfigured',
+        requires: {},
+        provides: {},
+        dynamicInputs: false,
+        dynamicOutputs: false,
+        execute: async () => ({})
+    },
     'molecule/formula': {
         namespace: 'molecule',
         category: 'molecule',

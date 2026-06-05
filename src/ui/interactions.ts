@@ -1064,9 +1064,22 @@ export function setupInteractions() {
             // Right-clicked empty canvas: hide context menu, show node adder
             if (ctxMenu) ctxMenu.classList.add('hidden');
             
-            appState.spawnX = worldPos.x;
-            appState.spawnY = worldPos.y;
-            showNodeAdder(mouseX, mouseY);
+            const snapEnabled = loadSettings().canvas.snapToGrid;
+            let spawnX = worldPos.x;
+            let spawnY = worldPos.y;
+            if (snapEnabled) {
+                spawnX = Math.round(spawnX / GRID_SIZE) * GRID_SIZE;
+                spawnY = Math.round(spawnY / GRID_SIZE) * GRID_SIZE;
+            }
+
+            appState.spawnX = spawnX;
+            appState.spawnY = spawnY;
+
+            // Map snapped coordinates back to screen pixels
+            const screenX = spawnX * appState.viewport.zoom + appState.viewport.x;
+            const screenY = spawnY * appState.viewport.zoom + appState.viewport.y;
+
+            showNodeAdder(screenX, screenY);
         }
     });
 
@@ -1128,10 +1141,24 @@ export function closeNodeAdder() {
     const adder = document.getElementById('node-adder');
     if (adder && !adder.classList.contains('hidden')) {
         adder.classList.add('hidden');
+        
+        // Clean up unconfigured node if creation was cancelled
+        if (appState.selectedNodeId) {
+            const selectedNode = appState.currentGraph.nodes[appState.selectedNodeId];
+            if (selectedNode && selectedNode.type === 'molecule/unconfigured') {
+                const nodesCopy = { ...appState.currentGraph.nodes };
+                delete nodesCopy[appState.selectedNodeId];
+                appState.currentGraph = {
+                    ...appState.currentGraph,
+                    nodes: nodesCopy
+                };
+                appState.selectedNodeId = null;
+                syncContextState();
+                updateInspector();
+            }
+        }
     }
 }
-
-
 
 export function showNodeAdder(screenX: number, screenY: number) {
     const adder = document.getElementById('node-adder');
@@ -1139,15 +1166,37 @@ export function showNodeAdder(screenX: number, screenY: number) {
     
     if (!adder || !searchInput) return;
 
-    const canvas = appState.canvas;
-    const rect = canvas ? canvas.getBoundingClientRect() : { width: window.innerWidth, height: window.innerHeight };
-    const adderWidth = 320;
-    const adderHeight = 360;
-    const posX = Math.max(10, Math.min(screenX, rect.width - adderWidth - 10));
-    const posY = Math.max(10, Math.min(screenY, rect.height - adderHeight - 10));
+    // 1. Immediately instantiate unconfigured node in graph
+    const uniqueId = `unconfigured_${Date.now().toString().slice(-4)}`;
+    const newNode: NodeState = {
+        id: uniqueId,
+        type: 'molecule/unconfigured',
+        params: {},
+        ui: {
+            x: appState.spawnX,
+            y: appState.spawnY,
+            title: 'NEW MOLECULE'
+        }
+    };
 
-    adder.style.left = `${posX}px`;
-    adder.style.top = `${posY}px`;
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [uniqueId]: newNode
+        }
+    };
+
+    appState.selectedNodeId = uniqueId;
+    syncContextState();
+    updateInspector();
+
+    // 2. Position HTML search adder exactly on top of the newly created node
+    const sx = newNode.ui!.x * appState.viewport.zoom + appState.viewport.x;
+    const sy = newNode.ui!.y * appState.viewport.zoom + appState.viewport.y;
+
+    adder.style.left = `${sx}px`;
+    adder.style.top = `${sy}px`;
     adder.classList.remove('hidden');
     
     searchInput.value = '';
@@ -1224,12 +1273,26 @@ export function addNewNode(type: string) {
         }
     }
 
-    const snapEnabled = loadSettings().canvas.snapToGrid;
-    let spawnX = Math.round(appState.spawnX - NODE_WIDTH / 2);
-    let spawnY = Math.round(appState.spawnY - 20);
-    if (snapEnabled) {
-        spawnX = Math.round(spawnX / GRID_SIZE) * GRID_SIZE;
-        spawnY = Math.round(spawnY / GRID_SIZE) * GRID_SIZE;
+    const unconfiguredNode = appState.selectedNodeId ? appState.currentGraph.nodes[appState.selectedNodeId] : null;
+    const isMorphing = unconfiguredNode && unconfiguredNode.type === 'molecule/unconfigured';
+
+    let spawnX = 0;
+    let spawnY = 0;
+
+    const nodesCopy = { ...appState.currentGraph.nodes };
+
+    if (isMorphing && unconfiguredNode) {
+        spawnX = unconfiguredNode.ui!.x;
+        spawnY = unconfiguredNode.ui!.y;
+        delete nodesCopy[unconfiguredNode.id];
+    } else {
+        const snapEnabled = loadSettings().canvas.snapToGrid;
+        spawnX = Math.round(appState.spawnX - NODE_WIDTH / 2);
+        spawnY = Math.round(appState.spawnY - 20);
+        if (snapEnabled) {
+            spawnX = Math.round(spawnX / GRID_SIZE) * GRID_SIZE;
+            spawnY = Math.round(spawnY / GRID_SIZE) * GRID_SIZE;
+        }
     }
 
     const newNode: NodeState = {
@@ -1248,7 +1311,7 @@ export function addNewNode(type: string) {
     appState.currentGraph = {
         ...appState.currentGraph,
         nodes: {
-            ...appState.currentGraph.nodes,
+            ...nodesCopy,
             [uniqueId]: newNode
         }
     };
@@ -1269,15 +1332,37 @@ export function addNewNode(type: string) {
 
         const sx = newNode.ui!.x * appState.viewport.zoom + appState.viewport.x;
         const sy = newNode.ui!.y * appState.viewport.zoom + appState.viewport.y;
-        const canvasRect = appState.canvas ? appState.canvas.getBoundingClientRect() : { left: 0, top: 0 };
-        const posX = sx + canvasRect.left;
-        const posY = sy + canvasRect.top;
+
+        const category = nodeDef?.category || 'system';
+        let accentColor = 'var(--accent-cyan)';
+        let glowColor = 'var(--accent-cyan-glow)';
+        if (category === 'math') {
+            accentColor = 'var(--accent-red)';
+            glowColor = 'var(--accent-red-glow)';
+        } else if (category === 'logic') {
+            accentColor = 'var(--accent-cyan)';
+            glowColor = 'var(--accent-cyan-glow)';
+        } else if (category === 'system') {
+            accentColor = 'var(--accent-purple)';
+            glowColor = 'var(--accent-purple-glow)';
+        } else if (category === 'molecule') {
+            accentColor = 'var(--accent-orange)';
+            glowColor = 'var(--accent-orange-glow)';
+        } else if (category === 'string' || category === 'array' || category === 'object') {
+            accentColor = 'var(--accent-emerald)';
+            glowColor = 'var(--accent-emerald-glow)';
+        }
 
         adder.style.transition = 'width 0.22s cubic-bezier(0.19, 1, 0.22, 1), height 0.22s cubic-bezier(0.19, 1, 0.22, 1), left 0.22s cubic-bezier(0.19, 1, 0.22, 1), top 0.22s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.22s ease';
-        adder.style.left = `${posX}px`;
-        adder.style.top = `${posY}px`;
+        adder.style.left = `${sx}px`;
+        adder.style.top = `${sy}px`;
         adder.style.width = `${screenW}px`;
         adder.style.height = `${screenH}px`;
+        
+        // Dynamically style background/border/shadow to match theme/category
+        adder.style.borderColor = accentColor;
+        adder.style.boxShadow = `0 0 20px ${glowColor}`;
+
         adder.classList.add('morphing');
         adderContent.style.opacity = '0';
 
@@ -1287,6 +1372,8 @@ export function addNewNode(type: string) {
             adder.style.transition = '';
             adder.style.width = '';
             adder.style.height = '';
+            adder.style.borderColor = '';
+            adder.style.boxShadow = '';
             adderContent.style.opacity = '1';
 
             const updatedNode = {

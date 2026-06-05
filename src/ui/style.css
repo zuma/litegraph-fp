@@ -406,10 +406,9 @@ body, html {
 }
 
 .floating-panel.morphing {
-    opacity: 0.8;
-    background: rgba(20, 24, 33, 0.95);
-    border: 2px solid var(--accent-cyan);
-    box-shadow: 0 0 20px rgba(0, 240, 255, 0.35);
+    opacity: 0.85;
+    background: var(--bg-card);
+    border: 2px solid transparent;
     pointer-events: none;
 }
 

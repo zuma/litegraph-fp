@@ -100,7 +100,7 @@ export function drawGrid(renderingCtx: RenderingContext, computedStyle: CSSStyle
 }
 
 export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDefinition | undefined, computedStyle: CSSStyleDeclaration) {
-    if (node.ui?.isMorphing) return;
+    if (node.ui?.isMorphing || node.type === 'molecule/unconfigured') return;
     const context = ctx.ctx;
     const x = node.ui?.x ?? 0;
     const y = node.ui?.y ?? 0;
