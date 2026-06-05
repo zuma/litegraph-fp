@@ -7,7 +7,7 @@
     --bg-obsidian: hsl(222, 20%, 7%);
     --bg-panel: hsla(222, 22%, 10%, 0.45);
     --bg-panel-solid: hsl(222, 22%, 12%);
-    --bg-card: hsla(222, 20%, 15%, 0.6);
+    --bg-card: hsla(222, 20%, 12%, 0.82);
     --bg-input: hsl(222, 25%, 9%);
     --bg-terminal: hsl(222, 30%, 5%);
     --bg-helper: rgba(11, 13, 17, 0.7);
@@ -49,7 +49,7 @@
     --sidebar-width: 384px;
     
     /* Effects */
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+    --glass-shadow: inset 0 1px 0 0 hsla(0, 0%, 100%, 0.16), 0 12px 40px 0 rgba(0, 0, 0, 0.45);
     --glass-blur: blur(32px) saturate(210%);
     --neon-shadow-cyan: 0 0 15px var(--accent-cyan-glow);
     --neon-shadow-red: 0 0 15px var(--accent-red-glow);
@@ -61,7 +61,7 @@ body.light-theme {
     --bg-obsidian: hsl(210, 40%, 98%);
     --bg-panel: hsla(210, 40%, 96%, 0.65);
     --bg-panel-solid: hsl(210, 40%, 95%);
-    --bg-card: hsla(0, 0%, 100%, 0.75);
+    --bg-card: hsla(0, 0%, 100%, 0.85);
     --bg-input: hsl(210, 30%, 90%);
     --bg-terminal: hsl(210, 25%, 93%);
     --bg-helper: rgba(255, 255, 255, 0.85);
@@ -87,7 +87,7 @@ body.light-theme {
     --text-muted: hsl(215, 15%, 55%);
     --text-btn-primary: hsl(0, 0%, 100%);
     
-    --glass-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.06);
+    --glass-shadow: inset 0 1px 0 0 hsla(0, 0%, 100%, 0.65), 0 12px 40px 0 rgba(15, 23, 42, 0.08);
     --glass-blur: blur(32px) saturate(210%);
     --neon-shadow-cyan: 0 0 12px var(--accent-cyan-glow);
     --neon-shadow-red: 0 0 12px var(--accent-red-glow);
@@ -397,7 +397,7 @@ body, html {
 .floating-panel {
     position: absolute;
     width: 320px;
-    border-radius: 12px;
+    border-radius: 16px;
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -988,7 +988,7 @@ body, html {
 
 .context-menu {
     position: absolute;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 6px;
     display: flex;
     flex-direction: column;

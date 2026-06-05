@@ -4,7 +4,7 @@ import { StandardNodes } from '../registry/index.js';
 import { NODE_WIDTH } from './canvas.js';
 import { appState, syncContextState, updateCursor, getNodeHeight } from './state.js';
 import { runExecutionPipeline, logToTerminal } from './execution.js';
-import { setupInteractions, deleteSelectedNodes, zoomExtents } from './interactions.js';
+import { setupInteractions, deleteSelectedNodes, zoomExtents, closeNodeAdder } from './interactions.js';
 import { undo, redo, pushToHistory } from './history.js';
 import { loadSettings, updateSetting } from './settings.js';
 import { autoLayoutGraph } from './layout.js';
@@ -428,7 +428,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Close Adder
     document.getElementById('btn-close-adder')?.addEventListener('click', () => {
-        document.getElementById('node-adder')?.classList.add('hidden');
+        closeNodeAdder();
     });
 
     // ========================================================================

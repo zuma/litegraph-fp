@@ -258,6 +258,20 @@ export function sendNodeToBack(nodeId: string) {
     }
 }
 
+function isPinHit(worldPos: { x: number; y: number }, pos: { x: number; y: number }, isInput: boolean): boolean {
+    const dx = worldPos.x - pos.x;
+    const dy = worldPos.y - pos.y;
+    
+    // Asymmetric horizontal tolerance to avoid overlapping text inside the card
+    if (isInput) {
+        if (dx > 6) return false; // Inside card (too far right) -> ignore
+    } else {
+        if (dx < -6) return false; // Inside card (too far left) -> ignore
+    }
+    
+    return Math.hypot(dx, dy) <= 22;
+}
+
 // ============================================================================
 // INTERACTIONS INITIALIZATION
 // ============================================================================
@@ -336,6 +350,29 @@ export function setupInteractions() {
     // ========================================================================
     // MOUSE INTERACTION EVENT LISTENERS
     // ========================================================================
+
+    // Global click-away handler to dismiss context menu and close/clean up unconfigured node adder
+    document.addEventListener('mousedown', (e) => {
+        const target = e.target as HTMLElement;
+
+        // Dismiss context menu if clicking outside of it
+        const ctxMenu = document.getElementById('context-menu');
+        if (ctxMenu && !ctxMenu.classList.contains('hidden')) {
+            if (!ctxMenu.contains(target)) {
+                ctxMenu.classList.add('hidden');
+            }
+        }
+
+        // Close and delete unconfigured node if clicking outside of the search adder
+        const adder = document.getElementById('node-adder');
+        if (adder && !adder.classList.contains('hidden')) {
+            const isClickInsideAdder = adder.contains(target);
+            const isRightClickOnCanvas = e.button === 2 && target.id === 'graph-canvas';
+            if (!isClickInsideAdder && !isRightClickOnCanvas) {
+                closeNodeAdder();
+            }
+        }
+    });
 
     // Search element coordinate bounds
     canvas.addEventListener('mousedown', (e) => {
@@ -425,8 +462,7 @@ export function setupInteractions() {
             const inputs = Object.keys(getNodeInputs(node));
             for (let i = 0; i < inputs.length; i++) {
                 const pos = getInputPinCoords(node, inputs[i]);
-                const dist = Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y);
-                if (dist <= 12) {
+                if (isPinHit(worldPos, pos, true)) {
                     pinClicked = true;
                     if (loadSettings().canvas.autoBringToFront) {
                         bringNodeToFront(node.id);
@@ -452,8 +488,7 @@ export function setupInteractions() {
             const outputs = Object.keys(getNodeOutputs(node));
             for (let i = 0; i < outputs.length; i++) {
                 const pos = getOutputPinCoords(node, outputs[i]);
-                const dist = Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y);
-                if (dist <= 12) {
+                if (isPinHit(worldPos, pos, false)) {
                     pinClicked = true;
                     if (loadSettings().canvas.autoBringToFront) {
                         bringNodeToFront(node.id);
@@ -717,31 +752,35 @@ export function setupInteractions() {
                 break;
             }
 
-            // Check if hovering node body or pins
-            if (worldPos.x >= nx && worldPos.x <= nx + w && worldPos.y >= ny && worldPos.y <= ny + h) {
-                hNodeId = node.id;
+            // Inputs
+            const inputs = Object.keys(getNodeInputs(node));
+            for (let i = 0; i < inputs.length; i++) {
+                const pos = getInputPinCoords(node, inputs[i]);
+                if (isPinHit(worldPos, pos, true)) {
+                    hPin = { nodeId: node.id, pinId: inputs[i], isInput: true };
+                    break;
+                }
+            }
 
-                // Inputs
-                const inputs = Object.keys(getNodeInputs(node));
-                for (let i = 0; i < inputs.length; i++) {
-                    const pos = getInputPinCoords(node, inputs[i]);
-                    if (Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y) <= 12) {
-                        hPin = { nodeId: node.id, pinId: inputs[i], isInput: true };
+            // Outputs
+            if (!hPin) {
+                const outputs = Object.keys(getNodeOutputs(node));
+                for (let i = 0; i < outputs.length; i++) {
+                    const pos = getOutputPinCoords(node, outputs[i]);
+                    if (isPinHit(worldPos, pos, false)) {
+                        hPin = { nodeId: node.id, pinId: outputs[i], isInput: false };
                         break;
                     }
                 }
+            }
 
-                // Outputs
-                if (!hPin) {
-                    const outputs = Object.keys(getNodeOutputs(node));
-                    for (let i = 0; i < outputs.length; i++) {
-                        const pos = getOutputPinCoords(node, outputs[i]);
-                        if (Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y) <= 12) {
-                            hPin = { nodeId: node.id, pinId: outputs[i], isInput: false };
-                            break;
-                        }
-                    }
-                }
+            if (hPin) {
+                break;
+            }
+
+            // Check if hovering node body
+            if (worldPos.x >= nx && worldPos.x <= nx + w && worldPos.y >= ny && worldPos.y <= ny + h) {
+                hNodeId = node.id;
                 break;
             }
         }
