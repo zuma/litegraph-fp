@@ -1,7 +1,7 @@
 import { GraphState, NodeState } from '../core/ast.js';
 import { RenderingContext, Viewport } from './types.js';
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
-import { StandardNodes } from '../registry/index.js';
+import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
 import { loadSettings } from './settings.js';
 
 // ============================================================================
@@ -97,6 +97,7 @@ export const appState = {
     mouseDownClientX: 0,
     mouseDownClientY: 0,
     mouseDownTime: 0,
+    activePlaceholderId: null as string | null,
 };
 
 // ============================================================================
@@ -127,6 +128,7 @@ export function syncContextState() {
         appState.renderingContext.hoveredEdgeId = appState.hoveredEdgeId;
         appState.renderingContext.hoveredEdgePos = appState.hoveredEdgePos;
         appState.renderingContext.edgeStyle = loadSettings().canvas.edgeStyle || 'spline';
+        appState.renderingContext.activePlaceholderId = appState.activePlaceholderId;
         appState.renderingContext.needsRedraw = true;
     }
 }
@@ -188,16 +190,13 @@ export function updateCursor() {
 // ============================================================================
 
 export function getNodeHeight(node: NodeState): number {
-    const nodeDef = StandardNodes[node.type];
-    if (!nodeDef) return 75; // Default to 1-row node height (30 + 15 + 30)
-    const numInputs = Object.keys(nodeDef.requires).length;
-    const numOutputs = Object.keys(nodeDef.provides).length;
+    const numInputs = Object.keys(getNodeInputs(node)).length;
+    const numOutputs = Object.keys(getNodeOutputs(node)).length;
     return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + 30; // 30px bottom padding
 }
 
 export function getInputPinCoords(node: NodeState, pinId: string): { x: number, y: number } {
-    const nodeDef = StandardNodes[node.type];
-    const inputs = nodeDef ? Object.keys(nodeDef.requires) : [];
+    const inputs = Object.keys(getNodeInputs(node));
     const idx = inputs.indexOf(pinId);
     const nx = node.ui?.x ?? 0;
     const ny = node.ui?.y ?? 0;
@@ -208,8 +207,7 @@ export function getInputPinCoords(node: NodeState, pinId: string): { x: number, 
 }
 
 export function getOutputPinCoords(node: NodeState, pinId: string): { x: number, y: number } {
-    const nodeDef = StandardNodes[node.type];
-    const outputs = nodeDef ? Object.keys(nodeDef.provides) : [];
+    const outputs = Object.keys(getNodeOutputs(node));
     const idx = outputs.indexOf(pinId);
     const nx = node.ui?.x ?? 0;
     const ny = node.ui?.y ?? 0;

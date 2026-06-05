@@ -1,5 +1,6 @@
 import { GraphState, PinType } from '../core/ast.js';
 import { NodeRegistry } from '../registry/types.js';
+import { getNodeInputs, getNodeOutputs } from '../registry/index.js';
 
 /**
  * Checks if a source PinType is compatible with a target PinType.
@@ -66,17 +67,11 @@ export const getGraphValidationErrors = (
             continue;
         }
 
-        const sourceDef = registry[sourceNode.type];
-        const targetDef = registry[targetNode.type];
+        if (sourceNode.type === 'molecule/unconfigured' || targetNode.type === 'molecule/unconfigured') {
+            continue;
+        }
 
-        if (!sourceDef) {
-            errors[edge.sourceNodeId] = `Invalid edge ${edge.id}: Node definition for '${sourceNode.type}' missing from registry.`;
-            continue;
-        }
-        if (!targetDef) {
-            errors[edge.targetNodeId] = `Invalid edge ${edge.id}: Node definition for '${targetNode.type}' missing from registry.`;
-            continue;
-        }
+
 
         // Check for multiple inputs to the same pin (single-source dataflow invariant)
         const targetPinKey = `${edge.targetNodeId}.${edge.targetPinId}`;
@@ -86,8 +81,8 @@ export const getGraphValidationErrors = (
         }
         seenTargets.add(targetPinKey);
 
-        const sourceType = sourceDef.provides[edge.sourcePinId];
-        const targetType = targetDef.requires[edge.targetPinId];
+        const sourceType = getNodeOutputs(sourceNode, registry)[edge.sourcePinId];
+        const targetType = getNodeInputs(targetNode, registry)[edge.targetPinId];
 
         if (sourceType === undefined) {
             errors[edge.sourceNodeId] = `Invalid edge ${edge.id}: Source pin '${edge.sourcePinId}' does not exist on definition '${sourceNode.type}'.`;

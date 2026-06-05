@@ -386,6 +386,8 @@ window.addEventListener('DOMContentLoaded', () => {
         deleteSelectedNodes();
     });
 
+
+
     document.getElementById('btn-clear-logs')?.addEventListener('click', () => {
         const consoleView = document.getElementById('terminal-console');
         if (consoleView) {

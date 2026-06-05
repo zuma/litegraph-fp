@@ -43,5 +43,6 @@ export interface RenderingContext {
     hoveredEdgeId?: string | null;
     hoveredEdgePos?: { x: number; y: number } | null;
     edgeStyle?: 'spline' | 'orthogonal';
+    activePlaceholderId?: string | null;
 }
 

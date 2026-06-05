@@ -1,10 +1,10 @@
-import { GraphState, NodeState, Edge } from '../core/ast.js';
+import { GraphState, NodeState, Edge, NodeMode } from '../core/ast.js';
 import { appState, screenToWorld, syncContextState, updateCursor, getNodeHeight, getInputPinCoords, getOutputPinCoords, GRID_SIZE } from './state.js';
 import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons, undo, redo } from './history.js';
 import { updateInspector } from './inspector.js';
 import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution.js';
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
-import { StandardNodes } from '../registry/index.js';
+import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
 import { isCompatible } from '../engine/validation.js';
 import { updateSetting, loadSettings } from './settings.js';
 
@@ -270,6 +270,11 @@ export function setupInteractions() {
     // KEYBOARD SHORTCUTS BINDING (Undo / Redo / Delete Listener)
     // ========================================================================
     window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeNodeAdder();
+            document.getElementById('context-menu')?.classList.add('hidden');
+        }
+
         if (e.key === 'Shift') {
             appState.isShiftPressed = true;
             updateCursor();
@@ -417,7 +422,7 @@ export function setupInteractions() {
             if (!nodeDef) continue;
 
             // Inputs
-            const inputs = Object.keys(nodeDef.requires);
+            const inputs = Object.keys(getNodeInputs(node));
             for (let i = 0; i < inputs.length; i++) {
                 const pos = getInputPinCoords(node, inputs[i]);
                 const dist = Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y);
@@ -444,7 +449,7 @@ export function setupInteractions() {
             if (pinClicked) break;
 
             // Outputs
-            const outputs = Object.keys(nodeDef.provides);
+            const outputs = Object.keys(getNodeOutputs(node));
             for (let i = 0; i < outputs.length; i++) {
                 const pos = getOutputPinCoords(node, outputs[i]);
                 const dist = Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y);
@@ -546,14 +551,14 @@ export function setupInteractions() {
             appState.dragNodeOriginalY = node.ui?.y ?? 0;
             
             // Hide node adder if showing
-            document.getElementById('node-adder')?.classList.add('hidden');
+            closeNodeAdder();
             updateInspector();
             updateCursor();
             return;
         }
 
         // 3. Fallback: Clicked empty canvas space. Start panning or selection box.
-        document.getElementById('node-adder')?.classList.add('hidden');
+        closeNodeAdder();
 
         if (e.shiftKey) {
             // Start Selection Box (CAD-style crossing/enclosing selection window)
@@ -717,7 +722,7 @@ export function setupInteractions() {
                 hNodeId = node.id;
 
                 // Inputs
-                const inputs = Object.keys(nodeDef.requires);
+                const inputs = Object.keys(getNodeInputs(node));
                 for (let i = 0; i < inputs.length; i++) {
                     const pos = getInputPinCoords(node, inputs[i]);
                     if (Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y) <= 12) {
@@ -728,7 +733,7 @@ export function setupInteractions() {
 
                 // Outputs
                 if (!hPin) {
-                    const outputs = Object.keys(nodeDef.provides);
+                    const outputs = Object.keys(getNodeOutputs(node));
                     for (let i = 0; i < outputs.length; i++) {
                         const pos = getOutputPinCoords(node, outputs[i]);
                         if (Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y) <= 12) {
@@ -758,8 +763,8 @@ export function setupInteractions() {
                 const targetDef = StandardNodes[targetNode.type];
                 if (!sourceDef || !targetDef) continue;
 
-                const outPinNames = Object.keys(sourceDef.provides);
-                const inPinNames = Object.keys(targetDef.requires);
+                const outPinNames = Object.keys(getNodeOutputs(sourceNode));
+                const inPinNames = Object.keys(getNodeInputs(targetNode));
                 const outIndex = outPinNames.indexOf(edge.sourcePinId);
                 const inIndex = inPinNames.indexOf(edge.targetPinId);
 
@@ -819,8 +824,8 @@ export function setupInteractions() {
                     const targetDef = StandardNodes[targetNode.type];
                     
                     if (sourceDef && targetDef) {
-                        const sourceType = sourceDef.provides[sourcePinId];
-                        const targetType = targetDef.requires[targetPinId];
+                        const sourceType = getNodeOutputs(sourceNode)[sourcePinId];
+                        const targetType = getNodeInputs(targetNode)[targetPinId];
 
                         // 1. Perform strict schema type-checking validation
                         if (isCompatible(sourceType, targetType)) {
@@ -1043,7 +1048,7 @@ export function setupInteractions() {
             }
             updateInspector();
 
-            if (nodeAdder) nodeAdder.classList.add('hidden');
+            closeNodeAdder();
             
             if (ctxMenu) {
                 const rect = canvas.getBoundingClientRect();
@@ -1119,6 +1124,15 @@ export function setupInteractions() {
 // NODE ADDER PANEL & SEARCH FILTER
 // ========================================================================
 
+export function closeNodeAdder() {
+    const adder = document.getElementById('node-adder');
+    if (adder && !adder.classList.contains('hidden')) {
+        adder.classList.add('hidden');
+    }
+}
+
+
+
 export function showNodeAdder(screenX: number, screenY: number) {
     const adder = document.getElementById('node-adder');
     const searchInput = document.getElementById('node-search-input') as HTMLInputElement;
@@ -1170,7 +1184,6 @@ export function filterNodeAdderList(query: string) {
 
         btn.addEventListener('click', () => {
             addNewNode(nodeType);
-            document.getElementById('node-adder')?.classList.add('hidden');
         });
 
         listContainer.appendChild(btn);
@@ -1186,11 +1199,25 @@ export function addNewNode(type: string) {
     
     const nodeDef = StandardNodes[type];
     
+    let mode: NodeMode | undefined = undefined;
+    if (type.startsWith('molecule/')) {
+        mode = type === 'molecule/blocks' ? 'blocks' : (type === 'molecule/python' ? 'python' : 'formula');
+    }
+    
     // Prepare initial parameter fields based on required pins
     const initialParams: Record<string, any> = {};
-    if (nodeDef) {
-        Object.keys(nodeDef.requires).forEach(pin => {
-            initialParams[pin] = pin === 'ms' ? 1000 : (pin === 'code' ? 'def execute(inputs):\n    # inputs: dict, e.g. {"a": 10, "b": 20}\n    # return a dict with output pin values\n    a = inputs.get("a", 0)\n    b = inputs.get("b", 0)\n    return { "out": a + b }' : (nodeDef.requires[pin] === 'number' ? 0 : ''));
+    if (mode === 'formula') {
+        initialParams.formula = 'a + b';
+    } else if (mode === 'blocks') {
+        initialParams.blocks = [
+            { id: `b_${Math.random().toString(36).substr(2, 4)}`, targetVar: 'out', operand1: 'a', operator: '+', operand2: 'b' }
+        ];
+    } else if (mode === 'python') {
+        initialParams.code = 'def execute(inputs):\n    # inputs: dict\n    # return dict\n    return { "out": inputs.get("a", 0) + inputs.get("b", 0) }';
+    } else if (nodeDef) {
+        const requires = getNodeInputs({ type } as any);
+        Object.keys(requires).forEach(pin => {
+            initialParams[pin] = pin === 'ms' ? 1000 : (pin === 'code' ? 'def execute(inputs):\n    # inputs: dict, e.g. {"a": 10, "b": 20}\n    # return a dict with output pin values\n    a = inputs.get("a", 0)\n    b = inputs.get("b", 0)\n    return { "out": a + b }' : (requires[pin] === 'number' ? 0 : ''));
         });
         if (type === 'system/state') {
             initialParams['defaultValue'] = 0;
@@ -1208,11 +1235,13 @@ export function addNewNode(type: string) {
     const newNode: NodeState = {
         id: uniqueId,
         type,
+        mode,
         params: initialParams,
         ui: {
             x: spawnX,
             y: spawnY,
-            title: baseId.toUpperCase()
+            title: baseId.toUpperCase(),
+            isMorphing: true
         }
     };
 
@@ -1227,10 +1256,78 @@ export function addNewNode(type: string) {
     logToTerminal(`Spawned node ${uniqueId} of type '${type}'`, 'system-msg');
     
     appState.selectedNodeId = uniqueId;
-    syncContextState();
-    
-    updateInspector();
-    triggerAutoRun();
+
+    const adder = document.getElementById('node-adder');
+    const adderContent = document.getElementById('node-adder-content');
+
+    if (adder && adderContent && !adder.classList.contains('hidden')) {
+        const nodeH = getNodeHeight(newNode);
+        const nodeW = newNode.ui?.width ?? NODE_WIDTH;
+
+        const screenW = nodeW * appState.viewport.zoom;
+        const screenH = nodeH * appState.viewport.zoom;
+
+        const sx = newNode.ui!.x * appState.viewport.zoom + appState.viewport.x;
+        const sy = newNode.ui!.y * appState.viewport.zoom + appState.viewport.y;
+        const canvasRect = appState.canvas ? appState.canvas.getBoundingClientRect() : { left: 0, top: 0 };
+        const posX = sx + canvasRect.left;
+        const posY = sy + canvasRect.top;
+
+        adder.style.transition = 'width 0.22s cubic-bezier(0.19, 1, 0.22, 1), height 0.22s cubic-bezier(0.19, 1, 0.22, 1), left 0.22s cubic-bezier(0.19, 1, 0.22, 1), top 0.22s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.22s ease';
+        adder.style.left = `${posX}px`;
+        adder.style.top = `${posY}px`;
+        adder.style.width = `${screenW}px`;
+        adder.style.height = `${screenH}px`;
+        adder.classList.add('morphing');
+        adderContent.style.opacity = '0';
+
+        setTimeout(() => {
+            adder.classList.add('hidden');
+            adder.classList.remove('morphing');
+            adder.style.transition = '';
+            adder.style.width = '';
+            adder.style.height = '';
+            adderContent.style.opacity = '1';
+
+            const updatedNode = {
+                ...newNode,
+                ui: {
+                    ...newNode.ui!,
+                    isMorphing: false
+                }
+            };
+            appState.currentGraph = {
+                ...appState.currentGraph,
+                nodes: {
+                    ...appState.currentGraph.nodes,
+                    [uniqueId]: updatedNode
+                }
+            };
+
+            syncContextState();
+            updateInspector();
+            triggerAutoRun();
+        }, 220);
+    } else {
+        const updatedNode = {
+            ...newNode,
+            ui: {
+                ...newNode.ui!,
+                isMorphing: false
+            }
+        };
+        appState.currentGraph = {
+            ...appState.currentGraph,
+            nodes: {
+                ...appState.currentGraph.nodes,
+                [uniqueId]: updatedNode
+            }
+        };
+
+        syncContextState();
+        updateInspector();
+        triggerAutoRun();
+    }
 }
 
 function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {

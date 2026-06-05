@@ -1,4 +1,5 @@
-import { StandardNodes } from '../registry/index.js';
+import { StandardNodes, getNodeInputs, getNodeOutputs, getNodeMode, getDefaultFormulaForType } from '../registry/index.js';
+import { NodeMode } from '../core/ast.js';
 import { appState } from './state.js';
 import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons } from './history.js';
 import { triggerAutoRun } from './execution.js';
@@ -20,6 +21,8 @@ export function updateInspector() {
     if (!appState.selectedNodeId || !appState.currentGraph.nodes[appState.selectedNodeId]) {
         content.classList.add('hidden');
         placeholder.classList.remove('hidden');
+        document.getElementById('btn-add-input')?.classList.add('hidden');
+        document.getElementById('btn-add-output')?.classList.add('hidden');
         if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
             (window as any).setSidebarCollapsed(true);
         }
@@ -35,6 +38,67 @@ export function updateInspector() {
     const node = appState.currentGraph.nodes[appState.selectedNodeId];
     const nodeDef = StandardNodes[node.type];
 
+
+
+    // Add Pin buttons setup
+    const btnAddInput = document.getElementById('btn-add-input');
+    const btnAddOutput = document.getElementById('btn-add-output');
+
+    if (btnAddInput) {
+        if (nodeDef?.dynamicInputs) {
+            btnAddInput.classList.remove('hidden');
+            const newBtn = btnAddInput.cloneNode(true) as HTMLButtonElement;
+            btnAddInput.parentNode?.replaceChild(newBtn, btnAddInput);
+            newBtn.addEventListener('click', () => {
+                handleAddInputPin(node.id);
+            });
+        } else {
+            btnAddInput.classList.add('hidden');
+        }
+    }
+
+    if (btnAddOutput) {
+        if (nodeDef?.dynamicOutputs) {
+            btnAddOutput.classList.remove('hidden');
+            const newBtn = btnAddOutput.cloneNode(true) as HTMLButtonElement;
+            btnAddOutput.parentNode?.replaceChild(newBtn, btnAddOutput);
+            newBtn.addEventListener('click', () => {
+                handleAddOutputPin(node.id);
+            });
+        } else {
+            btnAddOutput.classList.add('hidden');
+        }
+    }
+    // Node mode selector configuration
+    const modeRow = document.getElementById('inspect-node-mode-row');
+    const modeSelect = document.getElementById('inspect-node-mode') as HTMLSelectElement | null;
+    if (modeRow && modeSelect) {
+        modeRow.classList.remove('hidden');
+        modeSelect.replaceChildren();
+        const modes: { value: NodeMode; label: string }[] = [
+            { value: 'formula', label: 'Math Formula' },
+            { value: 'blocks', label: 'Blocks Expression' },
+            { value: 'python', label: 'Python Script' },
+            { value: 'delay', label: 'Time Delay' },
+            { value: 'state', label: 'State Loop' }
+        ];
+        modes.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.value;
+            opt.textContent = m.label;
+            modeSelect.appendChild(opt);
+        });
+        
+        const activeMode = getNodeMode(node);
+        modeSelect.value = activeMode;
+        
+        const newSelect = modeSelect.cloneNode(true) as HTMLSelectElement;
+        modeSelect.parentNode?.replaceChild(newSelect, modeSelect);
+        newSelect.value = activeMode;
+        newSelect.addEventListener('change', () => {
+            handleSwitchNodeMode(node.id, newSelect.value as NodeMode);
+        });
+    }
     // Node details textContent insertion
     const nodeIdText = document.getElementById('inspect-node-id');
     const nodeTypeText = document.getElementById('inspect-node-type');
@@ -72,114 +136,259 @@ export function updateInspector() {
 
     // 1. Rebuild Parameter Editor Container
     const paramsContainer = document.getElementById('inspect-parameters-container');
-    if (paramsContainer && nodeDef) {
+    if (paramsContainer) {
         paramsContainer.replaceChildren();
+        const mode = getNodeMode(node);
 
-        // Parameter inputs: Draw form input fields for requires pins that are NOT connected
-        const requires = Object.entries(nodeDef.requires);
-        const incomingEdges = appState.currentGraph.edges.filter(e => e.targetNodeId === node.id);
-
-        requires.forEach(([pinId, pinType]) => {
-            const isConnected = incomingEdges.some(e => e.targetPinId === pinId);
+        if (mode === 'formula') {
             const row = document.createElement('div');
             row.className = 'param-input-row';
 
             const label = document.createElement('label');
-            label.textContent = `${pinId} (${pinType})`;
+            label.textContent = 'Formula';
             row.appendChild(label);
 
-            if (isConnected) {
-                const badgeText = document.createElement('span');
-                badgeText.className = 'badge';
-                badgeText.style.alignSelf = 'flex-start';
-                badgeText.style.borderColor = 'rgba(255,255,255,0.05)';
-                badgeText.style.background = 'rgba(255,255,255,0.02)';
-                badgeText.style.color = 'var(--text-muted)';
-                badgeText.textContent = '🔌 Wired Link';
-                row.appendChild(badgeText);
-            } else {
-                // Not connected, display editor input
-                const currentVal = node.params[pinId] ?? '';
-                
-                if (pinType === 'boolean') {
-                    const checkLabel = document.createElement('label');
-                    checkLabel.className = 'input-field-checkbox';
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.checked = !!currentVal;
-                    checkbox.addEventListener('change', () => {
-                        // Capture snapshot on toggle action
-                        pushToHistory();
-                        updateNodeParam(node.id, pinId, checkbox.checked);
-                    });
-                    checkLabel.appendChild(checkbox);
-                    checkLabel.appendChild(document.createTextNode(' Enabled'));
-                } else if (pinId === 'code') {
-                    const textArea = document.createElement('textarea');
-                    textArea.className = 'input-field';
-                    textArea.style.fontFamily = '"Fira Code", monospace';
-                    textArea.style.minHeight = '140px';
-                    textArea.style.fontSize = '11px';
-                    textArea.style.resize = 'vertical';
-                    textArea.value = currentVal.toString();
-                    textArea.autocomplete = 'off';
+            const formulaInput = document.createElement('input');
+            formulaInput.type = 'text';
+            formulaInput.className = 'input-field';
+            formulaInput.value = node.params.formula ?? getDefaultFormulaForType(node.type);
+            formulaInput.autocomplete = 'off';
 
-                    textArea.addEventListener('focus', () => {
-                        appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
-                    });
+            formulaInput.addEventListener('focus', () => {
+                appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
+            });
 
-                    textArea.addEventListener('input', () => {
-                        if (appState.preEditGraphState) {
-                            undoStack.push(appState.preEditGraphState);
-                            if (undoStack.length > 50) undoStack.shift();
-                            redoStack.length = 0;
-                            updateUndoRedoButtons();
-                            appState.preEditGraphState = null;
-                        }
-                        updateNodeParam(node.id, pinId, textArea.value);
-                    });
-                    row.appendChild(textArea);
-                } else {
-                    const textInput = document.createElement('input');
-                    textInput.type = pinType === 'number' ? 'number' : 'text';
-                    textInput.className = 'input-field';
-                    textInput.value = currentVal.toString();
-                    textInput.autocomplete = 'off';
-                    
-                    // Capture snapshot once upon focusing the input
-                    textInput.addEventListener('focus', () => {
-                        appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
-                    });
-
-                    textInput.addEventListener('input', () => {
-                        // If we have a pending pre-edit snapshot, push it to history before saving the first keystroke
-                        if (appState.preEditGraphState) {
-                            undoStack.push(appState.preEditGraphState);
-                            if (undoStack.length > 50) undoStack.shift();
-                            redoStack.length = 0;
-                            updateUndoRedoButtons();
-                            appState.preEditGraphState = null; // Only push once per focus session
-                        }
-
-                        let parsedVal: any = textInput.value;
-                        if (pinType === 'number') {
-                            parsedVal = parseFloat(textInput.value);
-                            if (isNaN(parsedVal)) parsedVal = 0;
-                        }
-                        updateNodeParam(node.id, pinId, parsedVal);
-                    });
-                    row.appendChild(textInput);
+            formulaInput.addEventListener('input', () => {
+                if (appState.preEditGraphState) {
+                    undoStack.push(appState.preEditGraphState);
+                    if (undoStack.length > 50) undoStack.shift();
+                    redoStack.length = 0;
+                    updateUndoRedoButtons();
+                    appState.preEditGraphState = null;
                 }
-            }
+                updateNodeFormula(node.id, formulaInput.value);
+            });
+            row.appendChild(formulaInput);
             paramsContainer.appendChild(row);
-        });
+        } else if (mode === 'blocks') {
+            const blocksList = node.params.blocks ?? [];
+            blocksList.forEach((block) => {
+                const blockRow = document.createElement('div');
+                blockRow.style.display = 'flex';
+                blockRow.style.alignItems = 'center';
+                blockRow.style.gap = '6px';
+                blockRow.style.marginBottom = '8px';
 
-        if (requires.length === 0) {
-            const noParams = document.createElement('span');
-            noParams.style.fontSize = '12px';
-            noParams.style.color = 'var(--text-muted)';
-            noParams.textContent = 'None';
-            paramsContainer.appendChild(noParams);
+                const setLabel = document.createElement('span');
+                setLabel.textContent = 'Set';
+                setLabel.style.fontSize = '11px';
+                setLabel.style.color = 'var(--text-muted)';
+                blockRow.appendChild(setLabel);
+
+                const targetInput = document.createElement('input');
+                targetInput.type = 'text';
+                targetInput.className = 'input-field';
+                targetInput.value = block.targetVar;
+                targetInput.style.width = '50px';
+                targetInput.style.padding = '3px 6px';
+                targetInput.style.fontSize = '11px';
+                targetInput.style.fontFamily = 'var(--font-mono)';
+                targetInput.addEventListener('change', () => {
+                    updateBlockField(node.id, block.id, 'targetVar', targetInput.value);
+                });
+                blockRow.appendChild(targetInput);
+
+                const eqLabel = document.createElement('span');
+                eqLabel.textContent = '=';
+                eqLabel.style.fontSize = '11px';
+                eqLabel.style.color = 'var(--text-muted)';
+                blockRow.appendChild(eqLabel);
+
+                const op1Input = document.createElement('input');
+                op1Input.type = 'text';
+                op1Input.className = 'input-field';
+                op1Input.value = block.operand1;
+                op1Input.style.width = '50px';
+                op1Input.style.padding = '3px 6px';
+                op1Input.style.fontSize = '11px';
+                op1Input.style.fontFamily = 'var(--font-mono)';
+                op1Input.addEventListener('change', () => {
+                    updateBlockField(node.id, block.id, 'operand1', op1Input.value);
+                });
+                blockRow.appendChild(op1Input);
+
+                const opSelect = document.createElement('select');
+                opSelect.className = 'input-field';
+                opSelect.style.width = '45px';
+                opSelect.style.padding = '2px';
+                opSelect.style.fontSize = '11px';
+                const ops = ['+', '-', '*', '/', 'and', 'or', '=='];
+                ops.forEach(op => {
+                    const opt = document.createElement('option');
+                    opt.value = op;
+                    opt.textContent = op;
+                    opSelect.appendChild(opt);
+                });
+                opSelect.value = block.operator;
+                opSelect.addEventListener('change', () => {
+                    updateBlockField(node.id, block.id, 'operator', opSelect.value);
+                });
+                blockRow.appendChild(opSelect);
+
+                const op2Input = document.createElement('input');
+                op2Input.type = 'text';
+                op2Input.className = 'input-field';
+                op2Input.value = block.operand2;
+                op2Input.style.width = '50px';
+                op2Input.style.padding = '3px 6px';
+                op2Input.style.fontSize = '11px';
+                op2Input.style.fontFamily = 'var(--font-mono)';
+                op2Input.addEventListener('change', () => {
+                    updateBlockField(node.id, block.id, 'operand2', op2Input.value);
+                });
+                blockRow.appendChild(op2Input);
+
+                const btnDelBlock = document.createElement('button');
+                btnDelBlock.className = 'btn-delete-pin';
+                btnDelBlock.textContent = '×';
+                btnDelBlock.title = 'Delete Block';
+                btnDelBlock.addEventListener('click', () => {
+                    deleteBlockStatement(node.id, block.id);
+                });
+                blockRow.appendChild(btnDelBlock);
+
+                paramsContainer.appendChild(blockRow);
+            });
+
+            const btnAddBlock = document.createElement('button');
+            btnAddBlock.className = 'btn-add-pin';
+            btnAddBlock.textContent = '+ Add Block';
+            btnAddBlock.style.marginTop = '8px';
+            btnAddBlock.addEventListener('click', () => {
+                addBlockStatement(node.id);
+            });
+            paramsContainer.appendChild(btnAddBlock);
+        } else {
+            // Python, Delay, State
+            const requires = Object.entries(getNodeInputs(node));
+            const incomingEdges = appState.currentGraph.edges.filter(e => e.targetNodeId === node.id);
+
+            requires.forEach(([pinId, pinType]) => {
+                const isConnected = incomingEdges.some(e => e.targetPinId === pinId);
+                const row = document.createElement('div');
+                row.className = 'param-input-row';
+
+                const labelRow = document.createElement('div');
+                labelRow.style.display = 'flex';
+                labelRow.style.justifyContent = 'space-between';
+                labelRow.style.alignItems = 'center';
+
+                const label = document.createElement('label');
+                label.textContent = `${pinId} (${pinType})`;
+                labelRow.appendChild(label);
+
+                const isDynamic = !!(node.inputs && pinId in node.inputs);
+                if (isDynamic) {
+                    const btnDel = document.createElement('button');
+                    btnDel.className = 'btn-delete-pin';
+                    btnDel.textContent = '×';
+                    btnDel.title = `Delete input '${pinId}'`;
+                    btnDel.addEventListener('click', () => {
+                        handleDeleteInputPin(node.id, pinId);
+                    });
+                    labelRow.appendChild(btnDel);
+                }
+                row.appendChild(labelRow);
+
+                if (isConnected) {
+                    const badgeText = document.createElement('span');
+                    badgeText.className = 'badge';
+                    badgeText.style.alignSelf = 'flex-start';
+                    badgeText.style.borderColor = 'rgba(255,255,255,0.05)';
+                    badgeText.style.background = 'rgba(255,255,255,0.02)';
+                    badgeText.style.color = 'var(--text-muted)';
+                    badgeText.textContent = '🔌 Wired Link';
+                    row.appendChild(badgeText);
+                } else {
+                    const currentVal = node.params[pinId] ?? '';
+                    
+                    if (pinType === 'boolean') {
+                        const checkLabel = document.createElement('label');
+                        checkLabel.className = 'input-field-checkbox';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = !!currentVal;
+                        checkbox.addEventListener('change', () => {
+                            pushToHistory();
+                            updateNodeParam(node.id, pinId, checkbox.checked);
+                        });
+                        checkLabel.appendChild(checkbox);
+                        checkLabel.appendChild(document.createTextNode(' Enabled'));
+                    } else if (pinId === 'code') {
+                        const textArea = document.createElement('textarea');
+                        textArea.className = 'input-field';
+                        textArea.style.fontFamily = '"Fira Code", monospace';
+                        textArea.style.minHeight = '140px';
+                        textArea.style.fontSize = '11px';
+                        textArea.style.resize = 'vertical';
+                        textArea.value = currentVal.toString();
+                        textArea.autocomplete = 'off';
+
+                        textArea.addEventListener('focus', () => {
+                            appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
+                        });
+
+                        textArea.addEventListener('input', () => {
+                            if (appState.preEditGraphState) {
+                                undoStack.push(appState.preEditGraphState);
+                                if (undoStack.length > 50) undoStack.shift();
+                                redoStack.length = 0;
+                                updateUndoRedoButtons();
+                                appState.preEditGraphState = null;
+                            }
+                            updateNodeParam(node.id, pinId, textArea.value);
+                        });
+                        row.appendChild(textArea);
+                    } else {
+                        const textInput = document.createElement('input');
+                        textInput.type = pinType === 'number' ? 'number' : 'text';
+                        textInput.className = 'input-field';
+                        textInput.value = currentVal.toString();
+                        textInput.autocomplete = 'off';
+                        
+                        textInput.addEventListener('focus', () => {
+                            appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
+                        });
+
+                        textInput.addEventListener('input', () => {
+                            if (appState.preEditGraphState) {
+                                undoStack.push(appState.preEditGraphState);
+                                if (undoStack.length > 50) undoStack.shift();
+                                redoStack.length = 0;
+                                updateUndoRedoButtons();
+                                appState.preEditGraphState = null;
+                            }
+
+                            let parsedVal: any = textInput.value;
+                            if (pinType === 'number') {
+                                parsedVal = parseFloat(textInput.value);
+                                if (isNaN(parsedVal)) parsedVal = 0;
+                            }
+                            updateNodeParam(node.id, pinId, parsedVal);
+                        });
+                        row.appendChild(textInput);
+                    }
+                }
+                paramsContainer.appendChild(row);
+            });
+
+            if (requires.length === 0) {
+                const noParams = document.createElement('span');
+                noParams.style.fontSize = '12px';
+                noParams.style.color = 'var(--text-muted)';
+                noParams.textContent = 'None';
+                paramsContainer.appendChild(noParams);
+            }
         }
     }
 
@@ -188,15 +397,33 @@ export function updateInspector() {
     if (outputsContainer && nodeDef) {
         outputsContainer.replaceChildren();
 
-        const provides = Object.keys(nodeDef.provides);
+        const provides = Object.keys(getNodeOutputs(node));
         provides.forEach(pinId => {
             const row = document.createElement('div');
             row.className = 'pin-status-row';
 
+            const leftContainer = document.createElement('div');
+            leftContainer.style.display = 'flex';
+            leftContainer.style.alignItems = 'center';
+            leftContainer.style.gap = '8px';
+
             const nameSpan = document.createElement('span');
             nameSpan.className = 'pin-name';
             nameSpan.textContent = pinId;
-            row.appendChild(nameSpan);
+            leftContainer.appendChild(nameSpan);
+
+            const isDynamic = !!(node.outputs && pinId in node.outputs);
+            if (isDynamic) {
+                const btnDel = document.createElement('button');
+                btnDel.className = 'btn-delete-pin';
+                btnDel.textContent = '×';
+                btnDel.title = `Delete output '${pinId}'`;
+                btnDel.addEventListener('click', () => {
+                    handleDeleteOutputPin(node.id, pinId);
+                });
+                leftContainer.appendChild(btnDel);
+            }
+            row.appendChild(leftContainer);
 
             const valSpan = document.createElement('span');
             valSpan.className = 'pin-val';
@@ -272,4 +499,307 @@ export function updateNodeTitle(nodeId: string, title: string) {
     if (appState.renderingContext) {
         appState.renderingContext.needsRedraw = true;
     }
+}
+
+export function handleAddInputPin(nodeId: string) {
+    const pinName = prompt("Enter input pin name:");
+    if (!pinName) return;
+    const sanitized = pinName.trim().toLowerCase();
+    if (!sanitized) return;
+
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+    
+    const requires = getNodeInputs(node);
+    if (sanitized in requires) {
+        alert(`An input pin named '${sanitized}' already exists.`);
+        return;
+    }
+
+    pushToHistory();
+    const updatedInputs = { ...(node.inputs ?? {}), [sanitized]: 'any' };
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: {
+                ...node,
+                inputs: updatedInputs
+            }
+        }
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function handleAddOutputPin(nodeId: string) {
+    const pinName = prompt("Enter output pin name:");
+    if (!pinName) return;
+    const sanitized = pinName.trim().toLowerCase();
+    if (!sanitized) return;
+
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+    
+    const provides = getNodeOutputs(node);
+    if (sanitized in provides) {
+        alert(`An output pin named '${sanitized}' already exists.`);
+        return;
+    }
+
+    pushToHistory();
+    const updatedOutputs = { ...(node.outputs ?? {}), [sanitized]: 'any' };
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: {
+                ...node,
+                outputs: updatedOutputs
+            }
+        }
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function handleDeleteInputPin(nodeId: string, pinId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node || !node.inputs) return;
+
+    pushToHistory();
+    const updatedInputs = { ...node.inputs };
+    delete (updatedInputs as any)[pinId];
+
+    const updatedEdges = appState.currentGraph.edges.filter(
+        edge => !(edge.targetNodeId === nodeId && edge.targetPinId === pinId)
+    );
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: {
+                ...node,
+                inputs: updatedInputs
+            }
+        },
+        edges: updatedEdges
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function handleDeleteOutputPin(nodeId: string, pinId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node || !node.outputs) return;
+
+    pushToHistory();
+    const updatedOutputs = { ...node.outputs };
+    delete (updatedOutputs as any)[pinId];
+
+    const updatedEdges = appState.currentGraph.edges.filter(
+        edge => !(edge.sourceNodeId === nodeId && edge.sourcePinId === pinId)
+    );
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: {
+                ...node,
+                outputs: updatedOutputs
+            }
+        },
+        edges: updatedEdges
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+
+    pushToHistory();
+
+    const initialParams: Record<string, any> = {};
+    if (newMode === 'formula') {
+        initialParams.formula = 'a + b';
+    } else if (newMode === 'blocks') {
+        initialParams.blocks = [
+            { id: `b_${Math.random().toString(36).substr(2, 4)}`, targetVar: 'out', operand1: 'a', operator: '+', operand2: 'b' }
+        ];
+    } else if (newMode === 'python') {
+        initialParams.code = 'def execute(inputs):\n    # inputs: dict\n    # return dict\n    return { "out": inputs.get("a", 0) + inputs.get("b", 0) }';
+    } else if (newMode === 'delay') {
+        initialParams.delayMs = 1000;
+    } else if (newMode === 'state') {
+        initialParams.defaultValue = 0;
+    }
+
+    const tempNode = { ...node, mode: newMode, params: initialParams };
+    const nextInputs = getNodeInputs(tempNode);
+    const nextOutputs = getNodeOutputs(tempNode);
+
+    const updatedEdges = appState.currentGraph.edges.filter(edge => {
+        if (edge.sourceNodeId === nodeId && !(edge.sourcePinId in nextOutputs)) return false;
+        if (edge.targetNodeId === nodeId && !(edge.targetPinId in nextInputs)) return false;
+        return true;
+    });
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: {
+                ...node,
+                mode: newMode,
+                params: initialParams,
+                inputs: undefined,
+                outputs: undefined
+            }
+        },
+        edges: updatedEdges
+    };
+
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function updateNodeFormula(nodeId: string, formula: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+
+    const tempNode = { ...node, params: { ...node.params, formula } };
+    const nextInputs = getNodeInputs(tempNode);
+
+    const updatedEdges = appState.currentGraph.edges.filter(edge => {
+        if (edge.targetNodeId === nodeId && !(edge.targetPinId in nextInputs)) return false;
+        return true;
+    });
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: tempNode
+        },
+        edges: updatedEdges
+    };
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function updateBlockField(nodeId: string, blockId: string, field: string, value: any) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node || !node.params.blocks) return;
+
+    pushToHistory();
+    const updatedBlocks = node.params.blocks.map(b => {
+        if (b.id === blockId) {
+            return { ...b, [field]: value };
+        }
+        return b;
+    });
+
+    const tempNode = { ...node, params: { ...node.params, blocks: updatedBlocks } };
+    const nextInputs = getNodeInputs(tempNode);
+
+    const updatedEdges = appState.currentGraph.edges.filter(edge => {
+        if (edge.targetNodeId === nodeId && !(edge.targetPinId in nextInputs)) return false;
+        return true;
+    });
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: tempNode
+        },
+        edges: updatedEdges
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function addBlockStatement(nodeId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+
+    pushToHistory();
+    const newBlock = {
+        id: `b_${Math.random().toString(36).substr(2, 4)}`,
+        targetVar: 'out',
+        operand1: '0',
+        operator: '+' as const,
+        operand2: '0'
+    };
+    const updatedBlocks = [...(node.params.blocks || []), newBlock];
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: {
+                ...node,
+                params: { ...node.params, blocks: updatedBlocks }
+            }
+        }
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function deleteBlockStatement(nodeId: string, blockId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node || !node.params.blocks) return;
+
+    pushToHistory();
+    const updatedBlocks = node.params.blocks.filter(b => b.id !== blockId);
+
+    const tempNode = { ...node, params: { ...node.params, blocks: updatedBlocks } };
+    const nextInputs = getNodeInputs(tempNode);
+
+    const updatedEdges = appState.currentGraph.edges.filter(edge => {
+        if (edge.targetNodeId === nodeId && !(edge.targetPinId in nextInputs)) return false;
+        return true;
+    });
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: tempNode
+        },
+        edges: updatedEdges
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
 }

@@ -4,6 +4,7 @@ import { NodeRegistry } from '../registry/types.js';
 import { Command } from '../events/types.js';
 import { sortTopologically } from './topology.js';
 import { getGraphValidationErrors } from './validation.js';
+import { getNodeInputs, getNodeOutputs, getNodeMode, getDefaultFormulaForType } from '../registry/index.js';
 
 // ============================================================================
 // CORE EXECUTION ENGINE (Primary Entry Point)
@@ -170,9 +171,13 @@ export const evaluateGraph = async (
     // Helper: Evaluates a single, mathematically pure node with Mars-Grade Resilience
     const evaluateNode = async (nodeId: NodeID) => {
         const node = graph.nodes[nodeId];
+        if (node.type === 'molecule/unconfigured') {
+            return;
+        }
+        const mode = getNodeMode(node, registry);
         const nodeDef = registry[node.type];
         
-        if (!nodeDef) {
+        if (!nodeDef && (mode === 'python' || mode === 'delay' || mode === 'state')) {
             throw new Error(`Engine Error: Missing functional logic for node type "${node.type}"`);
         }
 
@@ -188,7 +193,7 @@ export const evaluateGraph = async (
         const resolvedInputs: Record<string, unknown> = {};
         
         // 1. Initialize strictly with any root inputs from active global state (like manually typed values) (Fix #3)
-        Object.keys(nodeDef.requires).forEach(pinName => {
+        Object.keys(getNodeInputs(node, registry)).forEach(pinName => {
             const stateKey = `${nodeId}.${pinName}`;
             if (stateKey in activeState) {
                 resolvedInputs[pinName] = activeState[stateKey];
@@ -210,7 +215,24 @@ export const evaluateGraph = async (
         });
 
         const coreExecute: NodeExecuteFn = async (inputs, params, signal) => {
-            return nodeDef.execute(inputs, params, signal) as Promise<Record<string, unknown>>;
+            switch (mode) {
+                case 'python':
+                case 'delay':
+                case 'state': {
+                    return nodeDef!.execute(inputs, params, signal) as Promise<Record<string, unknown>>;
+                }
+                case 'formula': {
+                    const formula = ((params as any).formula as string | undefined) ?? getDefaultFormulaForType(node.type);
+                    const result = evaluateFormulaExpression(formula, inputs);
+                    return { out: result };
+                }
+                case 'blocks': {
+                    const result = evaluateBlockExpression(((params as any).blocks as ReadonlyArray<any> | undefined) ?? [], inputs);
+                    return { out: result };
+                }
+                default:
+                    throw new Error(`Engine Error: Unsupported mode "${mode}"`);
+            }
         };
 
         const pipeline: Middleware[] = [];
@@ -234,7 +256,7 @@ export const evaluateGraph = async (
             collectedCommands[nodeId] = (computedOutput as any).$commands as Command[];
         }
 
-        Object.keys(nodeDef.provides).forEach(outputPin => {
+        Object.keys(getNodeOutputs(node, registry)).forEach(outputPin => {
             const value = (computedOutput as any)[outputPin] !== undefined ? (computedOutput as any)[outputPin] : null;
             activeState[`${nodeId}.${outputPin}`] = value;
         });
@@ -306,11 +328,8 @@ export const evaluateGraph = async (
     // Garbage Collection of Stale State Keys
     const validKeys = new Set<string>();
     Object.entries(graph.nodes).forEach(([nodeId, node]) => {
-        const def = registry[node.type];
-        if (def) {
-            Object.keys(def.provides).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
-            Object.keys(def.requires).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
-        }
+        Object.keys(getNodeOutputs(node, registry)).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
+        Object.keys(getNodeInputs(node, registry)).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
     });
 
     const cleanedState: Record<string, unknown> = {};
@@ -327,3 +346,206 @@ export const evaluateGraph = async (
         commands: Object.freeze(collectedCommands)
     };
 };
+
+export function evaluateFormulaExpression(formula: string, inputs: Record<string, any>): any {
+    let pos = 0;
+    const cleanFormula = formula.trim();
+
+    function peek() {
+        return cleanFormula[pos] || '';
+    }
+
+    function consume(char: string) {
+        if (peek() === char) {
+            pos++;
+            return true;
+        }
+        return false;
+    }
+
+    function skipWhitespace() {
+        while (pos < cleanFormula.length && /\s/.test(cleanFormula[pos])) {
+            pos++;
+        }
+    }
+
+    function parsePrimary(): any {
+        skipWhitespace();
+        
+        if (consume('(')) {
+            const val = parseExpression();
+            skipWhitespace();
+            if (!consume(')')) {
+                throw new Error("Missing closing parenthesis");
+            }
+            return val;
+        }
+
+        const start = pos;
+        if (/[a-zA-Z_]/.test(peek())) {
+            while (pos < cleanFormula.length && /[a-zA-Z0-9_]/.test(peek())) {
+                pos++;
+            }
+            const word = cleanFormula.substring(start, pos);
+            skipWhitespace();
+            
+            if (peek() === '(') {
+                consume('(');
+                const args: any[] = [];
+                if (peek() !== ')') {
+                    args.push(parseExpression());
+                    skipWhitespace();
+                    while (consume(',')) {
+                        args.push(parseExpression());
+                        skipWhitespace();
+                    }
+                }
+                if (!consume(')')) {
+                    throw new Error(`Missing closing parenthesis in function call '${word}'`);
+                }
+                
+                const fn = word.toLowerCase();
+                switch (fn) {
+                    case 'sin': return Math.sin(args[0]);
+                    case 'cos': return Math.cos(args[0]);
+                    case 'tan': return Math.tan(args[0]);
+                    case 'abs': return Math.abs(args[0]);
+                    case 'round': return Math.round(args[0]);
+                    case 'sqrt': return Math.sqrt(args[0]);
+                    case 'min': return Math.min(...args);
+                    case 'max': return Math.max(...args);
+                    case 'concat': return args.join('');
+                    case 'split': return String(args[0]).split(args[1]);
+                    default:
+                        throw new Error(`Unknown function: ${word}`);
+                }
+            }
+            
+            if (word === 'true') return true;
+            if (word === 'false') return false;
+            
+            if (word in inputs) {
+                return inputs[word];
+            }
+            if (word.toLowerCase() === 'pi') return Math.PI;
+            if (word.toLowerCase() === 'e') return Math.E;
+            
+            return 0;
+        }
+
+        if (/[0-9.]/.test(peek())) {
+            while (pos < cleanFormula.length && /[0-9.]/.test(peek())) {
+                pos++;
+            }
+            return parseFloat(cleanFormula.substring(start, pos));
+        }
+
+        if (consume('-')) {
+            return -parsePrimary();
+        }
+        if (consume('+')) {
+            return parsePrimary();
+        }
+
+        throw new Error(`Unexpected character: '${peek()}' at position ${pos}`);
+    }
+
+    function parseMultiplicative(): any {
+        let val = parsePrimary();
+        skipWhitespace();
+        while (true) {
+            if (consume('*')) {
+                val = val * parsePrimary();
+            } else if (consume('/')) {
+                val = val / parsePrimary();
+            } else if (consume('%')) {
+                val = val % parsePrimary();
+            } else {
+                break;
+            }
+            skipWhitespace();
+        }
+        return val;
+    }
+
+    function parseAdditive(): any {
+        let val = parseMultiplicative();
+        skipWhitespace();
+        while (true) {
+            if (consume('+')) {
+                val = val + parseMultiplicative();
+            } else if (consume('-')) {
+                val = val - parseMultiplicative();
+            } else {
+                break;
+            }
+            skipWhitespace();
+        }
+        return val;
+    }
+
+    function parseComparison(): any {
+        let val = parseAdditive();
+        skipWhitespace();
+        if (consume('=')) {
+            consume('=');
+            val = (val == parseAdditive());
+        } else if (consume('<')) {
+            if (consume('=')) {
+                val = (val <= parseAdditive());
+            } else {
+                val = (val < parseAdditive());
+            }
+        } else if (consume('>')) {
+            if (consume('=')) {
+                val = (val >= parseAdditive());
+            } else {
+                val = (val > parseAdditive());
+            }
+        }
+        return val;
+    }
+
+    function parseExpression(): any {
+        return parseComparison();
+    }
+
+    const result = parseExpression();
+    skipWhitespace();
+    if (pos < cleanFormula.length) {
+        throw new Error(`Unexpected trailing characters starting at position ${pos}`);
+    }
+    return result;
+}
+
+export function evaluateBlockExpression(blocks: ReadonlyArray<any>, inputs: Record<string, any>): any {
+    const scope: Record<string, any> = { ...inputs };
+    let lastTargetVar = '';
+    
+    for (const block of blocks) {
+        const target = block.targetVar.trim();
+        if (!target) continue;
+        
+        const op1Str = block.operand1.trim();
+        const op2Str = block.operand2.trim();
+        
+        const val1 = isNaN(Number(op1Str)) ? (scope[op1Str] ?? 0) : Number(op1Str);
+        const val2 = isNaN(Number(op2Str)) ? (scope[op2Str] ?? 0) : Number(op2Str);
+        
+        let res: any = 0;
+        switch (block.operator) {
+            case '+': res = val1 + val2; break;
+            case '-': res = val1 - val2; break;
+            case '*': res = val1 * val2; break;
+            case '/': res = val1 / val2; break;
+            case 'and': res = Boolean(val1) && Boolean(val2); break;
+            case 'or': res = Boolean(val1) || Boolean(val2); break;
+            case '==': res = val1 == val2; break;
+            default: res = 0;
+        }
+        scope[target] = res;
+        lastTargetVar = target;
+    }
+    
+    return scope['out'] !== undefined ? scope['out'] : (lastTargetVar ? scope[lastTargetVar] : 0);
+}

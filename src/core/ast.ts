@@ -29,15 +29,38 @@ export interface Edge {
     readonly targetPinId: string;
 }
 
+export type NodeMode = 'python' | 'formula' | 'blocks' | 'state' | 'delay';
+
+export interface BlockStatement {
+    readonly id: string;
+    readonly targetVar: string;
+    readonly operand1: string;
+    readonly operator: '+' | '-' | '*' | '/' | 'and' | 'or' | '==';
+    readonly operand2: string;
+}
+
 /**
  * Represents the pure, visual and declarative state of a single node.
  */
 export interface NodeState {
     readonly id: NodeID;
-    readonly type: string; // The functional identifier string (e.g., 'math/add')
+    readonly type: string; // The functional identifier string (e.g., 'math/add' or 'generic')
+    readonly mode?: NodeMode; // The execution mode of the stem cell node
     
-    // Internal constants/parameters for the node logic (e.g. static multiplier value)
-    readonly params: Readonly<Record<string, unknown>>;
+    // Internal constants/parameters for the node logic (e.g. static values, code or formula)
+    readonly params: Readonly<{
+        readonly code?: string;
+        readonly formula?: string;
+        readonly blocks?: ReadonlyArray<BlockStatement>;
+        readonly delayMs?: number;
+        readonly defaultValue?: unknown;
+        readonly value?: unknown;
+        readonly [key: string]: unknown;
+    }>;
+    
+    // Dynamic runtime overrides/additions to the node definition inputs and outputs
+    readonly inputs?: Readonly<Record<string, PinType>>;
+    readonly outputs?: Readonly<Record<string, PinType>>;
     
     // Purely for the rendering layer. The execution engine must ignore this.
     readonly ui?: Readonly<{
@@ -46,6 +69,7 @@ export interface NodeState {
         width?: number;
         height?: number;
         title?: string;
+        isMorphing?: boolean;
     }>;
 }
 

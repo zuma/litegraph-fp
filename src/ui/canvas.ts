@@ -1,6 +1,7 @@
 import { RenderingContext } from './types.js';
 import { NodeState, Edge, PinType } from '../core/ast.js';
 import { NodeDefinition } from '../registry/types.js';
+import { getNodeInputs, getNodeOutputs } from '../registry/index.js';
 
 // ============================================================================
 // CANVAS DRAWING CONSTANTS
@@ -32,10 +33,9 @@ export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration):
 }
 
 // Calculate the dimensions of a node based on its registry definition
-export function getNodeHeight(nodeDef?: NodeDefinition): number {
-    if (!nodeDef) return 75; // Default to 1-row node height (30 + 15 + 30)
-    const numInputs = Object.keys(nodeDef.requires).length;
-    const numOutputs = Object.keys(nodeDef.provides).length;
+export function getNodeHeight(node: NodeState, nodeDef?: NodeDefinition): number {
+    const numInputs = Object.keys(getNodeInputs(node)).length;
+    const numOutputs = Object.keys(getNodeOutputs(node)).length;
     const maxRows = Math.max(numInputs, numOutputs, 1);
     return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + 30; // 30px bottom padding to snap total height to multiple of 15
 }
@@ -100,11 +100,12 @@ export function drawGrid(renderingCtx: RenderingContext, computedStyle: CSSStyle
 }
 
 export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDefinition | undefined, computedStyle: CSSStyleDeclaration) {
+    if (node.ui?.isMorphing) return;
     const context = ctx.ctx;
     const x = node.ui?.x ?? 0;
     const y = node.ui?.y ?? 0;
     const w = node.ui?.width ?? NODE_WIDTH;
-    const h = getNodeHeight(nodeDef);
+    const h = getNodeHeight(node, nodeDef);
 
     const isSelected = ctx.selectedNodeId === node.id || (ctx.selectedNodeIds && ctx.selectedNodeIds.has(node.id));
     const isHovered = ctx.hoveredNodeId === node.id;
@@ -250,7 +251,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     // 6. Draw Pins and Labels
     if (nodeDef) {
         // Draw Inputs (Left side)
-        const inputs = Object.entries(nodeDef.requires);
+        const inputs = Object.entries(getNodeInputs(node));
         inputs.forEach(([pinId, pinType], idx) => {
             const pos = getInputPinPos(node, idx);
             
@@ -275,7 +276,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         });
 
         // Draw Outputs (Right side)
-        const outputs = Object.entries(nodeDef.provides);
+        const outputs = Object.entries(getNodeOutputs(node));
         outputs.forEach(([pinId, pinType], idx) => {
             const pos = getOutputPinPos(node, nodeDef, idx);
             
@@ -301,133 +302,135 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     }
 
     // 7. Draw Mini Parameters Preview at bottom of node body (if any)
-    const paramKeys = Object.keys(node.params);
-    const hasParams = paramKeys.length > 0;
-    if (hasParams) {
-        context.fillStyle = computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)';
-        context.font = '8px "Fira Code", monospace';
-        context.textAlign = 'center';
-        context.textBaseline = 'bottom';
-        const preview = paramKeys.map(k => `${k}:${node.params[k]}`).join(' | ');
-        context.fillText(preview.length > 25 ? preview.slice(0, 22) + '...' : preview, x + w / 2, y + h - 8);
-    }
+    if (true) {
+        const paramKeys = Object.keys(node.params);
+        const hasParams = paramKeys.length > 0;
+        if (hasParams) {
+            context.fillStyle = computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)';
+            context.font = '8px "Fira Code", monospace';
+            context.textAlign = 'center';
+            context.textBaseline = 'bottom';
+            const preview = paramKeys.map(k => `${k}:${node.params[k]}`).join(' | ');
+            context.fillText(preview.length > 25 ? preview.slice(0, 22) + '...' : preview, x + w / 2, y + h - 8);
+        }
 
-    // 8. Expandable Node ID Drawer (Dynamo style)
-    const isEllipsisHovered = ctx.hoveredEllipsisNodeId === node.id;
-    const isPinned = ctx.pinnedDrawerNodeIds?.has(node.id) ?? false;
-    const isDrawerOpen = ctx.hoveredDrawerNodeId === node.id || isPinned;
+        // 8. Expandable Node ID Drawer (Dynamo style)
+        const isEllipsisHovered = ctx.hoveredEllipsisNodeId === node.id;
+        const isPinned = ctx.pinnedDrawerNodeIds?.has(node.id) ?? false;
+        const isDrawerOpen = ctx.hoveredDrawerNodeId === node.id || isPinned;
 
-    // Draw ellipsis button at the bottom center of the node body
-    context.save();
-    context.beginPath();
-    
-    const btnW = 30;
-    const btnH = 12;
-    const btnX = x + w / 2 - btnW / 2;
-    const btnY = y + h - btnH / 2;
-    
-    context.roundRect(btnX, btnY, btnW, btnH, 6);
-    context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
-    context.fill();
-    
-    context.lineWidth = 1;
-    context.strokeStyle = isEllipsisHovered || isPinned 
-        ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
-        : (computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.08)');
-    context.stroke();
-    
-    // Draw ellipsis dots text
-    context.fillStyle = isEllipsisHovered || isPinned
-        ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
-        : (computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)');
-    context.font = 'bold 10px "Outfit", sans-serif';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText('...', x + w / 2, y + h);
-    context.restore();
-
-    // Draw the drawer if open
-    if (isDrawerOpen) {
+        // Draw ellipsis button at the bottom center of the node body
         context.save();
-        
-        const drawerW = 144;
-        const drawerH = 24;
-        const drawerX = x + w / 2 - drawerW / 2;
-        const drawerY = y + h + 6;
-        
-        // Draw drawer body (glassmorphism)
         context.beginPath();
-        context.roundRect(drawerX, drawerY, drawerW, drawerH, 6);
-        context.fillStyle = computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
-        context.globalAlpha = 0.95;
+        
+        const btnW = 30;
+        const btnH = 12;
+        const btnX = x + w / 2 - btnW / 2;
+        const btnY = y + h - btnH / 2;
+        
+        context.roundRect(btnX, btnY, btnW, btnH, 6);
+        context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
         context.fill();
-        context.globalAlpha = 1.0;
         
         context.lineWidth = 1;
-        context.strokeStyle = isPinned 
+        context.strokeStyle = isEllipsisHovered || isPinned 
             ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
             : (computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.08)');
         context.stroke();
         
-        // Draw Node ID text
-        context.fillStyle = computedStyle.getPropertyValue('--text-primary').trim() || '#ffffff';
-        context.font = '9px "Fira Code", monospace';
-        context.textAlign = 'left';
-        context.textBaseline = 'middle';
-        context.fillText(node.id, drawerX + 10, drawerY + drawerH / 2);
-        
-        // Draw Thumbtack/Pin button area
-        const pinCX = drawerX + drawerW - 18;
-        const pinCY = drawerY + drawerH / 2;
-        const isPinHovered = ctx.hoveredPinNodeId === node.id;
-        
-        if (isPinHovered) {
-            context.beginPath();
-            context.arc(pinCX, pinCY, 8, 0, Math.PI * 2);
-            context.fillStyle = 'rgba(255, 255, 255, 0.08)';
-            context.fill();
-        }
-        
-        // Draw thumbtack icon
-        const pinColor = isPinned 
+        // Draw ellipsis dots text
+        context.fillStyle = isEllipsisHovered || isPinned
             ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
-            : (isPinHovered ? '#ffffff' : (computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)'));
-            
-        context.strokeStyle = pinColor;
-        context.fillStyle = pinColor;
-        context.lineWidth = 1.5;
-        
-        context.translate(pinCX, pinCY);
-        if (!isPinned) {
-            context.rotate(Math.PI / 4); // Rotated 45 degrees when unpinned
-        }
-        
-        // Draw cap
-        context.beginPath();
-        context.moveTo(-4, -4);
-        context.lineTo(4, -4);
-        context.stroke();
-        
-        // Draw body
-        context.beginPath();
-        context.moveTo(-3, -4);
-        context.lineTo(-3, 1);
-        context.lineTo(3, 1);
-        context.lineTo(3, -4);
-        context.closePath();
-        if (isPinned) {
-            context.fill();
-        } else {
-            context.stroke();
-        }
-        
-        // Draw needle point
-        context.beginPath();
-        context.moveTo(0, 1);
-        context.lineTo(0, 6);
-        context.stroke();
-        
+            : (computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)');
+        context.font = 'bold 10px "Outfit", sans-serif';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText('...', x + w / 2, y + h);
         context.restore();
+
+        // Draw the drawer if open
+        if (isDrawerOpen) {
+            context.save();
+            
+            const drawerW = 144;
+            const drawerH = 24;
+            const drawerX = x + w / 2 - drawerW / 2;
+            const drawerY = y + h + 6;
+            
+            // Draw drawer body (glassmorphism)
+            context.beginPath();
+            context.roundRect(drawerX, drawerY, drawerW, drawerH, 6);
+            context.fillStyle = computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
+            context.globalAlpha = 0.95;
+            context.fill();
+            context.globalAlpha = 1.0;
+            
+            context.lineWidth = 1;
+            context.strokeStyle = isPinned 
+                ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
+                : (computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.08)');
+            context.stroke();
+            
+            // Draw Node ID text
+            context.fillStyle = computedStyle.getPropertyValue('--text-primary').trim() || '#ffffff';
+            context.font = '9px "Fira Code", monospace';
+            context.textAlign = 'left';
+            context.textBaseline = 'middle';
+            context.fillText(node.id, drawerX + 10, drawerY + drawerH / 2);
+            
+            // Draw Thumbtack/Pin button area
+            const pinCX = drawerX + drawerW - 18;
+            const pinCY = drawerY + drawerH / 2;
+            const isPinHovered = ctx.hoveredPinNodeId === node.id;
+            
+            if (isPinHovered) {
+                context.beginPath();
+                context.arc(pinCX, pinCY, 8, 0, Math.PI * 2);
+                context.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                context.fill();
+            }
+            
+            // Draw thumbtack icon
+            const pinColor = isPinned 
+                ? (computedStyle.getPropertyValue('--accent-cyan').trim() || 'hsl(190, 100%, 50%)')
+                : (isPinHovered ? '#ffffff' : (computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)'));
+                
+            context.strokeStyle = pinColor;
+            context.fillStyle = pinColor;
+            context.lineWidth = 1.5;
+            
+            context.translate(pinCX, pinCY);
+            if (!isPinned) {
+                context.rotate(Math.PI / 4); // Rotated 45 degrees when unpinned
+            }
+            
+            // Draw cap
+            context.beginPath();
+            context.moveTo(-4, -4);
+            context.lineTo(4, -4);
+            context.stroke();
+            
+            // Draw body
+            context.beginPath();
+            context.moveTo(-3, -4);
+            context.lineTo(-3, 1);
+            context.lineTo(3, 1);
+            context.lineTo(3, -4);
+            context.closePath();
+            if (isPinned) {
+                context.fill();
+            } else {
+                context.stroke();
+            }
+            
+            // Draw needle point
+            context.beginPath();
+            context.moveTo(0, 1);
+            context.lineTo(0, 6);
+            context.stroke();
+            
+            context.restore();
+        }
     }
 
     context.restore();

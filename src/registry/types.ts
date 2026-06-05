@@ -36,6 +36,11 @@ export interface NodeDefinition {
     requires: Record<string, PinType>;
     /** Static analysis mappings defining provided output keys and their types */
     provides: Record<string, PinType>;
+    
+    /** Indicates if the node type supports custom input slots added by the user */
+    dynamicInputs?: boolean;
+    /** Indicates if the node type supports custom output slots added by the user */
+    dynamicOutputs?: boolean;
 
     /** The pure execution block */
     execute: NodeFunction;

@@ -94,15 +94,17 @@
 
                 <!-- Double click / Right click Node Adder Panel -->
                 <div id="node-adder" class="floating-panel glass-panel hidden">
-                    <div class="panel-header">
-                        <h3>Add Node</h3>
-                        <button id="btn-close-adder" class="btn-close">&times;</button>
-                    </div>
-                    <div class="search-box">
-                        <input type="text" id="node-search-input" placeholder="Search node type..." autocomplete="off">
-                    </div>
-                    <div id="node-type-list" class="node-type-list">
-                        <!-- Populated dynamically via textContent & createElement -->
+                    <div id="node-adder-content" style="width: 100%; height: 100%; display: flex; flex-direction: column; transition: opacity 0.12s ease;">
+                        <div class="panel-header">
+                            <h3>Add Node</h3>
+                            <button id="btn-close-adder" class="btn-close">&times;</button>
+                        </div>
+                        <div class="search-box">
+                            <input type="text" id="node-search-input" placeholder="Search node type..." autocomplete="off">
+                        </div>
+                        <div id="node-type-list" class="node-type-list">
+                            <!-- Populated dynamically via textContent & createElement -->
+                        </div>
                     </div>
                 </div>
 
@@ -130,51 +132,61 @@
                     </label>
                 </div>
 
-                <!-- NODE INSPECTOR PANEL -->
+                <!-- MOLECULE INSPECTOR PANEL -->
                 <section class="sidebar-section expanded" id="inspector-section">
                     <div class="section-header interactive" id="inspector-header">
-                        <h2>Node Inspector</h2>
+                        <h2>Molecule Inspector</h2>
                         <span class="toggle-icon">▼</span>
                     </div>
                     <div id="inspector-section-body" class="inspector-section-body">
                         <div id="inspector-placeholder" class="inspector-placeholder">
-                            Select a node to view properties & edit inputs
+                            Select a molecule to view properties & edit inputs
                         </div>
                         <div id="inspector-content" class="inspector-content hidden">
                             <div class="inspector-field-group">
-                                <span class="inspector-label">Node ID</span>
+                                <span class="inspector-label">Molecule ID</span>
                                 <span id="inspect-node-id" class="inspector-value mono"></span>
                             </div>
                             <div class="inspector-field-group">
                                 <span class="inspector-label">Type</span>
                                 <span id="inspect-node-type" class="inspector-value badge"></span>
                             </div>
-                            <div class="inspector-field-group">
-                                <span class="inspector-label">Title</span>
-                                <input type="text" id="inspect-node-title" class="input-field" style="width: 120px; text-align: left; padding: 3px 6px; font-size: 12px; border-radius: 6px;" autocomplete="off">
-                            </div>
+                             <div class="inspector-field-group">
+                                 <span class="inspector-label">Title</span>
+                                 <input type="text" id="inspect-node-title" class="input-field" style="width: 120px; text-align: left; padding: 3px 6px; font-size: 12px; border-radius: 6px;" autocomplete="off">
+                             </div>
+                             <div id="inspect-node-mode-row" class="inspector-field-group hidden">
+                                 <span class="inspector-label">Mode</span>
+                                 <select id="inspect-node-mode" class="input-field" style="width: 120px; padding: 2px 4px; font-size: 12px; border-radius: 6px;"></select>
+                             </div>
                             
                             <div class="divider"></div>
                             
-                            <h3>Parameters</h3>
-                            <div id="inspect-parameters-container">
-                                <!-- Populated dynamically with secure input elements -->
-                            </div>
+                            <div class="inspector-header-row">
+                                 <h3>Parameters</h3>
+                                 <button id="btn-add-input" class="btn-add-pin hidden" title="Add input pin">+ Input</button>
+                             </div>
+                             <div id="inspect-parameters-container">
+                                 <!-- Populated dynamically with secure input elements -->
+                             </div>
 
-                            <div class="divider"></div>
-                            
-                            <h3>Runtime Status</h3>
-                            <div id="inspect-outputs-container">
-                                <!-- Populated dynamically -->
-                            </div>
-                            <div id="inspect-errors-container" class="error-container hidden">
-                                <!-- Populated dynamically -->
-                            </div>
+                             <div class="divider"></div>
+                             
+                             <div class="inspector-header-row">
+                                 <h3>Runtime Status</h3>
+                                 <button id="btn-add-output" class="btn-add-pin hidden" title="Add output pin">+ Output</button>
+                             </div>
+                             <div id="inspect-outputs-container">
+                                 <!-- Populated dynamically -->
+                             </div>
+                             <div id="inspect-errors-container" class="error-container hidden">
+                                 <!-- Populated dynamically -->
+                             </div>
 
                             <div class="divider"></div>
                             
                             <button id="btn-delete-node" class="btn btn-danger">
-                                🗑️ Delete Node
+                                🗑️ Delete Molecule
                             </button>
                         </div>
                     </div>

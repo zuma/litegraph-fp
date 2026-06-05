@@ -58,6 +58,8 @@ export const pythonScript: NodeDefinition = {
     name: 'script',
     requires: { a: 'any', b: 'any', code: 'string' },
     provides: { out: 'any' },
+    dynamicInputs: true,
+    dynamicOutputs: true,
     execute: async (inputs, params) => {
         const code = (inputs.code as string) || (params.code as string) || '';
         
