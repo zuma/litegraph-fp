@@ -1,5 +1,6 @@
 import http from 'http';
 import fs from 'fs';
+import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -26,6 +27,37 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/api/execute-python') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+            res.setHeader('Content-Type', 'application/json');
+            try {
+                const payload = JSON.parse(body);
+                const { code, inputs } = payload;
+                
+                if (typeof code !== 'string' || !inputs || typeof inputs !== 'object') {
+                    res.statusCode = 400;
+                    res.end(JSON.stringify({ success: false, error: 'Invalid payload parameters' }));
+                    return;
+                }
+
+                executePythonCode(code, inputs, (err, result) => {
+                    if (err) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                    } else {
+                        res.end(JSON.stringify({ success: true, result }));
+                    }
+                });
+            } catch (err) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ success: false, error: 'Invalid JSON request body' }));
+            }
+        });
+        return;
+    }
+
     // 1. Sanitize request URL path to prevent directory traversal
     let safePath = req.url || '/';
     // Remove query params
@@ -83,3 +115,51 @@ server.listen(PORT, HOST, () => {
     console.log(`🚀 Litegraph-FP dev server running at http://${HOST}:${PORT}/`);
     console.log(`📂 Serving workspace root: ${WORKSPACE_ROOT}`);
 });
+
+function executePythonCode(code, inputs, callback) {
+    const pythonCode = `
+import sys, json
+try:
+    payload = json.loads(sys.stdin.read())
+    code = payload['code']
+    inputs = payload['inputs']
+    
+    namespace = {}
+    exec(code, namespace)
+    if 'execute' not in namespace:
+        raise ValueError("Missing 'execute' function in Python code")
+    
+    result = namespace['execute'](inputs)
+    print(json.dumps({"success": True, "result": result}))
+except Exception as e:
+    print(json.dumps({"success": False, "error": str(e)}))
+    sys.exit(1)
+`;
+
+    const py = spawn('python3', ['-c', pythonCode]);
+    let stdout = '';
+    let stderr = '';
+
+    py.stdout.on('data', data => { stdout += data; });
+    py.stderr.on('data', data => { stderr += data; });
+
+    py.on('close', exitCode => {
+        if (exitCode !== 0 && !stdout) {
+            callback(new Error(stderr || 'Python execution failed.'));
+            return;
+        }
+        try {
+            const res = JSON.parse(stdout);
+            if (res.success) {
+                callback(null, res.result);
+            } else {
+                callback(new Error(res.error || stderr));
+            }
+        } catch (e) {
+            callback(new Error(stderr || 'Invalid output format from Python execution.'));
+        }
+    });
+
+    py.stdin.write(JSON.stringify({ code, inputs }));
+    py.stdin.end();
+}

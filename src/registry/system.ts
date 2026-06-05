@@ -4,10 +4,10 @@ export const delaySim: NodeDefinition = {
     namespace: 'system',
     category: 'simulation',
     name: 'delay',
-    requires: { a: 'any' },
+    requires: { a: 'any', ms: 'number' },
     provides: { out: 'any' },
     execute: async (inputs, params, signal?) => {
-        const delayMs = (params.ms as number) ?? 1000;
+        const delayMs = (inputs.ms as number) ?? (params.ms as number) ?? 1000;
         const a = inputs.a;
         
         await new Promise<void>((resolve, reject) => {

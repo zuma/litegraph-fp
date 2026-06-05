@@ -5,6 +5,7 @@ import { delaySim, logToConsole, state } from './system.js';
 import { concat as stringConcat, split as stringSplit, replace as stringReplace, length as stringLength } from './strings.js';
 import { getField as objectGet, setField as objectSet, parseJson as objectParse, stringifyJson as objectStringify } from './objects.js';
 import { arrayLength, arraySlice } from './arrays.js';
+import { pythonScript } from './python.js';
 
 // ============================================================================
 // THE STANDARD REGISTRY EXPORT
@@ -41,6 +42,8 @@ export const StandardNodes: NodeRegistry = Object.freeze({
 
     'array/length': arrayLength,
     'array/slice': arraySlice,
+
+    'python/script': pythonScript,
 
     'system/delay': delaySim,
     'system/log': logToConsole,

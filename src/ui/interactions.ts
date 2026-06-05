@@ -1185,7 +1185,7 @@ export function addNewNode(type: string) {
     const initialParams: Record<string, any> = {};
     if (nodeDef) {
         Object.keys(nodeDef.requires).forEach(pin => {
-            initialParams[pin] = pin === 'ms' ? 1000 : (nodeDef.requires[pin] === 'number' ? 0 : '');
+            initialParams[pin] = pin === 'ms' ? 1000 : (pin === 'code' ? 'def execute(inputs):\n    # inputs: dict, e.g. {"a": 10, "b": 20}\n    # return a dict with output pin values\n    a = inputs.get("a", 0)\n    b = inputs.get("b", 0)\n    return { "out": a + b }' : (nodeDef.requires[pin] === 'number' ? 0 : ''));
         });
         if (type === 'system/state') {
             initialParams['defaultValue'] = 0;

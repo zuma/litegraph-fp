@@ -114,7 +114,31 @@ export function updateInspector() {
                     });
                     checkLabel.appendChild(checkbox);
                     checkLabel.appendChild(document.createTextNode(' Enabled'));
-                    row.appendChild(checkLabel);
+                } else if (pinId === 'code') {
+                    const textArea = document.createElement('textarea');
+                    textArea.className = 'input-field';
+                    textArea.style.fontFamily = '"Fira Code", monospace';
+                    textArea.style.minHeight = '140px';
+                    textArea.style.fontSize = '11px';
+                    textArea.style.resize = 'vertical';
+                    textArea.value = currentVal.toString();
+                    textArea.autocomplete = 'off';
+
+                    textArea.addEventListener('focus', () => {
+                        appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
+                    });
+
+                    textArea.addEventListener('input', () => {
+                        if (appState.preEditGraphState) {
+                            undoStack.push(appState.preEditGraphState);
+                            if (undoStack.length > 50) undoStack.shift();
+                            redoStack.length = 0;
+                            updateUndoRedoButtons();
+                            appState.preEditGraphState = null;
+                        }
+                        updateNodeParam(node.id, pinId, textArea.value);
+                    });
+                    row.appendChild(textArea);
                 } else {
                     const textInput = document.createElement('input');
                     textInput.type = pinType === 'number' ? 'number' : 'text';
