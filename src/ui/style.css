@@ -534,18 +534,22 @@ body, html {
    ============================================================================ */
 
 #sidebar {
-    position: relative; /* Enable absolute positioning for tab handle child */
+    position: absolute;
+    right: 16px;
+    top: 16px;
+    bottom: 16px;
     width: var(--sidebar-width);
-    height: 100%;
-    border-left: 1px solid var(--border-panel);
+    height: calc(100% - 32px);
+    border: 1px solid var(--border-panel);
+    border-radius: 16px;
     display: flex;
     flex-direction: column;
     z-index: 9;
-    transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 #sidebar.collapsed {
-    margin-right: calc(-1 * var(--sidebar-width));
+    transform: translateX(calc(100% + 32px));
 }
 
 .no-transition, .no-transition * {
@@ -1085,19 +1089,29 @@ body.light-theme .context-menu-item:hover {
         position: absolute;
         right: 0;
         top: 0;
+        bottom: 0;
         height: 100%;
-        z-index: 100;
+        border-radius: 0;
         border-left: 1px solid var(--border-panel);
+        border-right: none;
+        border-top: none;
+        border-bottom: none;
+        z-index: 100;
         box-shadow: -10px 0 30px rgba(0, 0, 0, 0.25);
     }
     
     #sidebar.collapsed {
-        margin-right: 0;
         transform: translateX(100%);
     }
     
     #sidebar:not(.collapsed) {
         transform: translateX(0);
+    }
+    
+    .sidebar-handle {
+        right: 100%;
+        border-right: none;
+        border-radius: 8px 0 0 8px;
     }
     
     #app-header {
@@ -1165,19 +1179,18 @@ body.light-theme .context-menu-item:hover {
 
 .sidebar-handle {
     position: absolute;
-    right: 100%;
+    right: calc(100% + 8px);
     top: 20px;
     display: flex;
-    flex-direction: column; /* Portrait stack */
+    flex-direction: column;
     align-items: center;
     gap: 12px;
     background: var(--bg-panel);
     border: 1px solid var(--border-panel);
-    border-right: none; /* Visually merges the tab outline with the sidebar border */
-    border-radius: 8px 0 0 8px; /* Rounded only on the protruding edge */
-    padding: 12px 8px; /* Adjusted padding for vertical layout */
+    border-radius: 12px;
+    padding: 12px 8px;
     z-index: 10;
-    box-shadow: -4px 2px 10px rgba(0,0,0,0.15);
+    box-shadow: var(--glass-shadow);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     pointer-events: auto;
