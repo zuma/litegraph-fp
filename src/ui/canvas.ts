@@ -120,16 +120,28 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
 
     context.save();
 
-    // 1. Draw Glowing Backing Shadow for Selection or Error states
+    // 1. Draw Glowing Backing Shadow
     if (hasError) {
         context.shadowColor = isLight ? 'rgba(255, 0, 80, 0.25)' : 'rgba(255, 0, 80, 0.4)';
         context.shadowBlur = 15;
+        context.shadowOffsetY = 4;
     } else if (isSelected) {
         context.shadowColor = isLight ? 'rgba(0, 100, 255, 0.2)' : 'rgba(0, 240, 255, 0.3)';
         context.shadowBlur = 15;
-    } else if (isHovered) {
-        context.shadowColor = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)';
-        context.shadowBlur = 8;
+        context.shadowOffsetY = 4;
+    } else {
+        // Normal or Hovered state - use category-dependent ambient drop shadow (spilling content color)
+        let shadowVar = '--node-default-shadow';
+        if (nodeDef?.category === 'math') {
+            shadowVar = '--node-math-shadow';
+        } else if (nodeDef?.category === 'logic') {
+            shadowVar = '--node-logic-shadow';
+        } else if (nodeDef?.category === 'state') {
+            shadowVar = '--node-state-shadow';
+        }
+        context.shadowColor = computedStyle.getPropertyValue(shadowVar).trim() || (isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(0, 0, 0, 0.45)');
+        context.shadowBlur = isHovered ? 24 : 16;
+        context.shadowOffsetY = isHovered ? 8 : 4;
     }
 
     // 1.5 Draw Rounded Backdrop Blur (simulates CSS backdrop-filter on Canvas)
@@ -155,10 +167,8 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     }
     context.restore();
 
-    // 2. Draw Card Body (Glassmorphism card)
+    // 2. Draw Card Body (Glassmorphism card - Full size)
     context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
-    
-    // Draw rounded rect path
     context.beginPath();
     context.roundRect(x, y, w, h, 10);
     context.fill();
@@ -166,14 +176,19 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     // Reset shadow for subsequent drawings
     context.shadowBlur = 0;
 
+    // 4. Draw Header Bar (Suspended chip / Nested titlebar layout)
+    const INFILL_PADDING = 4;
+    const insetX = x + INFILL_PADDING;
+    const insetY = y + INFILL_PADDING;
+    const insetW = w - 2 * INFILL_PADDING;
+    const insetH = HEADER_HEIGHT - 2 * INFILL_PADDING;
+    const insetR = 6;
 
-
-    // 4. Draw Header Bar
     context.beginPath();
-    context.roundRect(x, y, w, HEADER_HEIGHT, [10, 10, 0, 0]);
+    context.roundRect(insetX, insetY, insetW, insetH, insetR);
     
     // Resolve header color gradient based on category and theme
-    let headerGrad = context.createLinearGradient(x, y, x + w, y);
+    let headerGrad = context.createLinearGradient(insetX, insetY, insetX + insetW, insetY);
     
     let startVar = '--node-default-header-start';
     let endVar = '--node-default-header-end';
@@ -196,14 +211,6 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     
     context.fillStyle = headerGrad;
     context.fill();
-    
-    // Draw header separator line
-    context.beginPath();
-    context.moveTo(x, y + HEADER_HEIGHT);
-    context.lineTo(x + w, y + HEADER_HEIGHT);
-    context.strokeStyle = computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.06)';
-    context.lineWidth = 1;
-    context.stroke();
 
     // 5. Draw Title text
     context.fillStyle = textPrimary;
@@ -417,30 +424,45 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
             context.restore();
         }
     }
-    // 9. Draw Card Border Outline last so it overlays the Header Bar fill consistently
-    context.beginPath();
-    context.roundRect(x, y, w, h, 10);
-    context.lineWidth = isSelected || hasError ? 2.5 : 1;
-    if (hasError) {
-        let borderGrad = context.createLinearGradient(x, y, x, y + h);
-        borderGrad.addColorStop(0, 'rgba(255, 0, 80, 1.0)');
-        borderGrad.addColorStop(1, 'rgba(255, 0, 80, 0.7)');
-        context.strokeStyle = borderGrad;
-    } else if (isSelected) {
-        let borderGrad = context.createLinearGradient(x, y, x, y + h);
-        borderGrad.addColorStop(0, isLight ? 'rgba(0, 100, 255, 1.0)' : 'rgba(0, 145, 255, 1.0)');
-        borderGrad.addColorStop(1, isLight ? 'rgba(0, 60, 255, 0.7)' : 'rgba(0, 100, 255, 0.7)');
-        context.strokeStyle = borderGrad;
-    } else {
-        // Uniform glass highlight border with a very subtle top-to-bottom light falloff (macOS style)
-        let borderGrad = context.createLinearGradient(x, y, x, y + h);
-        const topOpacity = isHovered ? 0.3 : 0.16;
-        const bottomOpacity = isHovered ? 0.12 : 0.04;
-        borderGrad.addColorStop(0, isLight ? `rgba(0, 0, 0, ${topOpacity})` : `rgba(255, 255, 255, ${topOpacity})`);
-        borderGrad.addColorStop(1, isLight ? `rgba(0, 0, 0, ${bottomOpacity})` : `rgba(255, 255, 255, ${bottomOpacity})`);
-        context.strokeStyle = borderGrad;
+    // 9. Draw Card Border Outline last (only on selection or error state to declutter the canvas)
+    if (isSelected || hasError) {
+        context.beginPath();
+        context.roundRect(x, y, w, h, 10);
+        context.lineWidth = 2.5;
+        if (hasError) {
+            let borderGrad = context.createLinearGradient(x, y, x, y + h);
+            borderGrad.addColorStop(0, 'rgba(255, 0, 80, 1.0)');
+            borderGrad.addColorStop(1, 'rgba(255, 0, 80, 0.7)');
+            context.strokeStyle = borderGrad;
+        } else if (isSelected) {
+            let borderGrad = context.createLinearGradient(x, y, x, y + h);
+            borderGrad.addColorStop(0, isLight ? 'rgba(0, 100, 255, 1.0)' : 'rgba(0, 145, 255, 1.0)');
+            borderGrad.addColorStop(1, isLight ? 'rgba(0, 60, 255, 0.7)' : 'rgba(0, 100, 255, 0.7)');
+            context.strokeStyle = borderGrad;
+        }
+        context.stroke();
     }
-    context.stroke();
+
+    // 9.5 Specular Top Catch-Light Highlight (Adopting Liquid Glass reflection)
+    if (!hasError && !isSelected) {
+        let specularVar = '--node-default-specular';
+        if (nodeDef?.category === 'math') {
+            specularVar = '--node-math-specular';
+        } else if (nodeDef?.category === 'logic') {
+            specularVar = '--node-logic-specular';
+        } else if (nodeDef?.category === 'state') {
+            specularVar = '--node-state-specular';
+        }
+        const specularColor = computedStyle.getPropertyValue(specularVar).trim() || (isLight ? 'rgba(255, 255, 255, 0.65)' : 'rgba(255, 255, 255, 0.16)');
+
+        context.beginPath();
+        context.arc(x + 10, y + 10, 10, Math.PI, Math.PI * 1.5);
+        context.lineTo(x + w - 10, y);
+        context.arc(x + w - 10, y + 10, 10, Math.PI * 1.5, Math.PI * 2);
+        context.strokeStyle = specularColor;
+        context.lineWidth = 1;
+        context.stroke();
+    }
 
     context.restore();
 }

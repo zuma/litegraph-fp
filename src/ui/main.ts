@@ -81,9 +81,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
         updateSetting('layout', 'sidebarCollapsed', collapsed);
 
-        if (btnSidebar) {
-            btnSidebar.textContent = collapsed ? '📋' : '❌';
-        }
+        // No emoji overwrite to preserve the vector SVGs
         
         // Animate resize smoothly over transition
         let startTime = Date.now();
@@ -104,10 +102,8 @@ window.addEventListener('DOMContentLoaded', () => {
         sidebar.classList.add('no-transition');
         if (settings.layout.sidebarCollapsed) {
             sidebar.classList.add('collapsed');
-            if (btnSidebar) btnSidebar.textContent = '📋';
         } else {
             sidebar.classList.remove('collapsed');
-            if (btnSidebar) btnSidebar.textContent = '❌';
         }
         // Force reflow to apply styles instantly
         void sidebar.offsetHeight;
@@ -436,101 +432,49 @@ window.addEventListener('DOMContentLoaded', () => {
     // ========================================================================
     const btnMainMenu = document.getElementById('btn-main-menu');
     const mainDropdownMenu = document.getElementById('main-dropdown-menu');
-    const menuContainer = document.querySelector('.main-menu-container');
-    let mainControlCloseTimer: any = null;
-
+    const submenuParent = document.querySelector('.dropdown-submenu-parent') as HTMLElement | null;
+    const submenu = document.getElementById('main-settings-submenu') as HTMLElement | null;
+ 
     btnMainMenu?.addEventListener('click', (e) => {
         e.stopPropagation();
         const isHidden = mainDropdownMenu?.classList.toggle('hidden');
         btnMainMenu.classList.toggle('active', !isHidden);
+        if (isHidden) {
+            submenu?.classList.remove('open');
+        }
     });
 
     // Auto-close menu on clicking outside
     window.addEventListener('click', () => {
         mainDropdownMenu?.classList.add('hidden');
         btnMainMenu?.classList.remove('active');
-        if (submenuCloseTimer) {
-            clearTimeout(submenuCloseTimer);
-            submenuCloseTimer = null;
-        }
         submenu?.classList.remove('open');
     });
 
-    // Submenu hover intent delay (accessibility help for jittery hands)
-    const submenuParent = document.querySelector('.dropdown-submenu-parent') as HTMLElement | null;
-    const submenu = document.getElementById('main-settings-submenu') as HTMLElement | null;
-    let submenuCloseTimer: any = null;
-
-    const handleSubmenuLeave = () => {
-        if (submenuCloseTimer) clearTimeout(submenuCloseTimer);
-        submenuCloseTimer = setTimeout(() => {
-            submenu?.classList.remove('open');
-            submenuCloseTimer = null;
-        }, 300); // 300ms grace period before closing
-
-        // Also trigger main control close timer when leaving the submenu
-        if (mainControlCloseTimer) clearTimeout(mainControlCloseTimer);
-        mainControlCloseTimer = setTimeout(() => {
-            mainDropdownMenu?.classList.add('hidden');
-            btnMainMenu?.classList.remove('active');
-            submenu?.classList.remove('open');
-            mainControlCloseTimer = null;
-        }, 300);
-    };
-
-    const handleSubmenuEnter = () => {
-        if (submenuCloseTimer) {
-            clearTimeout(submenuCloseTimer);
-            submenuCloseTimer = null;
-        }
-        // Keep the main menu open while user is hovering over settings submenu
-        if (mainControlCloseTimer) {
-            clearTimeout(mainControlCloseTimer);
-            mainControlCloseTimer = null;
-        }
-        submenu?.classList.add('open');
-    };
-
+    // Open submenu on hover
     submenuParent?.addEventListener('mouseenter', () => {
-        if (submenuCloseTimer) {
-            clearTimeout(submenuCloseTimer);
-            submenuCloseTimer = null;
-        }
         if (submenu && submenuParent) {
             const parentRect = submenuParent.getBoundingClientRect();
             // Position settings submenu dynamically next to its parent item
             submenu.style.top = `${parentRect.top - 6}px`;
-            submenu.style.left = `${parentRect.right}px`;
+            submenu.style.left = `${parentRect.right + 2}px`; // 2px overlap to avoid visual gap
         }
         submenu?.classList.add('open');
     });
 
-    submenuParent?.addEventListener('mouseleave', handleSubmenuLeave);
-    submenu?.addEventListener('mouseenter', handleSubmenuEnter);
-    submenu?.addEventListener('mouseleave', handleSubmenuLeave);
+    // Also support clicking submenu trigger to toggle
+    submenuParent?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        submenu?.classList.toggle('open');
+    });
 
-    // Main dropdown menu hover intent delay - close when cursor leaves toggle or menu
-    const handleMenuLeave = () => {
-        if (mainControlCloseTimer) clearTimeout(mainControlCloseTimer);
-        mainControlCloseTimer = setTimeout(() => {
-            mainDropdownMenu?.classList.add('hidden');
-            btnMainMenu?.classList.remove('active');
+    // Close settings submenu if user hovers over other non-settings items
+    const nonSubmenuItems = mainDropdownMenu?.querySelectorAll('.dropdown-item:not(#menu-settings-trigger)');
+    nonSubmenuItems?.forEach(item => {
+        item.addEventListener('mouseenter', () => {
             submenu?.classList.remove('open');
-            mainControlCloseTimer = null;
-        }, 300); // 300ms grace period
-    };
-
-    const handleMenuEnter = () => {
-        if (mainControlCloseTimer) {
-            clearTimeout(mainControlCloseTimer);
-            mainControlCloseTimer = null;
-        }
-    };
-
-    menuContainer?.addEventListener('mouseleave', handleMenuLeave);
-    menuContainer?.addEventListener('mouseenter', handleMenuEnter);
-    mainDropdownMenu?.addEventListener('mouseleave', handleMenuLeave);
-    mainDropdownMenu?.addEventListener('mouseenter', handleMenuEnter);
+        });
+    });
 
     // 1. Load Demo Graph
     document.getElementById('menu-load-demo')?.addEventListener('click', () => {
@@ -629,4 +573,20 @@ window.addEventListener('DOMContentLoaded', () => {
         runExecutionPipeline().catch(console.error);
         logToTerminal("Workspace cleared.", "system-msg");
     });
+
+    // 5. Liquid Glass Mouse-Reactive Specular Reflection
+    const zoomControls = document.querySelector('.zoom-controls') as HTMLElement | null;
+    if (zoomControls) {
+        zoomControls.addEventListener('mousemove', (e) => {
+            const rect = zoomControls.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            zoomControls.style.setProperty('--mouse-x', `${x}px`);
+            zoomControls.style.setProperty('--mouse-y', `${y}px`);
+        });
+        zoomControls.addEventListener('mouseleave', () => {
+            zoomControls.style.setProperty('--mouse-x', `-999px`);
+            zoomControls.style.setProperty('--mouse-y', `-999px`);
+        });
+    }
 });
