@@ -340,6 +340,10 @@ export function setupInteractions() {
         // Ignore right-clicks to prevent panning and drag-state interference
         if (e.button === 2) return;
 
+        appState.mouseDownClientX = e.clientX;
+        appState.mouseDownClientY = e.clientY;
+        appState.mouseDownTime = Date.now();
+
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -609,8 +613,9 @@ export function setupInteractions() {
                 newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
             }
             
-            // Check if node has actually shifted position
-            if (newX !== appState.dragNodeOriginalX || newY !== appState.dragNodeOriginalY) {
+            // Check if node has actually shifted position (by grid snap or client pixel drift)
+            const screenDrift = Math.hypot(e.clientX - appState.mouseDownClientX, e.clientY - appState.mouseDownClientY);
+            if (screenDrift > 6 || newX !== appState.dragNodeOriginalX || newY !== appState.dragNodeOriginalY) {
                 appState.dragHasMoved = true;
             }
 

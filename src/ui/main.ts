@@ -437,28 +437,60 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     // Submenu hover intent delay (accessibility help for jittery hands)
-    const submenuParent = document.querySelector('.dropdown-submenu-parent');
-    const submenu = document.querySelector('.dropdown-submenu');
+    const submenuParent = document.querySelector('.dropdown-submenu-parent') as HTMLElement | null;
+    const submenu = document.getElementById('main-settings-submenu') as HTMLElement | null;
     let submenuCloseTimer: any = null;
+
+    const handleSubmenuLeave = () => {
+        if (submenuCloseTimer) clearTimeout(submenuCloseTimer);
+        submenuCloseTimer = setTimeout(() => {
+            submenu?.classList.remove('open');
+            submenuCloseTimer = null;
+        }, 300); // 300ms grace period before closing
+
+        // Also trigger main control close timer when leaving the submenu
+        if (mainControlCloseTimer) clearTimeout(mainControlCloseTimer);
+        mainControlCloseTimer = setTimeout(() => {
+            mainDropdownMenu?.classList.add('hidden');
+            btnMainMenu?.classList.remove('active');
+            submenu?.classList.remove('open');
+            mainControlCloseTimer = null;
+        }, 300);
+    };
+
+    const handleSubmenuEnter = () => {
+        if (submenuCloseTimer) {
+            clearTimeout(submenuCloseTimer);
+            submenuCloseTimer = null;
+        }
+        // Keep the main menu open while user is hovering over settings submenu
+        if (mainControlCloseTimer) {
+            clearTimeout(mainControlCloseTimer);
+            mainControlCloseTimer = null;
+        }
+        submenu?.classList.add('open');
+    };
 
     submenuParent?.addEventListener('mouseenter', () => {
         if (submenuCloseTimer) {
             clearTimeout(submenuCloseTimer);
             submenuCloseTimer = null;
         }
+        if (submenu && submenuParent) {
+            const parentRect = submenuParent.getBoundingClientRect();
+            // Position settings submenu dynamically next to its parent item
+            submenu.style.top = `${parentRect.top - 6}px`;
+            submenu.style.left = `${parentRect.right}px`;
+        }
         submenu?.classList.add('open');
     });
 
-    submenuParent?.addEventListener('mouseleave', () => {
-        if (submenuCloseTimer) clearTimeout(submenuCloseTimer);
-        submenuCloseTimer = setTimeout(() => {
-            submenu?.classList.remove('open');
-            submenuCloseTimer = null;
-        }, 300); // 300ms grace period before closing
-    });
+    submenuParent?.addEventListener('mouseleave', handleSubmenuLeave);
+    submenu?.addEventListener('mouseenter', handleSubmenuEnter);
+    submenu?.addEventListener('mouseleave', handleSubmenuLeave);
 
-    // Main dropdown menu hover intent delay - close when cursor leaves container
-    menuContainer?.addEventListener('mouseleave', () => {
+    // Main dropdown menu hover intent delay - close when cursor leaves toggle or menu
+    const handleMenuLeave = () => {
         if (mainControlCloseTimer) clearTimeout(mainControlCloseTimer);
         mainControlCloseTimer = setTimeout(() => {
             mainDropdownMenu?.classList.add('hidden');
@@ -466,14 +498,19 @@ window.addEventListener('DOMContentLoaded', () => {
             submenu?.classList.remove('open');
             mainControlCloseTimer = null;
         }, 300); // 300ms grace period
-    });
+    };
 
-    menuContainer?.addEventListener('mouseenter', () => {
+    const handleMenuEnter = () => {
         if (mainControlCloseTimer) {
             clearTimeout(mainControlCloseTimer);
             mainControlCloseTimer = null;
         }
-    });
+    };
+
+    menuContainer?.addEventListener('mouseleave', handleMenuLeave);
+    menuContainer?.addEventListener('mouseenter', handleMenuEnter);
+    mainDropdownMenu?.addEventListener('mouseleave', handleMenuLeave);
+    mainDropdownMenu?.addEventListener('mouseenter', handleMenuEnter);
 
     // 1. Load Demo Graph
     document.getElementById('menu-load-demo')?.addEventListener('click', () => {
@@ -532,6 +569,30 @@ window.addEventListener('DOMContentLoaded', () => {
         downloadAnchor.click();
         downloadAnchor.remove();
         logToTerminal("Graph AST exported successfully.", "system-msg");
+    });
+
+    // 3.5. Export Execution JSON AST (Strips UI metadata)
+    document.getElementById('menu-export-execution-json')?.addEventListener('click', () => {
+        const cleanNodes: Record<string, any> = {};
+        Object.entries(appState.currentGraph.nodes).forEach(([id, node]) => {
+            cleanNodes[id] = {
+                id: node.id,
+                type: node.type,
+                params: node.params
+            };
+        });
+        const cleanGraph = {
+            nodes: cleanNodes,
+            edges: appState.currentGraph.edges
+        };
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cleanGraph, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", "litegraph-execution-ast.json");
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        logToTerminal("Execution AST exported successfully (without UI layout details).", "system-msg");
     });
 
     // 4. Clear Workspace

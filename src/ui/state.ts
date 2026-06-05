@@ -94,6 +94,9 @@ export const appState = {
     hoveredDrawerNodeId: null as string | null,
     hoveredEllipsisNodeId: null as string | null,
     hoveredPinNodeId: null as string | null,
+    mouseDownClientX: 0,
+    mouseDownClientY: 0,
+    mouseDownTime: 0,
 };
 
 // ============================================================================

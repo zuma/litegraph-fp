@@ -34,50 +34,6 @@
                     <button id="btn-main-menu" class="btn-menu-toggle">
                         ☰
                     </button>
-                    
-                    <!-- Main Dropdown Menu -->
-                    <div id="main-dropdown-menu" class="main-dropdown hidden">
-                        <button class="dropdown-item" id="menu-load-demo">📁 Load Demo Graph</button>
-                        <button class="dropdown-item" id="menu-import-json">📥 Import JSON AST</button>
-                        <button class="dropdown-item" id="menu-export-json">💾 Export JSON AST</button>
-                        
-                        <div class="dropdown-divider"></div>
-                        
-                        <!-- Settings Submenu -->
-                        <div class="dropdown-submenu-parent">
-                            <button class="dropdown-item" id="menu-settings-trigger">
-                                ⚙️ Settings <span style="margin-left: auto; font-size: 10px; color: var(--text-muted);">▶</span>
-                            </button>
-                            <div class="dropdown-submenu">
-                                <button class="dropdown-item" id="menu-toggle-darkmode">
-                                    <span>🌙 Dark Mode</span>
-                                    <input type="checkbox" id="menu-chk-darkmode" style="margin-left: auto; cursor: pointer;">
-                                </button>
-                                <button class="dropdown-item" id="menu-toggle-autorun">
-                                    <span>⚡ Auto-Run</span>
-                                    <input type="checkbox" id="menu-chk-autorun" style="margin-left: auto; cursor: pointer;">
-                                </button>
-                                <button class="dropdown-item" id="menu-toggle-snap-grid">
-                                    <span>📐 Snap to Grid</span>
-                                    <input type="checkbox" id="menu-chk-snap-grid-opt" style="margin-left: auto; cursor: pointer;">
-                                </button>
-                                <button class="dropdown-item" id="menu-toggle-pin-sidebar">
-                                    <span>📌 Pin Sidebar</span>
-                                    <input type="checkbox" id="menu-chk-pin-sidebar-opt" style="margin-left: auto; cursor: pointer;">
-                                </button>
-                                <button class="dropdown-item" id="menu-toggle-auto-front">
-                                    <span>🔝 Auto Bring to Front</span>
-                                    <input type="checkbox" id="menu-chk-auto-front-opt" style="margin-left: auto; cursor: pointer;">
-                                </button>
-                                <button class="dropdown-item" id="menu-toggle-edge-style">
-                                    <span id="menu-lbl-edge-style">🔌 Edge Style: Spline</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="dropdown-divider"></div>
-                        <button class="dropdown-item text-danger" id="menu-clear-workspace">🗑️ Clear Workspace</button>
-                    </div>
                 </div>
 
                 <span class="logo-glow"></span>
@@ -123,7 +79,7 @@
                 
                 <!-- Floating canvas overlays -->
                 <div id="canvas-overlays">
-                    <div class="zoom-controls">
+                    <div class="zoom-controls glass-panel">
                         <button id="btn-zoom-in" title="Zoom In">+</button>
                         <button id="btn-zoom-reset" title="Reset view">100%</button>
                         <button id="btn-zoom-fit" title="Fit Graph to Screen">
@@ -137,7 +93,7 @@
                 </div>
 
                 <!-- Double click / Right click Node Adder Panel -->
-                <div id="node-adder" class="floating-panel hidden">
+                <div id="node-adder" class="floating-panel glass-panel hidden">
                     <div class="panel-header">
                         <h3>Add Node</h3>
                         <button id="btn-close-adder" class="btn-close">&times;</button>
@@ -151,7 +107,7 @@
                 </div>
 
                 <!-- Sleek right-click Context Menu for Nodes -->
-                <div id="context-menu" class="context-menu hidden">
+                <div id="context-menu" class="context-menu glass-panel hidden">
                     <button class="context-menu-item" id="ctx-delete-node">🗑️ Delete Node</button>
                     <button class="context-menu-item" id="ctx-disconnect-node">🔌 Disconnect All</button>
                     <div class="context-menu-divider"></div>
@@ -161,7 +117,7 @@
             </section>
 
             <!-- SIDEBAR INSPECTOR & LOGS COLUMN -->
-            <aside id="sidebar">
+            <aside id="sidebar" class="glass-panel">
                 <!-- Sidebar Tab Handle (Connected directly to drawer, sticks out to the left) -->
                 <div class="sidebar-handle">
                     <button id="btn-sidebar-toggle" class="sidebar-handle-btn" data-tooltip="Toggle Panel (Ctrl+B) - Manually show or hide the sidebar panel">
@@ -293,6 +249,53 @@
                 </div>
             </div>
         </footer>
+
+        <!-- Main Dropdown Menu -->
+        <div id="main-dropdown-menu" class="main-dropdown glass-panel hidden">
+            <button class="dropdown-item" id="menu-load-demo">📁 Load Demo Graph</button>
+            <button class="dropdown-item" id="menu-import-json">📥 Import JSON AST</button>
+            <button class="dropdown-item" id="menu-export-json">💾 Export JSON AST</button>
+            <button class="dropdown-item" id="menu-export-execution-json">📤 Export Execution AST</button>
+            
+            <div class="dropdown-divider"></div>
+            
+            <!-- Settings Submenu -->
+            <div class="dropdown-submenu-parent">
+                <button class="dropdown-item" id="menu-settings-trigger">
+                    ⚙️ Settings <span style="margin-left: auto; font-size: 10px; color: var(--text-muted);">▶</span>
+                </button>
+            </div>
+
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item text-danger" id="menu-clear-workspace">🗑️ Clear Workspace</button>
+        </div>
+
+        <!-- Settings Submenu (Placed globally to avoid backdrop-filter hierarchy conflicts) -->
+        <div id="main-settings-submenu" class="dropdown-submenu glass-panel">
+            <button class="dropdown-item" id="menu-toggle-darkmode">
+                <span>🌙 Dark Mode</span>
+                <input type="checkbox" id="menu-chk-darkmode" style="margin-left: auto; cursor: pointer;">
+            </button>
+            <button class="dropdown-item" id="menu-toggle-autorun">
+                <span>⚡ Auto-Run</span>
+                <input type="checkbox" id="menu-chk-autorun" style="margin-left: auto; cursor: pointer;">
+            </button>
+            <button class="dropdown-item" id="menu-toggle-snap-grid">
+                <span>📐 Snap to Grid</span>
+                <input type="checkbox" id="menu-chk-snap-grid-opt" style="margin-left: auto; cursor: pointer;">
+            </button>
+            <button class="dropdown-item" id="menu-toggle-pin-sidebar">
+                <span>📌 Pin Sidebar</span>
+                <input type="checkbox" id="menu-chk-pin-sidebar-opt" style="margin-left: auto; cursor: pointer;">
+            </button>
+            <button class="dropdown-item" id="menu-toggle-auto-front">
+                <span>🔝 Auto Bring to Front</span>
+                <input type="checkbox" id="menu-chk-auto-front-opt" style="margin-left: auto; cursor: pointer;">
+            </button>
+            <button class="dropdown-item" id="menu-toggle-edge-style">
+                <span id="menu-lbl-edge-style">🔌 Edge Style: Spline</span>
+            </button>
+        </div>
     </div>
 
     <!-- Script loading: loads compiled typescript main -->
