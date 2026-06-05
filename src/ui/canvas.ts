@@ -71,8 +71,8 @@ export function drawGrid(renderingCtx: RenderingContext, computedStyle: CSSStyle
 
     ctx.save();
     
-    // Clear screen with theme background color
-    const canvasBg = computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
+    // Clear screen with custom background color or theme default
+    const canvasBg = renderingCtx.backgroundColor || computedStyle.getPropertyValue('--bg-obsidian').trim() || '#090a0f';
     ctx.fillStyle = canvasBg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -131,6 +131,29 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         context.shadowBlur = 8;
     }
 
+    // 1.5 Draw Rounded Backdrop Blur (simulates CSS backdrop-filter on Canvas)
+    context.save();
+    context.beginPath();
+    context.roundRect(x, y, w, h, 10);
+    context.clip();
+
+    // Grab corresponding area from the raw canvas element and paint it back with blur filter
+    context.filter = 'blur(12px) saturate(140%)';
+    const dpr = window.devicePixelRatio || 1;
+    const zoom = ctx.viewport.zoom;
+    const screenX = (x * zoom + ctx.viewport.x) * dpr;
+    const screenY = (y * zoom + ctx.viewport.y) * dpr;
+    const screenW = (w * zoom) * dpr;
+    const screenH = (h * zoom) * dpr;
+    try {
+        if (screenW > 0 && screenH > 0) {
+            context.drawImage(ctx.canvas, screenX, screenY, screenW, screenH, x, y, w, h);
+        }
+    } catch (e) {
+        // Fallback gracefully if canvas copying is temporarily out of bounds
+    }
+    context.restore();
+
     // 2. Draw Card Body (Glassmorphism card)
     context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
     
@@ -143,13 +166,19 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     context.shadowBlur = 0;
 
     // 3. Draw Card Border Outline
+    context.beginPath();
+    context.roundRect(x, y, w, h, 10);
     context.lineWidth = isSelected || hasError ? 2 : 1;
     if (hasError) {
         context.strokeStyle = accentRed;
     } else if (isSelected) {
         context.strokeStyle = accentCyan;
     } else {
-        context.strokeStyle = computedStyle.getPropertyValue('--border-panel').trim() || 'rgba(255, 255, 255, 0.08)';
+        // Uniform glass highlight border with a very subtle top-to-bottom light falloff (macOS style)
+        let borderGrad = context.createLinearGradient(x, y, x, y + h);
+        borderGrad.addColorStop(0, isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.16)');
+        borderGrad.addColorStop(1, isLight ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.04)');
+        context.strokeStyle = borderGrad;
     }
     context.stroke();
 
@@ -195,7 +224,28 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     context.font = 'bold 12px "Outfit", sans-serif';
     context.textAlign = 'left';
     context.textBaseline = 'middle';
-    context.fillText(node.ui?.title ?? nodeDef?.name ?? node.type, x + 12, y + HEADER_HEIGHT / 2);
+    const maxTitleWidth = w - 12 - (hasError ? 34 : 12);
+    context.fillText(node.ui?.title ?? nodeDef?.name ?? node.type, x + 12, y + HEADER_HEIGHT / 2, maxTitleWidth);
+
+    // 5.5 Draw Status Warning Badge if node is in error state
+    if (hasError) {
+        const badgeX = x + w - 18;
+        const badgeY = y + HEADER_HEIGHT / 2;
+        const badgeRadius = 7.5;
+
+        // Draw amber yellow badge background circle
+        context.beginPath();
+        context.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2);
+        context.fillStyle = '#f59e0b';
+        context.fill();
+
+        // Draw centered black exclamation mark
+        context.fillStyle = '#090a0f';
+        context.font = 'bold 11px "Outfit", sans-serif';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText('!', badgeX, badgeY);
+    }
 
     // 6. Draw Pins and Labels
     if (nodeDef) {

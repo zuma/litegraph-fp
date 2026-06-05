@@ -14,6 +14,7 @@ export interface AppSettings {
         autoBringToFront: boolean;
         edgeStyle: 'spline' | 'orthogonal';
         camera: { x: number; y: number; zoom: number };
+        backgroundColor?: string;
     };
 }
 
@@ -33,6 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         autoBringToFront: true,
         edgeStyle: 'spline',
         camera: { x: 0, y: 0, zoom: 1.0 },
+        backgroundColor: '#f3f4f6',
     },
 };
 

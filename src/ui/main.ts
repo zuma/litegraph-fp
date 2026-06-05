@@ -45,6 +45,7 @@ window.addEventListener('DOMContentLoaded', () => {
         canvas,
         ctx,
         viewport: appState.viewport,
+        backgroundColor: settings.canvas.backgroundColor,
         selectedNodeId: appState.selectedNodeId,
         selectedNodeIds: appState.selectedNodeIds,
         hoveredNodeId: appState.hoveredNodeId,
@@ -299,6 +300,23 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         applyTheme(chkDarkMode?.checked ? 'dark' : 'light');
     });
+
+    // Canvas Background Color picker handling
+    const colorCanvasBg = document.getElementById('menu-color-canvas-bg') as HTMLInputElement | null;
+    if (colorCanvasBg) {
+        colorCanvasBg.value = settings.canvas.backgroundColor || '#f3f4f6';
+        colorCanvasBg.addEventListener('input', (e) => {
+            const newColor = (e.target as HTMLInputElement).value;
+            updateSetting('canvas', 'backgroundColor', newColor);
+            if (appState.renderingContext) {
+                appState.renderingContext.backgroundColor = newColor;
+                appState.renderingContext.needsRedraw = true;
+            }
+        });
+        colorCanvasBg.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
 
     // Trigger initial layout resize once DOM state is finalized
     resizeCanvas();

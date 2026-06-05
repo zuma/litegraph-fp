@@ -26,6 +26,7 @@ export interface RenderingContext {
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D;
     viewport: Viewport;
+    backgroundColor?: string;
     selectedNodeId: string | null;
     selectedNodeIds: Set<string>;
     hoveredNodeId: string | null;
