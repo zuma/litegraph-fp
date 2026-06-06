@@ -3,7 +3,7 @@ import { ExecutionState, EngineConfig, ExecutionResult, Middleware, NodeExecuteF
 import { NodeRegistry } from '../registry/types.js';
 import { Command } from '../events/types.js';
 import { sortTopologically } from './topology.js';
-import { getGraphValidationErrors } from './validation.js';
+import { getGraphValidationErrors, resolveGraphTypes } from './validation.js';
 import { getNodeInputs, getNodeOutputs, getNodeMode, getDefaultFormulaForType } from '../registry/index.js';
 
 // ============================================================================
@@ -154,6 +154,9 @@ export const evaluateGraph = async (
 
     // 2. Pre-compute the edge index (single O(E) pass, all future lookups are O(1))
     const edgeIndex = buildEdgeIndex(graph.edges);
+
+    // Resolve dynamic types across connections
+    const resolvedTypes = resolveGraphTypes(graph, registry);
     
     // 3. Setup isolated execution dictionary.
     //    PRAGMATIC NOTE: We use local mutation (spreading into a mutable Record) here
@@ -193,7 +196,7 @@ export const evaluateGraph = async (
         const resolvedInputs: Record<string, unknown> = {};
         
         // 1. Initialize strictly with any root inputs from active global state (like manually typed values) (Fix #3)
-        Object.keys(getNodeInputs(node, registry)).forEach(pinName => {
+        Object.keys(getNodeInputs(node, resolvedTypes.inputs, registry)).forEach(pinName => {
             const stateKey = `${nodeId}.${pinName}`;
             if (stateKey in activeState) {
                 resolvedInputs[pinName] = activeState[stateKey];
@@ -256,7 +259,7 @@ export const evaluateGraph = async (
             collectedCommands[nodeId] = (computedOutput as any).$commands as Command[];
         }
 
-        Object.keys(getNodeOutputs(node, registry)).forEach(outputPin => {
+        Object.keys(getNodeOutputs(node, resolvedTypes.outputs, registry)).forEach(outputPin => {
             const value = (computedOutput as any)[outputPin] !== undefined ? (computedOutput as any)[outputPin] : null;
             activeState[`${nodeId}.${outputPin}`] = value;
         });
@@ -328,8 +331,8 @@ export const evaluateGraph = async (
     // Garbage Collection of Stale State Keys
     const validKeys = new Set<string>();
     Object.entries(graph.nodes).forEach(([nodeId, node]) => {
-        Object.keys(getNodeOutputs(node, registry)).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
-        Object.keys(getNodeInputs(node, registry)).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
+        Object.keys(getNodeOutputs(node, resolvedTypes.outputs, registry)).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
+        Object.keys(getNodeInputs(node, resolvedTypes.inputs, registry)).forEach(pin => validKeys.add(`${nodeId}.${pin}`));
     });
 
     const cleanedState: Record<string, unknown> = {};

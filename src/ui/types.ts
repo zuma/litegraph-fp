@@ -1,3 +1,5 @@
+import { PinType } from '../core/ast.js';
+
 export interface Viewport {
     x: number;
     y: number;
@@ -45,5 +47,7 @@ export interface RenderingContext {
     edgeStyle?: 'spline' | 'orthogonal';
     gridStyle?: 'dot' | 'line';
     activePlaceholderId?: string | null;
+    resolvedInputs?: Record<string, Record<string, PinType>>;
+    resolvedOutputs?: Record<string, Record<string, PinType>>;
 }
 

@@ -1,8 +1,9 @@
-import { GraphState, NodeState } from '../core/ast.js';
+import { GraphState, NodeState, PinType } from '../core/ast.js';
 import { RenderingContext, Viewport } from './types.js';
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
 import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
 import { loadSettings } from './settings.js';
+import { resolveGraphTypes } from '../engine/validation.js';
 
 // ============================================================================
 // GRID CONSTANT
@@ -98,6 +99,8 @@ export const appState = {
     mouseDownClientY: 0,
     mouseDownTime: 0,
     activePlaceholderId: null as string | null,
+    resolvedInputs: {} as Record<string, Record<string, PinType>>,
+    resolvedOutputs: {} as Record<string, Record<string, PinType>>,
 };
 
 // ============================================================================
@@ -117,6 +120,10 @@ export function screenToWorld(sx: number, sy: number) {
 // ============================================================================
 
 export function syncContextState() {
+    const { inputs, outputs } = resolveGraphTypes(appState.currentGraph);
+    appState.resolvedInputs = inputs;
+    appState.resolvedOutputs = outputs;
+
     if (appState.renderingContext) {
         appState.renderingContext.selectedNodeId = appState.selectedNodeId;
         appState.renderingContext.selectedNodeIds = appState.selectedNodeIds;
@@ -129,6 +136,8 @@ export function syncContextState() {
         appState.renderingContext.hoveredEdgePos = appState.hoveredEdgePos;
         appState.renderingContext.edgeStyle = loadSettings().canvas.edgeStyle || 'spline';
         appState.renderingContext.activePlaceholderId = appState.activePlaceholderId;
+        appState.renderingContext.resolvedInputs = inputs;
+        appState.renderingContext.resolvedOutputs = outputs;
         appState.renderingContext.needsRedraw = true;
     }
 }

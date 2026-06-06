@@ -1,5 +1,6 @@
 import { StandardNodes, getNodeInputs, getNodeOutputs, getNodeMode, getDefaultFormulaForType } from '../registry/index.js';
-import { NodeMode } from '../core/ast.js';
+import { NodeMode, NodeState, PinType } from '../core/ast.js';
+import { NodeDefinition } from '../registry/types.js';
 import { appState } from './state.js';
 import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons } from './history.js';
 import { triggerAutoRun } from './execution.js';
@@ -40,9 +41,6 @@ export function updateInspector() {
 
 
 
-    const activeMode = getNodeMode(node);
-    const isPython = activeMode === 'python';
-
     // Add/Remove Pin buttons setup
     const btnAddInput = document.getElementById('btn-add-input');
     const btnRemoveInput = document.getElementById('btn-remove-input');
@@ -50,19 +48,15 @@ export function updateInspector() {
     const btnRemoveOutput = document.getElementById('btn-remove-output');
 
     if (btnAddInput && btnRemoveInput) {
-        if (nodeDef?.dynamicInputs && isPython) {
+        if (nodeDef?.dynamicInputs) {
             btnAddInput.classList.remove('hidden');
+            btnRemoveInput.classList.remove('hidden');
             
             const deletableInputs = node.inputs ? Object.keys(node.inputs).filter(
                 pinId => !(nodeDef && pinId in nodeDef.requires)
             ) : [];
             const hasCustomInputs = deletableInputs.length > 0;
-            if (hasCustomInputs) {
-                btnRemoveInput.classList.remove('hidden');
-            } else {
-                btnRemoveInput.classList.add('hidden');
-            }
-
+            
             const newAddBtn = btnAddInput.cloneNode(true) as HTMLButtonElement;
             btnAddInput.parentNode?.replaceChild(newAddBtn, btnAddInput);
             newAddBtn.addEventListener('click', () => {
@@ -71,6 +65,7 @@ export function updateInspector() {
 
             const newRemoveBtn = btnRemoveInput.cloneNode(true) as HTMLButtonElement;
             btnRemoveInput.parentNode?.replaceChild(newRemoveBtn, btnRemoveInput);
+            newRemoveBtn.disabled = !hasCustomInputs;
             newRemoveBtn.addEventListener('click', () => {
                 handleRemoveLastInputPin(node.id);
             });
@@ -81,19 +76,15 @@ export function updateInspector() {
     }
 
     if (btnAddOutput && btnRemoveOutput) {
-        if (nodeDef?.dynamicOutputs && isPython) {
+        if (nodeDef?.dynamicOutputs) {
             btnAddOutput.classList.remove('hidden');
+            btnRemoveOutput.classList.remove('hidden');
             
             const deletableOutputs = node.outputs ? Object.keys(node.outputs).filter(
                 pinId => !(nodeDef && pinId in nodeDef.provides)
             ) : [];
             const hasCustomOutputs = deletableOutputs.length > 0;
-            if (hasCustomOutputs) {
-                btnRemoveOutput.classList.remove('hidden');
-            } else {
-                btnRemoveOutput.classList.add('hidden');
-            }
-
+            
             const newAddBtn = btnAddOutput.cloneNode(true) as HTMLButtonElement;
             btnAddOutput.parentNode?.replaceChild(newAddBtn, btnAddOutput);
             newAddBtn.addEventListener('click', () => {
@@ -102,6 +93,7 @@ export function updateInspector() {
 
             const newRemoveBtn = btnRemoveOutput.cloneNode(true) as HTMLButtonElement;
             btnRemoveOutput.parentNode?.replaceChild(newRemoveBtn, btnRemoveOutput);
+            newRemoveBtn.disabled = !hasCustomOutputs;
             newRemoveBtn.addEventListener('click', () => {
                 handleRemoveLastOutputPin(node.id);
             });
@@ -175,23 +167,31 @@ export function updateInspector() {
         });
     }
 
-    // 1. Rebuild Parameter Editor Container
-    const paramsContainer = document.getElementById('inspect-parameters-container');
-    if (paramsContainer) {
-        paramsContainer.replaceChildren();
+    // 0.5 Rebuild Logic Editor Container
+    const logicContainer = document.getElementById('inspect-node-logic-container');
+    if (logicContainer) {
+        logicContainer.replaceChildren();
+        logicContainer.classList.add('hidden');
+
         const mode = getNodeMode(node);
-
         if (mode === 'formula') {
-            const row = document.createElement('div');
-            row.className = 'param-input-row';
+            logicContainer.classList.remove('hidden');
 
-            const label = document.createElement('label');
+            const row = document.createElement('div');
+            row.className = 'inspector-field-group';
+            row.style.flexDirection = 'column';
+            row.style.alignItems = 'stretch';
+            row.style.gap = '6px';
+
+            const label = document.createElement('span');
+            label.className = 'inspector-label';
             label.textContent = 'Formula';
             row.appendChild(label);
 
             const formulaInput = document.createElement('input');
             formulaInput.type = 'text';
             formulaInput.className = 'input-field';
+            formulaInput.style.width = '100%';
             formulaInput.value = node.params.formula ?? getDefaultFormulaForType(node.type);
             formulaInput.autocomplete = 'off';
 
@@ -210,15 +210,22 @@ export function updateInspector() {
                 updateNodeFormula(node.id, formulaInput.value);
             });
             row.appendChild(formulaInput);
-            paramsContainer.appendChild(row);
+            logicContainer.appendChild(row);
         } else if (mode === 'blocks') {
+            logicContainer.classList.remove('hidden');
+
+            const label = document.createElement('span');
+            label.className = 'inspector-label';
+            label.textContent = 'Blocks Logic';
+            logicContainer.appendChild(label);
+
             const blocksList = node.params.blocks ?? [];
             blocksList.forEach((block) => {
                 const blockRow = document.createElement('div');
                 blockRow.style.display = 'flex';
                 blockRow.style.alignItems = 'center';
                 blockRow.style.gap = '6px';
-                blockRow.style.marginBottom = '8px';
+                blockRow.style.marginBottom = '4px';
 
                 const setLabel = document.createElement('span');
                 setLabel.textContent = 'Set';
@@ -298,139 +305,60 @@ export function updateInspector() {
                 });
                 blockRow.appendChild(btnDelBlock);
 
-                paramsContainer.appendChild(blockRow);
+                logicContainer.appendChild(blockRow);
             });
 
             const btnAddBlock = document.createElement('button');
             btnAddBlock.className = 'btn-add-pin';
             btnAddBlock.textContent = '+ Add Block';
-            btnAddBlock.style.marginTop = '8px';
+            btnAddBlock.style.marginTop = '4px';
             btnAddBlock.addEventListener('click', () => {
                 addBlockStatement(node.id);
             });
-            paramsContainer.appendChild(btnAddBlock);
-        } else {
-            // Python, Delay, State
-            const requires = Object.entries(getNodeInputs(node));
-            const incomingEdges = appState.currentGraph.edges.filter(e => e.targetNodeId === node.id);
+            logicContainer.appendChild(btnAddBlock);
+        } else if (mode === 'python') {
+            logicContainer.classList.remove('hidden');
 
-            requires.forEach(([pinId, pinType]) => {
-                const isConnected = incomingEdges.some(e => e.targetPinId === pinId);
-                const row = document.createElement('div');
-                row.className = 'param-input-row';
+            const label = document.createElement('span');
+            label.className = 'inspector-label';
+            label.textContent = 'Python Code';
+            logicContainer.appendChild(label);
 
-                const labelRow = document.createElement('div');
-                labelRow.style.display = 'flex';
-                labelRow.style.justifyContent = 'space-between';
-                labelRow.style.alignItems = 'center';
+            const currentVal = node.params.code ?? 'def execute(inputs):\n    return { "out": 0 }';
 
-                const label = document.createElement('label');
-                label.textContent = `${pinId} (${pinType})`;
-                labelRow.appendChild(label);
+            const textArea = document.createElement('textarea');
+            textArea.className = 'input-field';
+            textArea.style.fontFamily = '"Fira Code", monospace';
+            textArea.style.minHeight = '180px';
+            textArea.style.fontSize = '11px';
+            textArea.style.width = '100%';
+            textArea.style.resize = 'vertical';
+            textArea.value = currentVal.toString();
+            textArea.autocomplete = 'off';
 
-                const isDynamic = !!(node.inputs && pinId in node.inputs && !(nodeDef && pinId in nodeDef.requires));
-                if (isDynamic) {
-                    const btnDel = document.createElement('button');
-                    btnDel.className = 'btn-delete-pin';
-                    btnDel.textContent = '×';
-                    btnDel.title = `Delete input '${pinId}'`;
-                    btnDel.addEventListener('click', () => {
-                        handleDeleteInputPin(node.id, pinId);
-                    });
-                    labelRow.appendChild(btnDel);
-                }
-                row.appendChild(labelRow);
-
-                if (isConnected) {
-                    const badgeText = document.createElement('span');
-                    badgeText.className = 'badge';
-                    badgeText.style.alignSelf = 'flex-start';
-                    badgeText.style.borderColor = 'rgba(255,255,255,0.05)';
-                    badgeText.style.background = 'rgba(255,255,255,0.02)';
-                    badgeText.style.color = 'var(--text-muted)';
-                    badgeText.textContent = '🔌 Wired Link';
-                    row.appendChild(badgeText);
-                } else {
-                    const currentVal = node.params[pinId] ?? '';
-                    
-                    if (pinType === 'boolean') {
-                        const checkLabel = document.createElement('label');
-                        checkLabel.className = 'input-field-checkbox';
-                        const checkbox = document.createElement('input');
-                        checkbox.type = 'checkbox';
-                        checkbox.checked = !!currentVal;
-                        checkbox.addEventListener('change', () => {
-                            pushToHistory();
-                            updateNodeParam(node.id, pinId, checkbox.checked);
-                        });
-                        checkLabel.appendChild(checkbox);
-                        checkLabel.appendChild(document.createTextNode(' Enabled'));
-                    } else if (pinId === 'code') {
-                        const textArea = document.createElement('textarea');
-                        textArea.className = 'input-field';
-                        textArea.style.fontFamily = '"Fira Code", monospace';
-                        textArea.style.minHeight = '140px';
-                        textArea.style.fontSize = '11px';
-                        textArea.style.resize = 'vertical';
-                        textArea.value = currentVal.toString();
-                        textArea.autocomplete = 'off';
-
-                        textArea.addEventListener('focus', () => {
-                            appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
-                        });
-
-                        textArea.addEventListener('input', () => {
-                            if (appState.preEditGraphState) {
-                                undoStack.push(appState.preEditGraphState);
-                                if (undoStack.length > 50) undoStack.shift();
-                                redoStack.length = 0;
-                                updateUndoRedoButtons();
-                                appState.preEditGraphState = null;
-                            }
-                            updateNodeParam(node.id, pinId, textArea.value);
-                        });
-                        row.appendChild(textArea);
-                    } else {
-                        const textInput = document.createElement('input');
-                        textInput.type = pinType === 'number' ? 'number' : 'text';
-                        textInput.className = 'input-field';
-                        textInput.value = currentVal.toString();
-                        textInput.autocomplete = 'off';
-                        
-                        textInput.addEventListener('focus', () => {
-                            appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
-                        });
-
-                        textInput.addEventListener('input', () => {
-                            if (appState.preEditGraphState) {
-                                undoStack.push(appState.preEditGraphState);
-                                if (undoStack.length > 50) undoStack.shift();
-                                redoStack.length = 0;
-                                updateUndoRedoButtons();
-                                appState.preEditGraphState = null;
-                            }
-
-                            let parsedVal: any = textInput.value;
-                            if (pinType === 'number') {
-                                parsedVal = parseFloat(textInput.value);
-                                if (isNaN(parsedVal)) parsedVal = 0;
-                            }
-                            updateNodeParam(node.id, pinId, parsedVal);
-                        });
-                        row.appendChild(textInput);
-                    }
-                }
-                paramsContainer.appendChild(row);
+            textArea.addEventListener('focus', () => {
+                appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
             });
 
-            if (requires.length === 0) {
-                const noParams = document.createElement('span');
-                noParams.style.fontSize = '12px';
-                noParams.style.color = 'var(--text-muted)';
-                noParams.textContent = 'None';
-                paramsContainer.appendChild(noParams);
-            }
+            textArea.addEventListener('input', () => {
+                if (appState.preEditGraphState) {
+                    undoStack.push(appState.preEditGraphState);
+                    if (undoStack.length > 50) undoStack.shift();
+                    redoStack.length = 0;
+                    updateUndoRedoButtons();
+                    appState.preEditGraphState = null;
+                }
+                updateNodeParam(node.id, 'code', textArea.value);
+            });
+            logicContainer.appendChild(textArea);
         }
+    }
+
+    // 1. Rebuild Parameter Editor Container (Inputs Card)
+    const paramsContainer = document.getElementById('inspect-parameters-container');
+    if (paramsContainer) {
+        paramsContainer.replaceChildren();
+        renderInputPinsList(paramsContainer, node, nodeDef);
     }
 
     // 2. Rebuild Outputs Container
@@ -438,10 +366,42 @@ export function updateInspector() {
     if (outputsContainer && nodeDef) {
         outputsContainer.replaceChildren();
 
-        const provides = Object.keys(getNodeOutputs(node));
+        const provides = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
         provides.forEach(pinId => {
             const row = document.createElement('div');
             row.className = 'pin-status-row';
+            row.draggable = true;
+
+            row.addEventListener('dragstart', (e) => {
+                e.dataTransfer?.setData('text/plain', JSON.stringify({ type: 'output', pinId }));
+                row.classList.add('dragging');
+            });
+
+            row.addEventListener('dragend', () => {
+                row.classList.remove('dragging');
+            });
+
+            row.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                row.classList.add('drag-hover');
+            });
+
+            row.addEventListener('dragleave', () => {
+                row.classList.remove('drag-hover');
+            });
+
+            row.addEventListener('drop', (e) => {
+                e.preventDefault();
+                row.classList.remove('drag-hover');
+                try {
+                    const data = JSON.parse(e.dataTransfer?.getData('text/plain') || '{}');
+                    if (data.type === 'output') {
+                        reorderOutputPins(node.id, data.pinId, pinId);
+                    }
+                } catch (err) {
+                    // Ignore
+                }
+            });
 
             const leftContainer = document.createElement('div');
             leftContainer.style.display = 'flex';
@@ -856,6 +816,216 @@ export function deleteBlockStatement(nodeId: string, blockId: string) {
             [nodeId]: tempNode
         },
         edges: updatedEdges
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, nodeDef: NodeDefinition | undefined) {
+    const requires = Object.entries(getNodeInputs(node, appState.resolvedInputs)).filter(([pinId]) => pinId !== 'code');
+    if (requires.length === 0) {
+        const noParams = document.createElement('span');
+        noParams.style.fontSize = '12px';
+        noParams.style.color = 'var(--text-muted)';
+        noParams.textContent = 'None';
+        paramsContainer.appendChild(noParams);
+        return;
+    }
+
+    const incomingEdges = appState.currentGraph.edges.filter(e => e.targetNodeId === node.id);
+
+    requires.forEach(([pinId, pinType]) => {
+        const isConnected = incomingEdges.some(e => e.targetPinId === pinId);
+        const row = document.createElement('div');
+        row.className = 'pin-status-row';
+        row.draggable = true;
+
+        row.addEventListener('dragstart', (e) => {
+            e.dataTransfer?.setData('text/plain', JSON.stringify({ type: 'input', pinId }));
+            row.classList.add('dragging');
+        });
+
+        row.addEventListener('dragend', () => {
+            row.classList.remove('dragging');
+        });
+
+        row.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            row.classList.add('drag-hover');
+        });
+
+        row.addEventListener('dragleave', () => {
+            row.classList.remove('drag-hover');
+        });
+
+        row.addEventListener('drop', (e) => {
+            e.preventDefault();
+            row.classList.remove('drag-hover');
+            try {
+                const data = JSON.parse(e.dataTransfer?.getData('text/plain') || '{}');
+                if (data.type === 'input') {
+                    reorderInputPins(node.id, data.pinId, pinId);
+                }
+            } catch (err) {
+                // Ignore
+            }
+        });
+
+        const leftContainer = document.createElement('div');
+        leftContainer.style.display = 'flex';
+        leftContainer.style.alignItems = 'center';
+        leftContainer.style.gap = '8px';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'pin-name';
+        nameSpan.textContent = pinId;
+        leftContainer.appendChild(nameSpan);
+
+        const isDynamic = !!(node.inputs && pinId in node.inputs && !(nodeDef && pinId in nodeDef.requires));
+        if (isDynamic) {
+            const btnDel = document.createElement('button');
+            btnDel.className = 'btn-delete-pin';
+            btnDel.textContent = '×';
+            btnDel.title = `Delete input '${pinId}'`;
+            btnDel.addEventListener('click', () => {
+                handleDeleteInputPin(node.id, pinId);
+            });
+            leftContainer.appendChild(btnDel);
+        }
+        row.appendChild(leftContainer);
+
+        if (isConnected) {
+            const badgeText = document.createElement('span');
+            badgeText.className = 'badge';
+            badgeText.style.borderColor = 'rgba(255,255,255,0.05)';
+            badgeText.style.background = 'rgba(255,255,255,0.02)';
+            badgeText.style.color = 'var(--text-muted)';
+            badgeText.style.fontSize = '10px';
+            badgeText.style.padding = '2px 4px';
+            badgeText.textContent = '🔌 Wired';
+            row.appendChild(badgeText);
+        } else {
+            const currentVal = node.params[pinId] ?? '';
+            
+            if (pinType === 'boolean') {
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = !!currentVal;
+                checkbox.style.width = '14px';
+                checkbox.style.height = '14px';
+                checkbox.style.cursor = 'pointer';
+                checkbox.addEventListener('change', () => {
+                    pushToHistory();
+                    updateNodeParam(node.id, pinId, checkbox.checked);
+                });
+                row.appendChild(checkbox);
+            } else {
+                const textInput = document.createElement('input');
+                textInput.type = pinType === 'number' ? 'number' : 'text';
+                textInput.className = 'input-field';
+                textInput.value = currentVal.toString();
+                textInput.autocomplete = 'off';
+                
+                textInput.addEventListener('focus', () => {
+                    appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
+                });
+
+                textInput.addEventListener('input', () => {
+                    if (appState.preEditGraphState) {
+                        undoStack.push(appState.preEditGraphState);
+                        if (undoStack.length > 50) undoStack.shift();
+                        redoStack.length = 0;
+                        updateUndoRedoButtons();
+                        appState.preEditGraphState = null;
+                    }
+
+                    let parsedVal: any = textInput.value;
+                    if (pinType === 'number') {
+                        parsedVal = parseFloat(textInput.value);
+                        if (isNaN(parsedVal)) parsedVal = 0;
+                    }
+                    updateNodeParam(node.id, pinId, parsedVal);
+                });
+                row.appendChild(textInput);
+            }
+        }
+        paramsContainer.appendChild(row);
+    });
+}
+
+export function reorderInputPins(nodeId: string, draggedPinId: string, targetPinId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+
+    const currentInputs = getNodeInputs(node);
+    const keys = Object.keys(currentInputs);
+    const draggedIndex = keys.indexOf(draggedPinId);
+    const targetIndex = keys.indexOf(targetPinId);
+
+    if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return;
+
+    pushToHistory();
+
+    const newKeys = [...keys];
+    newKeys.splice(draggedIndex, 1);
+    newKeys.splice(targetIndex, 0, draggedPinId);
+
+    const newInputs: Record<string, PinType> = {};
+    newKeys.forEach(k => {
+        newInputs[k] = currentInputs[k];
+    });
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: {
+                ...node,
+                inputs: newInputs
+            }
+        }
+    };
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function reorderOutputPins(nodeId: string, draggedPinId: string, targetPinId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+
+    const currentOutputs = getNodeOutputs(node);
+    const keys = Object.keys(currentOutputs);
+    const draggedIndex = keys.indexOf(draggedPinId);
+    const targetIndex = keys.indexOf(targetPinId);
+
+    if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return;
+
+    pushToHistory();
+
+    const newKeys = [...keys];
+    newKeys.splice(draggedIndex, 1);
+    newKeys.splice(targetIndex, 0, draggedPinId);
+
+    const newOutputs: Record<string, PinType> = {};
+    newKeys.forEach(k => {
+        newOutputs[k] = currentOutputs[k];
+    });
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: {
+                ...node,
+                outputs: newOutputs
+            }
+        }
     };
     updateInspector();
     if (appState.renderingContext) {

@@ -47,12 +47,58 @@ export const isCompatible = (source: PinType, target: PinType): boolean => {
  * Performs deep checks for node existence, pin existence, single-source connections, and type safety.
  * Returns a dictionary of errors mapped to NodeIDs.
  */
+export function resolveGraphTypes(graph: GraphState, registry?: NodeRegistry): {
+    inputs: Record<string, Record<string, PinType>>;
+    outputs: Record<string, Record<string, PinType>>;
+} {
+    const resolvedInputs: Record<string, Record<string, PinType>> = {};
+    const resolvedOutputs: Record<string, Record<string, PinType>> = {};
+
+    // 1. Initialize with base types
+    for (const nodeId in graph.nodes) {
+        const node = graph.nodes[nodeId];
+        resolvedInputs[node.id] = { ...getNodeInputs(node, undefined, registry) };
+        resolvedOutputs[node.id] = { ...getNodeOutputs(node, undefined, registry) };
+    }
+
+    // 2. Perform forward/backward propagation passes (3 iterations)
+    for (let iter = 0; iter < 3; iter++) {
+        let changed = false;
+
+        graph.edges.forEach(edge => {
+            const sourceOutputs = resolvedOutputs[edge.sourceNodeId];
+            const targetInputs = resolvedInputs[edge.targetNodeId];
+
+            if (!sourceOutputs || !targetInputs) return;
+
+            const sourceType = sourceOutputs[edge.sourcePinId];
+            const targetType = targetInputs[edge.targetPinId];
+
+            if (sourceType === 'any' && targetType !== 'any' && targetType !== undefined) {
+                sourceOutputs[edge.sourcePinId] = targetType;
+                changed = true;
+            }
+            if (targetType === 'any' && sourceType !== 'any' && sourceType !== undefined) {
+                targetInputs[edge.targetPinId] = sourceType;
+                changed = true;
+            }
+        });
+
+        if (!changed) break;
+    }
+
+    return { inputs: resolvedInputs, outputs: resolvedOutputs };
+}
+
 export const getGraphValidationErrors = (
     graph: GraphState,
     registry: NodeRegistry
 ): Record<string, string> => {
     const errors: Record<string, string> = {};
     const seenTargets = new Set<string>();
+    
+    // Resolve all wildcard types first!
+    const resolved = resolveGraphTypes(graph, registry);
 
     for (const edge of graph.edges) {
         const sourceNode = graph.nodes[edge.sourceNodeId];
@@ -71,8 +117,6 @@ export const getGraphValidationErrors = (
             continue;
         }
 
-
-
         // Check for multiple inputs to the same pin (single-source dataflow invariant)
         const targetPinKey = `${edge.targetNodeId}.${edge.targetPinId}`;
         if (seenTargets.has(targetPinKey)) {
@@ -81,8 +125,8 @@ export const getGraphValidationErrors = (
         }
         seenTargets.add(targetPinKey);
 
-        const sourceType = getNodeOutputs(sourceNode, registry)[edge.sourcePinId];
-        const targetType = getNodeInputs(targetNode, registry)[edge.targetPinId];
+        const sourceType = getNodeOutputs(sourceNode, resolved.outputs, registry)[edge.sourcePinId];
+        const targetType = getNodeInputs(targetNode, resolved.inputs, registry)[edge.targetPinId];
 
         if (sourceType === undefined) {
             errors[edge.sourceNodeId] = `Invalid edge ${edge.id}: Source pin '${edge.sourcePinId}' does not exist on definition '${sourceNode.type}'.`;

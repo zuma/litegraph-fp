@@ -1,7 +1,11 @@
 # Project Context: litegraph-fp
 
 ## The Vision
-This is a ground-up, purely functional rewrite of `litegraph.js`. The goal is to completely decouple the execution engine from the visual canvas to achieve extreme portability (running in browsers, Web Workers, or headless edge/server environments). 
+litegraph-fp is an agnostic, long-lasting visual programming engine inspired by the philosophy of AutoCAD.
+Just as AutoCAD provides a neutral Cartesian coordinate system that can support civil engineering, architecture, mechanical design, and countless other domains without favoring any of them, this engine provides a fundamentally neutral foundation for visual programming.
+Nodes are treated as simple, untyped “molecules” — blank shells that have no inherent meaning until a user assigns behavior to them. Ports are completely flexible and untyped, allowing any output to connect to any input. The engine itself performs no type checking or enforcement, staying maximally permissive so users can freely explore ideas.
+The core is built on pure functional principles: graphs are immutable JSON, nodes are pure functions, and execution is predictable and portable. The system is designed from the ground up to support multiple programming languages, so different communities can bring their own tools and logic into the same graph.
+The ultimate goal is to create a system flexible enough that it can evolve and remain useful across decades and many different domains, rather than being locked into one language, one paradigm, or one narrow use case.
 
 ## Architecture Directives
 * **Paradigm:** Purely functional. Zero object-oriented classes for core logic. Closures and factory functions for impure boundaries.

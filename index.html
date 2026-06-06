@@ -183,10 +183,11 @@
                                      <span class="inspector-label">Mode</span>
                                      <select id="inspect-node-mode" class="input-field" style="width: 120px; padding: 2px 4px; font-size: 12px; border-radius: 6px;"></select>
                                  </div>
-                            </div>
+                                 <div id="inspect-node-logic-container" class="hidden" style="margin-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;"></div>
+                             </div>
                             
                             <div class="inspector-header-row">
-                                 <h3>Parameters</h3>
+                                 <h3>Inputs</h3>
                                  <div style="display: flex; gap: 6px;">
                                      <button id="btn-add-input" class="btn-add-pin hidden" title="Add input pin">+ Input</button>
                                      <button id="btn-remove-input" class="btn-remove-pin hidden" title="Remove last input pin">- Input</button>
@@ -197,7 +198,7 @@
                              </div>
 
                              <div class="inspector-header-row">
-                                 <h3>Runtime Status</h3>
+                                 <h3>Outputs</h3>
                                  <div style="display: flex; gap: 6px;">
                                      <button id="btn-add-output" class="btn-add-pin hidden" title="Add output pin">+ Output</button>
                                      <button id="btn-remove-output" class="btn-remove-pin hidden" title="Remove last output pin">- Output</button>

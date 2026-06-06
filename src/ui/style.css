@@ -900,6 +900,22 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
     padding: 2px 6px;
     border-radius: 4px;
 }
+.pin-status-row .input-field {
+    width: 90px !important;
+    padding: 2px 6px !important;
+    font-size: 11px !important;
+    border-radius: 4px !important;
+    text-align: right !important;
+    font-family: var(--font-mono) !important;
+}
+.pin-status-row.dragging {
+    opacity: 0.35;
+    border: 1px dashed rgba(255, 255, 255, 0.15) !important;
+}
+.pin-status-row.drag-hover {
+    border-top: 2px solid var(--accent-cyan) !important;
+    background: rgba(0, 240, 255, 0.04) !important;
+}
 
 .error-container {
     background: rgba(255, 0, 80, 0.12);
@@ -1661,6 +1677,16 @@ body.light-theme .context-menu-item:hover {
 }
 .btn-remove-pin.hidden {
     display: none !important;
+}
+.btn-add-pin:disabled,
+.btn-remove-pin:disabled {
+    opacity: 0.28 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    box-shadow: none !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-muted) !important;
 }
 .btn-delete-pin {
     background: transparent;

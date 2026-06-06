@@ -56,8 +56,8 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         name: 'unconfigured',
         requires: {},
         provides: {},
-        dynamicInputs: false,
-        dynamicOutputs: false,
+        dynamicInputs: true,
+        dynamicOutputs: true,
         execute: async () => ({})
     },
     'molecule/formula': {
@@ -67,7 +67,7 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         requires: { a: 'any', b: 'any' },
         provides: { out: 'any' },
         dynamicInputs: true,
-        dynamicOutputs: false,
+        dynamicOutputs: true,
         execute: async () => ({ out: 0 })
     },
     'molecule/blocks': {
@@ -77,7 +77,7 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         requires: {},
         provides: { out: 'any' },
         dynamicInputs: true,
-        dynamicOutputs: false,
+        dynamicOutputs: true,
         execute: async () => ({ out: 0 })
     },
     'molecule/python': {
@@ -142,7 +142,8 @@ export function extractVariablesFromFormula(formula: string): string[] {
     return Array.from(vars);
 }
 
-export function getNodeInputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
+export function getBaseNodeInputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
+    if (node.inputs) return node.inputs;
     const mode = getNodeMode(node, registry);
     switch (mode) {
         case 'delay':
@@ -189,7 +190,15 @@ export function getNodeInputs(node: NodeState, registry?: NodeRegistry): Record<
     }
 }
 
-export function getNodeOutputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
+export function getNodeInputs(node: NodeState, resolvedInputs?: Record<string, Record<string, PinType>>, registry?: NodeRegistry): Record<string, PinType> {
+    if (resolvedInputs && resolvedInputs[node.id]) {
+        return resolvedInputs[node.id];
+    }
+    return getBaseNodeInputs(node, registry);
+}
+
+export function getBaseNodeOutputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
+    if (node.outputs) return node.outputs;
     const mode = getNodeMode(node, registry);
     switch (mode) {
         case 'delay':
@@ -207,5 +216,12 @@ export function getNodeOutputs(node: NodeState, registry?: NodeRegistry): Record
             return def ? def.provides : {};
         }
     }
+}
+
+export function getNodeOutputs(node: NodeState, resolvedOutputs?: Record<string, Record<string, PinType>>, registry?: NodeRegistry): Record<string, PinType> {
+    if (resolvedOutputs && resolvedOutputs[node.id]) {
+        return resolvedOutputs[node.id];
+    }
+    return getBaseNodeOutputs(node, registry);
 }
 

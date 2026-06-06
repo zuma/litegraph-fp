@@ -265,7 +265,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     // 6. Draw Pins and Labels
     if (nodeDef) {
         // Draw Inputs (Left side)
-        const inputs = Object.entries(getNodeInputs(node));
+        const inputs = Object.entries(getNodeInputs(node, ctx.resolvedInputs));
         inputs.forEach(([pinId, pinType], idx) => {
             const pos = getInputPinPos(node, idx);
             
@@ -290,7 +290,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         });
 
         // Draw Outputs (Right side)
-        const outputs = Object.entries(getNodeOutputs(node));
+        const outputs = Object.entries(getNodeOutputs(node, ctx.resolvedOutputs));
         outputs.forEach(([pinId, pinType], idx) => {
             const pos = getOutputPinPos(node, nodeDef, idx);
             

@@ -507,7 +507,123 @@ export function setupInteractions() {
                     break;
                 }
             }
-            if (pinClicked) break;
+        }
+
+        if (!pinClicked) {
+            for (const nodeId in appState.currentGraph.nodes) {
+                const node = appState.currentGraph.nodes[nodeId];
+                const nodeDef = StandardNodes[node.type];
+                if (!nodeDef) continue;
+
+                const nx = node.ui?.x ?? 0;
+                const ny = node.ui?.y ?? 0;
+                const nw = node.ui?.width ?? NODE_WIDTH;
+                const nh = getNodeHeight(node);
+
+                // Right edge zone (for outputs)
+                const rightX = nx + nw;
+                const rightDistX = Math.abs(worldPos.x - rightX);
+                const rightDistY = worldPos.y - (ny + HEADER_HEIGHT);
+                
+                if (rightDistX <= 12 && rightDistY >= 0 && rightDistY <= nh - HEADER_HEIGHT) {
+                    if (nodeDef.dynamicOutputs) {
+                        pushToHistory();
+                        
+                        const currentOutputs = getNodeOutputs(node);
+                        let nextIdx = 0;
+                        let pinName = `output${nextIdx}`;
+                        while (pinName in currentOutputs) {
+                            nextIdx++;
+                            pinName = `output${nextIdx}`;
+                        }
+
+                        const updatedOutputs = { ...currentOutputs, [pinName]: 'any' as const };
+                        
+                        appState.currentGraph = {
+                            ...appState.currentGraph,
+                            nodes: {
+                                ...appState.currentGraph.nodes,
+                                [node.id]: {
+                                    ...node,
+                                    outputs: updatedOutputs
+                                }
+                            }
+                        };
+                        
+                        const pinIndex = Object.keys(updatedOutputs).length - 1;
+                        const pinY = ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT;
+
+                        if (appState.renderingContext) {
+                            appState.renderingContext.draggingConnection = {
+                                sourceNodeId: node.id,
+                                sourcePinId: pinName,
+                                isInput: false,
+                                x: rightX,
+                                y: pinY,
+                                cursorX: worldPos.x,
+                                cursorY: worldPos.y
+                            };
+                        }
+                        
+                        pinClicked = true;
+                        logToTerminal(`Created output pin '${pinName}' on Node ${node.id} via border drag`, 'system-msg');
+                        updateInspector();
+                        break;
+                    }
+                }
+
+                // Left edge zone (for inputs)
+                const leftX = nx;
+                const leftDistX = Math.abs(worldPos.x - leftX);
+                const leftDistY = worldPos.y - (ny + HEADER_HEIGHT);
+                
+                if (leftDistX <= 12 && leftDistY >= 0 && leftDistY <= nh - HEADER_HEIGHT) {
+                    if (nodeDef.dynamicInputs) {
+                        pushToHistory();
+                        
+                        const currentInputs = getNodeInputs(node);
+                        let nextIdx = 0;
+                        let pinName = `input${nextIdx}`;
+                        while (pinName in currentInputs) {
+                            nextIdx++;
+                            pinName = `input${nextIdx}`;
+                        }
+
+                        const updatedInputs = { ...currentInputs, [pinName]: 'any' as const };
+                        
+                        appState.currentGraph = {
+                            ...appState.currentGraph,
+                            nodes: {
+                                ...appState.currentGraph.nodes,
+                                [node.id]: {
+                                    ...node,
+                                    inputs: updatedInputs
+                                }
+                            }
+                        };
+                        
+                        const pinIndex = Object.keys(updatedInputs).length - 1;
+                        const pinY = ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT;
+
+                        if (appState.renderingContext) {
+                            appState.renderingContext.draggingConnection = {
+                                sourceNodeId: node.id,
+                                sourcePinId: pinName,
+                                isInput: true,
+                                x: leftX,
+                                y: pinY,
+                                cursorX: worldPos.x,
+                                cursorY: worldPos.y
+                            };
+                        }
+                        
+                        pinClicked = true;
+                        logToTerminal(`Created input pin '${pinName}' on Node ${node.id} via border drag`, 'system-msg');
+                        updateInspector();
+                        break;
+                    }
+                }
+            }
         }
 
         if (pinClicked) {
@@ -844,11 +960,16 @@ export function setupInteractions() {
     });
 
     canvas.addEventListener('mouseup', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        const worldPos = screenToWorld(screenX, screenY);
+
         // A. Resolve Edge linkages on connection release
         if (appState.renderingContext?.draggingConnection) {
             const drag = appState.renderingContext.draggingConnection;
             
-            // Check if released over a matching opposite pin
+            // 1. Released over a specific hovered pin
             if (appState.hoveredPin && appState.hoveredPin.nodeId !== drag.sourceNodeId && appState.hoveredPin.isInput !== drag.isInput) {
                 const sourceNodeId = drag.isInput ? appState.hoveredPin.nodeId : drag.sourceNodeId;
                 const sourcePinId = drag.isInput ? appState.hoveredPin.pinId : drag.sourcePinId;
@@ -866,12 +987,9 @@ export function setupInteractions() {
                         const sourceType = getNodeOutputs(sourceNode)[sourcePinId];
                         const targetType = getNodeInputs(targetNode)[targetPinId];
 
-                        // 1. Perform strict schema type-checking validation
                         if (isCompatible(sourceType, targetType)) {
-                            // Capture snapshot before modifying graph edges
                             pushToHistory();
 
-                            // Clear any existing connection leading to targetPin (since inputs can have only 1 source)
                             const cleanedEdges = appState.currentGraph.edges.filter(
                                 edge => !(edge.targetNodeId === targetNodeId && edge.targetPinId === targetPinId)
                             );
@@ -896,7 +1014,110 @@ export function setupInteractions() {
                         }
                     }
                 }
+            } 
+            // 2. Released over a node body (supporting dynamic pin addition on drop)
+            else if (!appState.hoveredPin) {
+                let hitNode: NodeState | null = null;
+                for (const nodeId in appState.currentGraph.nodes) {
+                    const node = appState.currentGraph.nodes[nodeId];
+                    const x = node.ui?.x ?? 0;
+                    const y = node.ui?.y ?? 0;
+                    const w = node.ui?.width ?? NODE_WIDTH;
+                    const nodeDef = StandardNodes[node.type];
+                    const h = getNodeHeight(node);
+
+                    if (worldPos.x >= x && worldPos.x <= x + w && worldPos.y >= y && worldPos.y <= y + h) {
+                        hitNode = node;
+                        break;
+                    }
+                }
+
+                if (hitNode && hitNode.id !== drag.sourceNodeId) {
+                    const hitDef = StandardNodes[hitNode.type];
+                    
+                    if (drag.isInput === false && hitDef?.dynamicInputs) {
+                        // Dragged from output -> drop on hitNode body -> Add Input Pin!
+                        pushToHistory();
+
+                        const currentInputs = getNodeInputs(hitNode);
+                        let nextIdx = 0;
+                        let newPinId = `input${nextIdx}`;
+                        while (newPinId in currentInputs) {
+                            nextIdx++;
+                            newPinId = `input${nextIdx}`;
+                        }
+
+                        const updatedInputs = { ...currentInputs, [newPinId]: 'any' as const };
+                        
+                        const newEdge: Edge = {
+                            id: `edge_${Date.now()}`,
+                            sourceNodeId: drag.sourceNodeId,
+                            sourcePinId: drag.sourcePinId,
+                            targetNodeId: hitNode.id,
+                            targetPinId: newPinId
+                        };
+
+                        appState.currentGraph = {
+                            ...appState.currentGraph,
+                            nodes: {
+                                ...appState.currentGraph.nodes,
+                                [hitNode.id]: {
+                                    ...hitNode,
+                                    inputs: updatedInputs
+                                }
+                            },
+                            edges: [...appState.currentGraph.edges, newEdge]
+                        };
+
+                        logToTerminal(`Added input pin '${newPinId}' and connected to [Node ${drag.sourceNodeId}].${drag.sourcePinId}`, 'system-msg');
+                        updateInspector();
+                        triggerAutoRun();
+                    }
+                    else if (drag.isInput === true && hitDef?.dynamicOutputs) {
+                        // Dragged from input -> drop on hitNode body -> Add Output Pin!
+                        pushToHistory();
+
+                        const currentOutputs = getNodeOutputs(hitNode);
+                        let nextIdx = 0;
+                        let newPinId = `output${nextIdx}`;
+                        while (newPinId in currentOutputs) {
+                            nextIdx++;
+                            newPinId = `output${nextIdx}`;
+                        }
+
+                        const updatedOutputs = { ...currentOutputs, [newPinId]: 'any' as const };
+
+                        const newEdge: Edge = {
+                            id: `edge_${Date.now()}`,
+                            sourceNodeId: hitNode.id,
+                            sourcePinId: newPinId,
+                            targetNodeId: drag.sourceNodeId,
+                            targetPinId: drag.sourcePinId
+                        };
+
+                        const cleanedEdges = appState.currentGraph.edges.filter(
+                            edge => !(edge.targetNodeId === drag.sourceNodeId && edge.targetPinId === drag.sourcePinId)
+                        );
+
+                        appState.currentGraph = {
+                            ...appState.currentGraph,
+                            nodes: {
+                                ...appState.currentGraph.nodes,
+                                [hitNode.id]: {
+                                    ...hitNode,
+                                    outputs: updatedOutputs
+                                }
+                            },
+                            edges: [...cleanedEdges, newEdge]
+                        };
+
+                        logToTerminal(`Added output pin '${newPinId}' and connected to [Node ${drag.sourceNodeId}].${drag.sourcePinId}`, 'system-msg');
+                        updateInspector();
+                        triggerAutoRun();
+                    }
+                }
             }
+            
             appState.renderingContext.draggingConnection = null;
         }
 
@@ -1340,6 +1561,8 @@ export function addNewNode(type: string) {
         type,
         mode,
         params: initialParams,
+        inputs: (isMorphing && unconfiguredNode) ? unconfiguredNode.inputs : undefined,
+        outputs: (isMorphing && unconfiguredNode) ? unconfiguredNode.outputs : undefined,
         ui: {
             x: spawnX,
             y: spawnY,
