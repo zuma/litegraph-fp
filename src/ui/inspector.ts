@@ -790,13 +790,13 @@ export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
 
     const initialParams: Record<string, any> = {};
     if (newMode === 'formula') {
-        initialParams.formula = 'a + b';
+        initialParams.formula = 'in0 + in1';
     } else if (newMode === 'blocks') {
         initialParams.blocks = [
-            { id: `b_${Math.random().toString(36).substr(2, 4)}`, targetVar: 'out', operand1: 'a', operator: '+', operand2: 'b' }
+            { id: `b_${Math.random().toString(36).substr(2, 4)}`, targetVar: 'out0', operand1: 'in0', operator: '+', operand2: 'in1' }
         ];
     } else if (newMode === 'python') {
-        initialParams.code = 'def execute(inputs):\n    # inputs: dict\n    # return dict\n    return { "out": inputs.get("a", 0) + inputs.get("b", 0) }';
+        initialParams.code = 'def execute(inputs):\n    # inputs: dict\n    # return dict\n    return { "out0": inputs.get("in0", 0) + inputs.get("in1", 0) }';
     } else if (newMode === 'delay') {
         initialParams.delayMs = 1000;
     } else if (newMode === 'state') {

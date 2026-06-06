@@ -21,18 +21,18 @@ export const defaultGraph: GraphState = {
             id: 'add_4012',
             type: 'node/formula',
             mode: 'formula',
-            inputs: { a: 'any', b: 'any' },
+            inputs: { in0: 'any', in1: 'any' },
             outputs: { out0: 'any' },
-            params: { formula: 'a + b', a: 10, b: 20 },
+            params: { formula: 'in0 + in1', in0: 10, in1: 20 },
             ui: { x: 100, y: 80, title: 'Input Adder' }
         }),
         'multiply_8930': createNodeState({
             id: 'multiply_8930',
             type: 'node/formula',
             mode: 'formula',
-            inputs: { a: 'any', b: 'any' },
+            inputs: { in0: 'any', in1: 'any' },
             outputs: { out0: 'any' },
-            params: { formula: 'a * b', b: 5 },
+            params: { formula: 'in0 * in1', in1: 5 },
             ui: { x: 380, y: 150, title: 'Scaling Node' }
         }),
         'log_1052': createNodeState({
@@ -45,14 +45,14 @@ export const defaultGraph: GraphState = {
         'delay_7701': createNodeState({
             id: 'delay_7701',
             type: 'system/delay',
-            inputs: { a: 'any', ms: 'number' },
+            inputs: { in0: 'any', ms: 'number' },
             outputs: { out: 'any' },
             params: { delayMs: 999999 }, // High delay to demonstrate watchdog cull!
             ui: { x: 100, y: 350, title: 'Rogue Delayer' }
         })
     },
     edges: [
-        { id: 'edge1', sourceNodeId: 'add_4012', sourcePinId: 'out0', targetNodeId: 'multiply_8930', targetPinId: 'a' },
+        { id: 'edge1', sourceNodeId: 'add_4012', sourcePinId: 'out0', targetNodeId: 'multiply_8930', targetPinId: 'in0' },
         { id: 'edge2', sourceNodeId: 'multiply_8930', sourcePinId: 'out0', targetNodeId: 'log_1052', targetPinId: 'msg' }
     ]
 };

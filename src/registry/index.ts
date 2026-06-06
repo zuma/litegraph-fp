@@ -65,7 +65,7 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         namespace: 'system',
         category: 'system',
         name: 'delay',
-        requires: { a: 'any', ms: 'number' },
+        requires: { in0: 'any', ms: 'number' },
         provides: { out: 'any' },
         dynamicInputs: true,
         dynamicOutputs: true,
@@ -78,7 +78,7 @@ export const StandardNodes: NodeRegistry = Object.freeze({
                     reject(new Error('Aborted'));
                 });
             });
-            return { out: inputs.a };
+            return { out: inputs.in0 };
         }
     },
     'system/state': {
@@ -149,7 +149,7 @@ export function extractVariablesFromFormula(formula: string): string[] {
 export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
     switch (mode) {
         case 'delay':
-            return { a: 'any', ms: 'number' };
+            return { in0: 'any', ms: 'number' };
         case 'state':
             return { value: 'any', defaultValue: 'any', nextValue: 'any' };
         case 'formula': {

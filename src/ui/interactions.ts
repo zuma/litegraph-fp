@@ -757,10 +757,10 @@ export function setupInteractions() {
                         
                         const currentInputs = getNodeInputs(node);
                         let nextIdx = 0;
-                        let pinName = `input${nextIdx}`;
+                        let pinName = `in${nextIdx}`;
                         while (pinName in currentInputs) {
                             nextIdx++;
-                            pinName = `input${nextIdx}`;
+                            pinName = `in${nextIdx}`;
                         }
 
                         const updatedInputs = { ...currentInputs, [pinName]: 'any' as const };
@@ -950,7 +950,7 @@ export function setupInteractions() {
         }
     });
 
-    canvas.addEventListener('mousemove', (e) => {
+    window.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -1167,7 +1167,7 @@ export function setupInteractions() {
         }
     });
 
-    canvas.addEventListener('mouseup', (e) => {
+    window.addEventListener('mouseup', (e) => {
         if (e.button === 2) return;
         const rect = canvas.getBoundingClientRect();
         const screenX = e.clientX - rect.left;
@@ -1257,10 +1257,10 @@ export function setupInteractions() {
 
                         const currentInputs = getNodeInputs(hitNode);
                         let nextIdx = 0;
-                        let newPinId = `input${nextIdx}`;
+                        let newPinId = `in${nextIdx}`;
                         while (newPinId in currentInputs) {
                             nextIdx++;
-                            newPinId = `input${nextIdx}`;
+                            newPinId = `in${nextIdx}`;
                         }
 
                         const updatedInputs = { ...currentInputs, [newPinId]: 'any' as const };
