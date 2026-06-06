@@ -7,12 +7,14 @@ export interface AppSettings {
         sidebarCollapsed: boolean;
         inspectorExpanded: boolean;
         astExpanded: boolean;
+        logsExpanded: boolean;
     };
     canvas: {
         autoRun: boolean;
         snapToGrid: boolean;
         autoBringToFront: boolean;
         edgeStyle: 'spline' | 'orthogonal';
+        gridStyle?: 'dot' | 'line';
         camera: { x: number; y: number; zoom: number };
         backgroundColor?: string;
     };
@@ -27,12 +29,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
         sidebarCollapsed: true, // Maximize viewport by default
         inspectorExpanded: true,
         astExpanded: false,
+        logsExpanded: true,
     },
     canvas: {
         autoRun: true,
         snapToGrid: false,
         autoBringToFront: true,
         edgeStyle: 'spline',
+        gridStyle: 'dot',
         camera: { x: 0, y: 0, zoom: 1.0 },
         backgroundColor: '#f3f4f6',
     },

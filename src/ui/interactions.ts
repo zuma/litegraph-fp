@@ -1230,9 +1230,10 @@ export function showNodeAdder(screenX: number, screenY: number) {
     syncContextState();
     updateInspector();
 
-    // 2. Position HTML search adder exactly on top of the newly created node
+    // 2. Position HTML search adder below the newly created node so it doesn't cover it
+    const nodeH = getNodeHeight(newNode);
     const sx = newNode.ui!.x * appState.viewport.zoom + appState.viewport.x;
-    const sy = newNode.ui!.y * appState.viewport.zoom + appState.viewport.y;
+    const sy = (newNode.ui!.y + nodeH + 8) * appState.viewport.zoom + appState.viewport.y;
 
     adder.style.left = `${sx}px`;
     adder.style.top = `${sy}px`;

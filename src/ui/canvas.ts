@@ -84,15 +84,37 @@ export function drawGrid(renderingCtx: RenderingContext, computedStyle: CSSStyle
     const startX = ((x % scaledGrid) + scaledGrid) % scaledGrid;
     const startY = ((y % scaledGrid) + scaledGrid) % scaledGrid;
 
-    // Adjust grid dot opacity and color based on theme
     const isLight = document.body.classList.contains('light-theme');
-    ctx.fillStyle = isLight ? 'rgba(0, 0, 0, 0.07)' : 'rgba(255, 255, 255, 0.04)';
     
-    for (let gx = startX - scaledGrid; gx < canvas.width + scaledGrid; gx += scaledGrid) {
+    if (renderingCtx.gridStyle === 'line') {
+        // Draw grid lines
+        ctx.lineWidth = 1 * Math.max(0.3, zoom);
+        ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.03)';
+        
+        // Vertical lines
+        for (let gx = startX - scaledGrid; gx < canvas.width + scaledGrid; gx += scaledGrid) {
+            ctx.beginPath();
+            ctx.moveTo(gx, 0);
+            ctx.lineTo(gx, canvas.height);
+            ctx.stroke();
+        }
+        
+        // Horizontal lines
         for (let gy = startY - scaledGrid; gy < canvas.height + scaledGrid; gy += scaledGrid) {
             ctx.beginPath();
-            ctx.arc(gx, gy, 1.2 * Math.max(0.5, zoom), 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(0, gy);
+            ctx.lineTo(canvas.width, gy);
+            ctx.stroke();
+        }
+    } else {
+        // Draw grid dots (default)
+        ctx.fillStyle = isLight ? 'rgba(0, 0, 0, 0.07)' : 'rgba(255, 255, 255, 0.04)';
+        for (let gx = startX - scaledGrid; gx < canvas.width + scaledGrid; gx += scaledGrid) {
+            for (let gy = startY - scaledGrid; gy < canvas.height + scaledGrid; gy += scaledGrid) {
+                ctx.beginPath();
+                ctx.arc(gx, gy, 1.2 * Math.max(0.5, zoom), 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
     }
     
@@ -100,7 +122,7 @@ export function drawGrid(renderingCtx: RenderingContext, computedStyle: CSSStyle
 }
 
 export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDefinition | undefined, computedStyle: CSSStyleDeclaration) {
-    if (node.ui?.isMorphing || node.type === 'molecule/unconfigured') return;
+    if (node.ui?.isMorphing) return;
     const context = ctx.ctx;
     const x = node.ui?.x ?? 0;
     const y = node.ui?.y ?? 0;
@@ -425,22 +447,28 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         }
     }
     // 9. Draw Card Border Outline last (only on selection or error state to declutter the canvas)
-    if (isSelected || hasError) {
+    if (isSelected || hasError || node.type === 'molecule/unconfigured') {
         context.beginPath();
         context.roundRect(x, y, w, h, 10);
-        context.lineWidth = 2.5;
-        if (hasError) {
+        context.lineWidth = node.type === 'molecule/unconfigured' ? 1.5 : 2.5;
+        if (node.type === 'molecule/unconfigured') {
+            context.setLineDash([4, 4]);
+            context.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.24)' : 'rgba(255, 255, 255, 0.24)';
+        } else if (hasError) {
+            context.setLineDash([]);
             let borderGrad = context.createLinearGradient(x, y, x, y + h);
             borderGrad.addColorStop(0, 'rgba(255, 0, 80, 1.0)');
             borderGrad.addColorStop(1, 'rgba(255, 0, 80, 0.7)');
             context.strokeStyle = borderGrad;
         } else if (isSelected) {
+            context.setLineDash([]);
             let borderGrad = context.createLinearGradient(x, y, x, y + h);
             borderGrad.addColorStop(0, isLight ? 'rgba(0, 100, 255, 1.0)' : 'rgba(0, 145, 255, 1.0)');
             borderGrad.addColorStop(1, isLight ? 'rgba(0, 60, 255, 0.7)' : 'rgba(0, 100, 255, 0.7)');
             context.strokeStyle = borderGrad;
         }
         context.stroke();
+        context.setLineDash([]);
     }
 
     // 9.5 Specular Top Catch-Light Highlight (Adopting Liquid Glass reflection)

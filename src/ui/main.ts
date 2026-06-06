@@ -8,6 +8,7 @@ import { setupInteractions, deleteSelectedNodes, zoomExtents, closeNodeAdder } f
 import { undo, redo, pushToHistory } from './history.js';
 import { loadSettings, updateSetting } from './settings.js';
 import { autoLayoutGraph } from './layout.js';
+import { watchLiquidGlass } from './liquid_glass.js';
 
 window.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('graph-canvas') as HTMLCanvasElement;
@@ -54,6 +55,8 @@ window.addEventListener('DOMContentLoaded', () => {
         nodeErrors: appState.nodeErrors,
         selectionBox: null,
         lastExecutionTime: 0,
+        edgeStyle: settings.canvas.edgeStyle,
+        gridStyle: settings.canvas.gridStyle || 'dot',
         needsRedraw: true
     };
 
@@ -269,6 +272,30 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Initialize and bind Grid Style state
+    const menuLblGridStyle = document.getElementById('menu-lbl-grid-style');
+    const menuToggleGridStyle = document.getElementById('menu-toggle-grid-style');
+
+    function updateGridStyleLabel(style: 'dot' | 'line') {
+        if (menuLblGridStyle) {
+            menuLblGridStyle.textContent = `🌐 Grid Style: ${style === 'line' ? 'Line' : 'Dot'}`;
+        }
+    }
+
+    updateGridStyleLabel(settings.canvas.gridStyle || 'dot');
+
+    menuToggleGridStyle?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const currentSettings = loadSettings();
+        const newStyle = currentSettings.canvas.gridStyle === 'line' ? 'dot' : 'line';
+        updateSetting('canvas', 'gridStyle', newStyle);
+        updateGridStyleLabel(newStyle);
+        if (appState.renderingContext) {
+            appState.renderingContext.gridStyle = newStyle;
+            appState.renderingContext.needsRedraw = true;
+        }
+    });
+
     // Theme Management initialization and click handlers
     const chkDarkMode = document.getElementById('menu-chk-darkmode') as HTMLInputElement | null;
 
@@ -420,6 +447,23 @@ window.addEventListener('DOMContentLoaded', () => {
     astHeader?.addEventListener('click', () => {
         const wasExpanded = astSection?.classList.toggle('expanded');
         updateSetting('layout', 'astExpanded', !!wasExpanded);
+    });
+
+    // Toggle Logs Collapsible block
+    const logsHeader = document.getElementById('logs-header');
+    const logsSection = document.getElementById('logs-section');
+    if (logsSection) {
+        if (settings.layout.logsExpanded !== false) {
+            logsSection.classList.add('expanded');
+        } else {
+            logsSection.classList.remove('expanded');
+        }
+    }
+    logsHeader?.addEventListener('click', (e) => {
+        // Clear button click should not trigger collapse
+        if ((e.target as HTMLElement).closest('#btn-clear-logs')) return;
+        const wasExpanded = logsSection?.classList.toggle('expanded');
+        updateSetting('layout', 'logsExpanded', !!wasExpanded);
     });
 
     // Close Adder
@@ -589,4 +633,42 @@ window.addEventListener('DOMContentLoaded', () => {
             zoomControls.style.setProperty('--mouse-y', `-999px`);
         });
     }
+
+    // Apply dynamic Liquid Glass UI effect to all glass panels in the DOM
+    const glassPanels = document.querySelectorAll('.glass-panel');
+    const glassCleanups: (() => void)[] = [];
+    
+    glassPanels.forEach(panel => {
+        let bezelWidth = 12;
+        let refractionScale = 36;
+        let backdropBlur = 18;
+        let specularOpacity = 0.24;
+        
+        if (panel.id === 'sidebar' || panel.id === 'zoom-toolbar') {
+            bezelWidth = 6;
+            refractionScale = 24;
+            backdropBlur = 6;
+            specularOpacity = 0.18;
+        } else if (panel.id === 'context-menu' || panel.id === 'main-dropdown-menu' || panel.id === 'main-settings-submenu') {
+            bezelWidth = 9;
+            refractionScale = 27;
+            backdropBlur = 12;
+            specularOpacity = 0.24;
+        } else if (panel.id === 'app-header') {
+            bezelWidth = 12;
+            refractionScale = 48;
+            backdropBlur = 18;
+            specularOpacity = 0.24;
+        }
+
+        const cleanup = watchLiquidGlass(panel as HTMLElement, {
+            bezelWidth,
+            refractionScale,
+            backdropBlur,
+            blurLevel: 0.2, // Small anti-aliasing inside SVG
+            specularOpacity,
+            downsample: 2
+        });
+        glassCleanups.push(cleanup);
+    });
 });

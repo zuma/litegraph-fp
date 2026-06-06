@@ -40,33 +40,74 @@ export function updateInspector() {
 
 
 
-    // Add Pin buttons setup
-    const btnAddInput = document.getElementById('btn-add-input');
-    const btnAddOutput = document.getElementById('btn-add-output');
+    const activeMode = getNodeMode(node);
+    const isPython = activeMode === 'python';
 
-    if (btnAddInput) {
-        if (nodeDef?.dynamicInputs) {
+    // Add/Remove Pin buttons setup
+    const btnAddInput = document.getElementById('btn-add-input');
+    const btnRemoveInput = document.getElementById('btn-remove-input');
+    const btnAddOutput = document.getElementById('btn-add-output');
+    const btnRemoveOutput = document.getElementById('btn-remove-output');
+
+    if (btnAddInput && btnRemoveInput) {
+        if (nodeDef?.dynamicInputs && isPython) {
             btnAddInput.classList.remove('hidden');
-            const newBtn = btnAddInput.cloneNode(true) as HTMLButtonElement;
-            btnAddInput.parentNode?.replaceChild(newBtn, btnAddInput);
-            newBtn.addEventListener('click', () => {
+            
+            const deletableInputs = node.inputs ? Object.keys(node.inputs).filter(
+                pinId => !(nodeDef && pinId in nodeDef.requires)
+            ) : [];
+            const hasCustomInputs = deletableInputs.length > 0;
+            if (hasCustomInputs) {
+                btnRemoveInput.classList.remove('hidden');
+            } else {
+                btnRemoveInput.classList.add('hidden');
+            }
+
+            const newAddBtn = btnAddInput.cloneNode(true) as HTMLButtonElement;
+            btnAddInput.parentNode?.replaceChild(newAddBtn, btnAddInput);
+            newAddBtn.addEventListener('click', () => {
                 handleAddInputPin(node.id);
+            });
+
+            const newRemoveBtn = btnRemoveInput.cloneNode(true) as HTMLButtonElement;
+            btnRemoveInput.parentNode?.replaceChild(newRemoveBtn, btnRemoveInput);
+            newRemoveBtn.addEventListener('click', () => {
+                handleRemoveLastInputPin(node.id);
             });
         } else {
             btnAddInput.classList.add('hidden');
+            btnRemoveInput.classList.add('hidden');
         }
     }
 
-    if (btnAddOutput) {
-        if (nodeDef?.dynamicOutputs) {
+    if (btnAddOutput && btnRemoveOutput) {
+        if (nodeDef?.dynamicOutputs && isPython) {
             btnAddOutput.classList.remove('hidden');
-            const newBtn = btnAddOutput.cloneNode(true) as HTMLButtonElement;
-            btnAddOutput.parentNode?.replaceChild(newBtn, btnAddOutput);
-            newBtn.addEventListener('click', () => {
+            
+            const deletableOutputs = node.outputs ? Object.keys(node.outputs).filter(
+                pinId => !(nodeDef && pinId in nodeDef.provides)
+            ) : [];
+            const hasCustomOutputs = deletableOutputs.length > 0;
+            if (hasCustomOutputs) {
+                btnRemoveOutput.classList.remove('hidden');
+            } else {
+                btnRemoveOutput.classList.add('hidden');
+            }
+
+            const newAddBtn = btnAddOutput.cloneNode(true) as HTMLButtonElement;
+            btnAddOutput.parentNode?.replaceChild(newAddBtn, btnAddOutput);
+            newAddBtn.addEventListener('click', () => {
                 handleAddOutputPin(node.id);
+            });
+
+            const newRemoveBtn = btnRemoveOutput.cloneNode(true) as HTMLButtonElement;
+            btnRemoveOutput.parentNode?.replaceChild(newRemoveBtn, btnRemoveOutput);
+            newRemoveBtn.addEventListener('click', () => {
+                handleRemoveLastOutputPin(node.id);
             });
         } else {
             btnAddOutput.classList.add('hidden');
+            btnRemoveOutput.classList.add('hidden');
         }
     }
     // Node mode selector configuration
@@ -287,7 +328,7 @@ export function updateInspector() {
                 label.textContent = `${pinId} (${pinType})`;
                 labelRow.appendChild(label);
 
-                const isDynamic = !!(node.inputs && pinId in node.inputs);
+                const isDynamic = !!(node.inputs && pinId in node.inputs && !(nodeDef && pinId in nodeDef.requires));
                 if (isDynamic) {
                     const btnDel = document.createElement('button');
                     btnDel.className = 'btn-delete-pin';
@@ -412,7 +453,7 @@ export function updateInspector() {
             nameSpan.textContent = pinId;
             leftContainer.appendChild(nameSpan);
 
-            const isDynamic = !!(node.outputs && pinId in node.outputs);
+            const isDynamic = !!(node.outputs && pinId in node.outputs && !(nodeDef && pinId in nodeDef.provides));
             if (isDynamic) {
                 const btnDel = document.createElement('button');
                 btnDel.className = 'btn-delete-pin';
@@ -502,22 +543,19 @@ export function updateNodeTitle(nodeId: string, title: string) {
 }
 
 export function handleAddInputPin(nodeId: string) {
-    const pinName = prompt("Enter input pin name:");
-    if (!pinName) return;
-    const sanitized = pinName.trim().toLowerCase();
-    if (!sanitized) return;
-
     const node = appState.currentGraph.nodes[nodeId];
     if (!node) return;
     
     const requires = getNodeInputs(node);
-    if (sanitized in requires) {
-        alert(`An input pin named '${sanitized}' already exists.`);
-        return;
+    let nextIndex = 0;
+    let pinName = `input${nextIndex}`;
+    while (pinName in requires) {
+        nextIndex++;
+        pinName = `input${nextIndex}`;
     }
 
     pushToHistory();
-    const updatedInputs = { ...(node.inputs ?? {}), [sanitized]: 'any' };
+    const updatedInputs = { ...requires, [pinName]: 'any' };
     appState.currentGraph = {
         ...appState.currentGraph,
         nodes: {
@@ -536,22 +574,19 @@ export function handleAddInputPin(nodeId: string) {
 }
 
 export function handleAddOutputPin(nodeId: string) {
-    const pinName = prompt("Enter output pin name:");
-    if (!pinName) return;
-    const sanitized = pinName.trim().toLowerCase();
-    if (!sanitized) return;
-
     const node = appState.currentGraph.nodes[nodeId];
     if (!node) return;
     
     const provides = getNodeOutputs(node);
-    if (sanitized in provides) {
-        alert(`An output pin named '${sanitized}' already exists.`);
-        return;
+    let nextIndex = 0;
+    let pinName = `output${nextIndex}`;
+    while (pinName in provides) {
+        nextIndex++;
+        pinName = `output${nextIndex}`;
     }
 
     pushToHistory();
-    const updatedOutputs = { ...(node.outputs ?? {}), [sanitized]: 'any' };
+    const updatedOutputs = { ...provides, [pinName]: 'any' };
     appState.currentGraph = {
         ...appState.currentGraph,
         nodes: {
@@ -629,6 +664,33 @@ export function handleDeleteOutputPin(nodeId: string, pinId: string) {
     triggerAutoRun();
 }
 
+export function handleRemoveLastInputPin(nodeId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node || !node.inputs) return;
+    const nodeDef = StandardNodes[node.type];
+
+    const deletablePins = Object.keys(node.inputs).filter(
+        pinId => !(nodeDef && pinId in nodeDef.requires)
+    );
+    if (deletablePins.length === 0) return;
+
+    const pinIdToDelete = deletablePins[deletablePins.length - 1];
+    handleDeleteInputPin(nodeId, pinIdToDelete);
+}
+
+export function handleRemoveLastOutputPin(nodeId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node || !node.outputs) return;
+    const nodeDef = StandardNodes[node.type];
+
+    const deletablePins = Object.keys(node.outputs).filter(
+        pinId => !(nodeDef && pinId in nodeDef.provides)
+    );
+    if (deletablePins.length === 0) return;
+
+    const pinIdToDelete = deletablePins[deletablePins.length - 1];
+}
+
 export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
     const node = appState.currentGraph.nodes[nodeId];
     if (!node) return;
@@ -667,9 +729,7 @@ export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
             [nodeId]: {
                 ...node,
                 mode: newMode,
-                params: initialParams,
-                inputs: undefined,
-                outputs: undefined
+                params: initialParams
             }
         },
         edges: updatedEdges
