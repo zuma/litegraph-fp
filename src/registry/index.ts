@@ -36,20 +36,20 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         category: 'node',
         name: 'formula',
         requires: {},
-        provides: { out: 'any' },
+        provides: { out0: 'any' },
         dynamicInputs: true,
         dynamicOutputs: true,
-        execute: async () => ({ out: 0 })
+        execute: async () => ({ out0: 0 })
     },
     'node/blocks': {
         namespace: 'node',
         category: 'node',
         name: 'blocks',
         requires: {},
-        provides: { out: 'any' },
+        provides: { out0: 'any' },
         dynamicInputs: true,
         dynamicOutputs: true,
-        execute: async () => ({ out: 0 })
+        execute: async () => ({ out0: 0 })
     },
     'node/python': {
         namespace: 'node',
@@ -115,7 +115,7 @@ export function getNodeMode(node: { type: string; mode?: NodeMode }, registry?: 
     if (node.type === 'node/formula') return 'formula';
     if (node.type === 'node/blocks') return 'blocks';
     if (node.type === 'node/python') return 'python';
-    if (node.type === 'node/generic') return 'state';
+    if (node.type === 'node/unconfigured') return 'formula';
 
     const isRegistered = (registry && node.type in registry) || (node.type in StandardNodes);
     if (isRegistered) {
@@ -146,9 +146,7 @@ export function extractVariablesFromFormula(formula: string): string[] {
     return Array.from(vars);
 }
 
-export function getBaseNodeInputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
-    if (node.inputs) return node.inputs;
-    const mode = getNodeMode(node, registry);
+export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
     switch (mode) {
         case 'delay':
             return { a: 'any', ms: 'number' };
@@ -187,11 +185,16 @@ export function getBaseNodeInputs(node: NodeState, registry?: NodeRegistry): Rec
         }
         case 'python':
         default: {
-            if (node.inputs) return node.inputs;
             const def = registry ? registry[node.type] : StandardNodes[node.type];
             return def ? def.requires : {};
         }
     }
+}
+
+export function getBaseNodeInputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
+    const mode = getNodeMode(node, registry);
+    const base = getModeBaseInputs(mode, node, registry);
+    return { ...base, ...node.inputs };
 }
 
 export function getNodeInputs(node: NodeState, resolvedInputs?: Record<string, Record<string, PinType>>, registry?: NodeRegistry): Record<string, PinType> {
@@ -201,25 +204,28 @@ export function getNodeInputs(node: NodeState, resolvedInputs?: Record<string, R
     return getBaseNodeInputs(node, registry);
 }
 
-export function getBaseNodeOutputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
-    if (node.outputs) return node.outputs;
-    const mode = getNodeMode(node, registry);
+export function getModeBaseOutputs(mode: NodeMode, nodeType: string, registry?: NodeRegistry): Record<string, PinType> {
     switch (mode) {
         case 'delay':
             return { out: 'any' };
         case 'state':
             return { value: 'any' };
         case 'formula':
-            return { out: 'any' };
+            return { out0: 'any' };
         case 'blocks':
-            return { out: 'any' };
+            return { out0: 'any' };
         case 'python':
         default: {
-            if (node.outputs) return node.outputs;
-            const def = registry ? registry[node.type] : StandardNodes[node.type];
+            const def = registry ? registry[nodeType] : StandardNodes[nodeType];
             return def ? def.provides : {};
         }
     }
+}
+
+export function getBaseNodeOutputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
+    const mode = getNodeMode(node, registry);
+    const base = getModeBaseOutputs(mode, node.type, registry);
+    return { ...base, ...node.outputs };
 }
 
 export function getNodeOutputs(node: NodeState, resolvedOutputs?: Record<string, Record<string, PinType>>, registry?: NodeRegistry): Record<string, PinType> {

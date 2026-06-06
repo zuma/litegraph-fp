@@ -1,4 +1,4 @@
-import { StandardNodes, getNodeInputs, getNodeOutputs, getNodeMode, getDefaultFormulaForType } from '../registry/index.js';
+import { StandardNodes, getNodeInputs, getNodeOutputs, getNodeMode, getDefaultFormulaForType, getModeBaseInputs, getModeBaseOutputs } from '../registry/index.js';
 import { NodeMode, NodeState, PinType } from '../core/ast.js';
 import { NodeDefinition } from '../registry/types.js';
 import { appState } from './state.js';
@@ -10,6 +10,28 @@ import { triggerAutoRun } from './execution.js';
 // ============================================================================
 
 export function updateInspector() {
+    // 1. Remember focused element details to restore after rebuild
+    const activeEl = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+    let focusInfo: {
+        formulaInput?: boolean;
+        blockId?: string;
+        blockField?: string;
+        pinId?: string;
+        selectionStart: number;
+        selectionEnd: number;
+    } | null = null;
+
+    if (activeEl && activeEl.closest('#sidebar')) {
+        focusInfo = {
+            formulaInput: activeEl.dataset.formulaInput === 'true',
+            blockId: activeEl.dataset.blockId,
+            blockField: activeEl.dataset.blockField,
+            pinId: activeEl.dataset.pinId,
+            selectionStart: activeEl.selectionStart || 0,
+            selectionEnd: activeEl.selectionEnd || 0
+        };
+    }
+
     const placeholder = document.getElementById('inspector-placeholder');
     const content = document.getElementById('inspector-content');
     
@@ -211,6 +233,13 @@ export function updateInspector() {
             formulaInput.style.width = '100%';
             formulaInput.value = node.params.formula ?? getDefaultFormulaForType(node.type);
             formulaInput.autocomplete = 'off';
+            formulaInput.dataset.formulaInput = 'true';
+            setupAutocomplete(formulaInput, () => {
+                const inputPins = Object.keys(getNodeInputs(node, appState.resolvedInputs));
+                const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
+                const mathHelpers = ['sin', 'cos', 'abs', 'round', 'min', 'max', 'pi', 'e', 'value'];
+                return Array.from(new Set([...inputPins, ...outputPins, ...mathHelpers]));
+            });
 
             formulaInput.addEventListener('focus', () => {
                 appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
@@ -258,6 +287,8 @@ export function updateInspector() {
                 targetInput.style.padding = '3px 6px';
                 targetInput.style.fontSize = '11px';
                 targetInput.style.fontFamily = 'var(--font-mono)';
+                targetInput.dataset.blockId = block.id;
+                targetInput.dataset.blockField = 'targetVar';
                 targetInput.addEventListener('change', () => {
                     updateBlockField(node.id, block.id, 'targetVar', targetInput.value);
                 });
@@ -281,6 +312,8 @@ export function updateInspector() {
                 op1Input.style.padding = '3px 6px';
                 op1Input.style.fontSize = '11px';
                 op1Input.style.fontFamily = 'var(--font-mono)';
+                op1Input.dataset.blockId = block.id;
+                op1Input.dataset.blockField = 'operand1';
                 op1Input.addEventListener('change', () => {
                     updateBlockField(node.id, block.id, 'operand1', op1Input.value);
                 });
@@ -321,6 +354,8 @@ export function updateInspector() {
                 op2Input.style.padding = '3px 6px';
                 op2Input.style.fontSize = '11px';
                 op2Input.style.fontFamily = 'var(--font-mono)';
+                op2Input.dataset.blockId = block.id;
+                op2Input.dataset.blockField = 'operand2';
                 op2Input.addEventListener('change', () => {
                     updateBlockField(node.id, block.id, 'operand2', op2Input.value);
                 });
@@ -397,10 +432,46 @@ export function updateInspector() {
     if (outputsContainer && nodeDef) {
         outputsContainer.replaceChildren();
 
+        const mode = getNodeMode(node);
+        const baseOutputs = getModeBaseOutputs(mode, node.type);
         const provides = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
+
+        if (provides.length > 0) {
+            const header = document.createElement('div');
+            header.className = 'pin-table-header';
+            
+            const nameH = document.createElement('span');
+            nameH.className = 'pin-header-col left';
+            nameH.textContent = 'Name';
+            header.appendChild(nameH);
+            
+            const srcH = document.createElement('span');
+            srcH.className = 'pin-header-col';
+            srcH.textContent = 'SRC';
+            header.appendChild(srcH);
+            
+            const valH = document.createElement('span');
+            valH.className = 'pin-header-col';
+            valH.textContent = 'Value';
+            header.appendChild(valH);
+            
+            const destH = document.createElement('span');
+            destH.className = 'pin-header-col';
+            destH.textContent = 'DEST';
+            header.appendChild(destH);
+            
+            outputsContainer.appendChild(header);
+        }
+
         provides.forEach(pinId => {
             const row = document.createElement('div');
             row.className = 'pin-status-row';
+            const isActive = pinId in baseOutputs;
+            if (!isActive) {
+                row.style.opacity = '0.5';
+                row.style.filter = 'grayscale(1)';
+                row.title = `This output is inactive in '${mode}' mode.`;
+            }
             row.draggable = true;
 
             row.addEventListener('dragstart', (e) => {
@@ -434,15 +505,16 @@ export function updateInspector() {
                 }
             });
 
-            const leftContainer = document.createElement('div');
-            leftContainer.style.display = 'flex';
-            leftContainer.style.alignItems = 'center';
-            leftContainer.style.gap = '8px';
+            // Column 1: Name
+            const nameRow = document.createElement('div');
+            nameRow.style.display = 'flex';
+            nameRow.style.alignItems = 'center';
+            nameRow.style.gap = '6px';
 
             const nameSpan = document.createElement('span');
             nameSpan.className = 'pin-name';
             nameSpan.textContent = pinId;
-            leftContainer.appendChild(nameSpan);
+            nameRow.appendChild(nameSpan);
 
             const isDynamic = !!(node.outputs && pinId in node.outputs && !(nodeDef && pinId in nodeDef.provides));
             if (isDynamic) {
@@ -453,51 +525,51 @@ export function updateInspector() {
                 btnDel.addEventListener('click', () => {
                     handleDeleteOutputPin(node.id, pinId);
                 });
-                leftContainer.appendChild(btnDel);
+                nameRow.appendChild(btnDel);
             }
-            row.appendChild(leftContainer);
-
-            const rightContainer = document.createElement('div');
-            rightContainer.style.display = 'flex';
-            rightContainer.style.alignItems = 'center';
-            rightContainer.style.gap = '6px';
+            row.appendChild(nameRow);
 
             const isConnected = appState.currentGraph.edges.some(e => e.sourceNodeId === node.id && e.sourcePinId === pinId);
             const stateKey = `${node.id}.${pinId}`;
             const val = appState.latestExecutionState[stateKey];
-            const hasValue = val !== undefined;
+            const flowFlow = getOutputPinFlow(node, pinId);
 
-            const statusBadge = document.createElement('span');
-            statusBadge.className = 'badge';
-            statusBadge.style.fontSize = '9px';
-            statusBadge.style.padding = '1px 3px';
-            statusBadge.style.textTransform = 'uppercase';
-            statusBadge.style.fontWeight = 'bold';
-
-            if (isConnected) {
-                statusBadge.style.borderColor = 'rgba(255,255,255,0.05)';
-                statusBadge.style.background = 'rgba(255,255,255,0.02)';
-                statusBadge.style.color = 'var(--text-muted)';
-                statusBadge.textContent = '🔌 Wired';
-            } else if (hasValue) {
-                statusBadge.style.borderColor = 'rgba(0, 255, 128, 0.15)';
-                statusBadge.style.background = 'rgba(0, 255, 128, 0.03)';
-                statusBadge.style.color = '#00ff80';
-                statusBadge.textContent = '⚙️ Value';
+            // Column 2: SRC
+            const srcSpan = document.createElement('span');
+            srcSpan.className = 'pin-col-text';
+            if (!isActive) {
+                srcSpan.className += ' inactive';
+                srcSpan.textContent = '—';
             } else {
-                statusBadge.style.borderColor = 'rgba(255, 70, 70, 0.15)';
-                statusBadge.style.background = 'rgba(255, 70, 70, 0.03)';
-                statusBadge.style.color = '#ff4646';
-                statusBadge.textContent = '❓ Undefined';
+                srcSpan.className += ' active-src';
+                srcSpan.textContent = flowFlow.src;
+                srcSpan.title = flowFlow.src;
             }
-            rightContainer.appendChild(statusBadge);
+            row.appendChild(srcSpan);
 
+            // Column 3: Value
+            const valCol = document.createElement('div');
+            valCol.className = 'pin-col-val';
             const valSpan = document.createElement('span');
             valSpan.className = 'pin-val';
             valSpan.textContent = val !== undefined ? JSON.stringify(val) : 'undefined';
-            rightContainer.appendChild(valSpan);
+            valCol.appendChild(valSpan);
+            row.appendChild(valCol);
 
-            row.appendChild(rightContainer);
+            // Column 4: DEST
+            const destSpan = document.createElement('span');
+            destSpan.className = 'pin-col-text';
+            if (!isActive) {
+                destSpan.className += ' inactive';
+                destSpan.textContent = '—';
+            } else if (isConnected) {
+                destSpan.className += ' active-dest';
+                destSpan.textContent = flowFlow.dest;
+                destSpan.title = flowFlow.dest;
+            } else {
+                destSpan.textContent = '—';
+            }
+            row.appendChild(destSpan);
 
             outputsContainer.appendChild(row);
         });
@@ -520,6 +592,25 @@ export function updateInspector() {
         } else {
             errorsContainer.classList.add('hidden');
             errorsContainer.textContent = '';
+        }
+    }
+
+    // 4. Restore focus if active element was recreated
+    if (focusInfo && content) {
+        let targetEl: HTMLInputElement | HTMLTextAreaElement | null = null;
+        if (focusInfo.formulaInput) {
+            targetEl = content.querySelector('input[data-formula-input="true"]');
+        } else if (focusInfo.blockId && focusInfo.blockField) {
+            targetEl = content.querySelector(
+                `input[data-block-id="${focusInfo.blockId}"][data-block-field="${focusInfo.blockField}"]`
+            );
+        } else if (focusInfo.pinId) {
+            targetEl = content.querySelector(`input[data-pin-id="${focusInfo.pinId}"]`);
+        }
+
+        if (targetEl) {
+            targetEl.focus();
+            targetEl.setSelectionRange(focusInfo.selectionStart, focusInfo.selectionEnd);
         }
     }
 }
@@ -573,10 +664,10 @@ export function handleAddInputPin(nodeId: string) {
     
     const requires = getNodeInputs(node);
     let nextIndex = 0;
-    let pinName = `input${nextIndex}`;
+    let pinName = `in${nextIndex}`;
     while (pinName in requires) {
         nextIndex++;
-        pinName = `input${nextIndex}`;
+        pinName = `in${nextIndex}`;
     }
 
     pushToHistory();
@@ -604,10 +695,10 @@ export function handleAddOutputPin(nodeId: string) {
     
     const provides = getNodeOutputs(node);
     let nextIndex = 0;
-    let pinName = `output${nextIndex}`;
+    let pinName = `out${nextIndex}`;
     while (pinName in provides) {
         nextIndex++;
-        pinName = `output${nextIndex}`;
+        pinName = `out${nextIndex}`;
     }
 
     pushToHistory();
@@ -712,7 +803,20 @@ export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
         initialParams.defaultValue = 0;
     }
 
-    const tempNode = { ...node, mode: newMode, params: initialParams };
+    let newType = node.type;
+    if (newMode === 'formula') {
+        newType = 'node/formula';
+    } else if (newMode === 'blocks') {
+        newType = 'node/blocks';
+    } else if (newMode === 'python') {
+        newType = 'node/python';
+    } else if (newMode === 'delay') {
+        newType = 'system/delay';
+    } else if (newMode === 'state') {
+        newType = 'system/state';
+    }
+
+    const tempNode = { ...node, type: newType, mode: newMode, params: initialParams };
     const nextInputs = getNodeInputs(tempNode);
     const nextOutputs = getNodeOutputs(tempNode);
 
@@ -726,11 +830,7 @@ export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
         ...appState.currentGraph,
         nodes: {
             ...appState.currentGraph.nodes,
-            [nodeId]: {
-                ...node,
-                mode: newMode,
-                params: initialParams
-            }
+            [nodeId]: tempNode
         },
         edges: updatedEdges
     };
@@ -746,7 +846,11 @@ export function updateNodeFormula(nodeId: string, formula: string) {
     const node = appState.currentGraph.nodes[nodeId];
     if (!node) return;
 
-    const tempNode = { ...node, params: { ...node.params, formula } };
+    let newType = node.type;
+    if (node.type === 'node/unconfigured') {
+        newType = 'node/formula';
+    }
+    const tempNode = { ...node, type: newType, params: { ...node.params, formula } };
     const nextInputs = getNodeInputs(tempNode);
 
     const updatedEdges = appState.currentGraph.edges.filter(edge => {
@@ -780,7 +884,11 @@ export function updateBlockField(nodeId: string, blockId: string, field: string,
         return b;
     });
 
-    const tempNode = { ...node, params: { ...node.params, blocks: updatedBlocks } };
+    let newType = node.type;
+    if (node.type === 'node/unconfigured') {
+        newType = 'node/blocks';
+    }
+    const tempNode = { ...node, type: newType, params: { ...node.params, blocks: updatedBlocks } };
     const nextInputs = getNodeInputs(tempNode);
 
     const updatedEdges = appState.currentGraph.edges.filter(edge => {
@@ -875,12 +983,46 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
         return;
     }
 
+    const mode = getNodeMode(node);
+    const baseInputs = getModeBaseInputs(mode, node);
     const incomingEdges = appState.currentGraph.edges.filter(e => e.targetNodeId === node.id);
+
+    // Render Table Header
+    const header = document.createElement('div');
+    header.className = 'pin-table-header';
+    
+    const nameH = document.createElement('span');
+    nameH.className = 'pin-header-col left';
+    nameH.textContent = 'Name';
+    header.appendChild(nameH);
+    
+    const srcH = document.createElement('span');
+    srcH.className = 'pin-header-col';
+    srcH.textContent = 'SRC';
+    header.appendChild(srcH);
+    
+    const valH = document.createElement('span');
+    valH.className = 'pin-header-col';
+    valH.textContent = 'Value';
+    header.appendChild(valH);
+    
+    const destH = document.createElement('span');
+    destH.className = 'pin-header-col';
+    destH.textContent = 'DEST';
+    header.appendChild(destH);
+    
+    paramsContainer.appendChild(header);
 
     requires.forEach(([pinId, pinType]) => {
         const isConnected = incomingEdges.some(e => e.targetPinId === pinId);
         const row = document.createElement('div');
         row.className = 'pin-status-row';
+        const isActive = pinId in baseInputs;
+        if (!isActive) {
+            row.style.opacity = '0.5';
+            row.style.filter = 'grayscale(1)';
+            row.title = `This input is inactive in '${mode}' mode.`;
+        }
         row.draggable = true;
 
         row.addEventListener('dragstart', (e) => {
@@ -914,15 +1056,16 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
             }
         });
 
-        const leftContainer = document.createElement('div');
-        leftContainer.style.display = 'flex';
-        leftContainer.style.alignItems = 'center';
-        leftContainer.style.gap = '8px';
+        // Column 1: Name
+        const nameRow = document.createElement('div');
+        nameRow.style.display = 'flex';
+        nameRow.style.alignItems = 'center';
+        nameRow.style.gap = '6px';
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'pin-name';
         nameSpan.textContent = pinId;
-        leftContainer.appendChild(nameSpan);
+        nameRow.appendChild(nameSpan);
 
         const isDynamic = !!(node.inputs && pinId in node.inputs && !(nodeDef && pinId in nodeDef.requires));
         if (isDynamic) {
@@ -933,50 +1076,49 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
             btnDel.addEventListener('click', () => {
                 handleDeleteInputPin(node.id, pinId);
             });
-            leftContainer.appendChild(btnDel);
+            nameRow.appendChild(btnDel);
         }
-        row.appendChild(leftContainer);
+        row.appendChild(nameRow);
 
-        const rightContainer = document.createElement('div');
-        rightContainer.style.display = 'flex';
-        rightContainer.style.alignItems = 'center';
-        rightContainer.style.gap = '6px';
+        const flowFlow = getInputPinFlow(node, pinId);
 
+        // Column 2: SRC
+        const srcSpan = document.createElement('span');
+        srcSpan.className = 'pin-col-text';
+        if (!isActive) {
+            srcSpan.className += ' inactive';
+            srcSpan.textContent = '—';
+        } else if (isConnected) {
+            srcSpan.className += ' active-src';
+            srcSpan.textContent = flowFlow.src;
+            srcSpan.title = flowFlow.src;
+        } else {
+            srcSpan.textContent = 'LITERAL';
+        }
+        row.appendChild(srcSpan);
+
+        // Column 3: Value
+        const valCol = document.createElement('div');
+        valCol.className = 'pin-col-val';
         if (isConnected) {
-            const badgeText = document.createElement('span');
-            badgeText.className = 'badge';
-            badgeText.style.borderColor = 'rgba(255,255,255,0.05)';
-            badgeText.style.background = 'rgba(255,255,255,0.02)';
-            badgeText.style.color = 'var(--text-muted)';
-            badgeText.style.fontSize = '10px';
-            badgeText.style.padding = '2px 4px';
-            badgeText.textContent = '🔌 Wired';
-            rightContainer.appendChild(badgeText);
+            const dashSpan = document.createElement('span');
+            dashSpan.style.color = 'var(--text-muted)';
+            dashSpan.style.fontSize = '12px';
+            dashSpan.style.width = '100%';
+            dashSpan.style.textAlign = 'right';
+            dashSpan.textContent = '—';
+            valCol.appendChild(dashSpan);
         } else {
             const currentVal = node.params[pinId] ?? '';
-            const hasValue = node.params[pinId] !== undefined && node.params[pinId] !== '';
-
-            const statusBadge = document.createElement('span');
-            statusBadge.className = 'badge';
-            statusBadge.style.fontSize = '9px';
-            statusBadge.style.padding = '1px 3px';
-            statusBadge.style.textTransform = 'uppercase';
-            statusBadge.style.fontWeight = 'bold';
-
-            if (hasValue) {
-                statusBadge.style.borderColor = 'rgba(0, 255, 128, 0.15)';
-                statusBadge.style.background = 'rgba(0, 255, 128, 0.03)';
-                statusBadge.style.color = '#00ff80';
-                statusBadge.textContent = '⚙️ Value';
-            } else {
-                statusBadge.style.borderColor = 'rgba(255, 70, 70, 0.15)';
-                statusBadge.style.background = 'rgba(255, 70, 70, 0.03)';
-                statusBadge.style.color = '#ff4646';
-                statusBadge.textContent = '❓ Undefined';
-            }
-            rightContainer.appendChild(statusBadge);
-            
-            if (pinType === 'boolean') {
+            if (!isActive) {
+                const textInput = document.createElement('input');
+                textInput.type = 'text';
+                textInput.className = 'input-field';
+                textInput.value = currentVal.toString();
+                textInput.disabled = true;
+                textInput.style.opacity = '0.5';
+                valCol.appendChild(textInput);
+            } else if (pinType === 'boolean') {
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.checked = !!currentVal;
@@ -987,13 +1129,14 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
                     pushToHistory();
                     updateNodeParam(node.id, pinId, checkbox.checked);
                 });
-                rightContainer.appendChild(checkbox);
+                valCol.appendChild(checkbox);
             } else {
                 const textInput = document.createElement('input');
                 textInput.type = pinType === 'number' ? 'number' : 'text';
                 textInput.className = 'input-field';
                 textInput.value = currentVal.toString();
                 textInput.autocomplete = 'off';
+                textInput.dataset.pinId = pinId;
                 
                 textInput.addEventListener('focus', () => {
                     appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
@@ -1015,10 +1158,24 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
                     }
                     updateNodeParam(node.id, pinId, parsedVal);
                 });
-                rightContainer.appendChild(textInput);
+                valCol.appendChild(textInput);
             }
         }
-        row.appendChild(rightContainer);
+        row.appendChild(valCol);
+
+        // Column 4: DEST
+        const destSpan = document.createElement('span');
+        destSpan.className = 'pin-col-text';
+        if (!isActive) {
+            destSpan.className += ' inactive';
+            destSpan.textContent = '—';
+        } else {
+            destSpan.className += ' active-dest';
+            destSpan.textContent = flowFlow.dest;
+            destSpan.title = flowFlow.dest;
+        }
+        row.appendChild(destSpan);
+
         paramsContainer.appendChild(row);
     });
 }
@@ -1113,20 +1270,43 @@ export function setupAutocomplete(input: HTMLInputElement, getSuggestions: () =>
         activeIndex = -1;
     };
 
-    const selectSuggestion = (val: string) => {
-        input.value = val;
+    const getActiveToken = () => {
+        const val = input.value;
+        const pos = input.selectionStart || 0;
+        const textBefore = val.slice(0, pos);
+        const lastWordMatch = textBefore.match(/[a-zA-Z0-9_]+$/);
+        if (lastWordMatch) {
+            return {
+                query: lastWordMatch[0].toLowerCase(),
+                start: pos - lastWordMatch[0].length,
+                end: pos
+            };
+        }
+        return null;
+    };
+
+    const selectSuggestion = (suggestion: string) => {
+        const token = getActiveToken();
+        if (token) {
+            const val = input.value;
+            input.value = val.slice(0, token.start) + suggestion + val.slice(token.end);
+            input.setSelectionRange(token.start + suggestion.length, token.start + suggestion.length);
+        } else {
+            input.value = suggestion;
+        }
         input.dispatchEvent(new Event('change')); // Trigger update handlers
+        input.dispatchEvent(new Event('input'));  // Trigger input updates
         removeDropdown();
     };
 
     input.addEventListener('input', () => {
-        const query = input.value.trim().toLowerCase();
+        const token = getActiveToken();
         removeDropdown();
 
-        if (!query) return;
+        if (!token || !token.query) return;
 
         const allSuggestions = getSuggestions();
-        const matches = allSuggestions.filter(s => s.toLowerCase().startsWith(query) && s.toLowerCase() !== query);
+        const matches = allSuggestions.filter(s => s.toLowerCase().startsWith(token.query) && s.toLowerCase() !== token.query);
 
         if (matches.length === 0) return;
 
@@ -1186,4 +1366,63 @@ export function setupAutocomplete(input: HTMLInputElement, getSuggestions: () =>
     input.addEventListener('blur', () => {
         setTimeout(removeDropdown, 150);
     });
+}
+
+function getInputPinFlow(node: NodeState, pinId: string): { src: string; dest: string } {
+    const mode = getNodeMode(node);
+    let dest = '—';
+    if (mode === 'formula') {
+        const formula = (node.params.formula ?? '').toString();
+        const regex = new RegExp(`\\b${pinId}\\b`);
+        if (regex.test(formula)) {
+            dest = 'FORMULA';
+        }
+    } else if (mode === 'blocks') {
+        const blocks = node.params.blocks ?? [];
+        const isUsed = blocks.some((b: any) => b.operand1 === pinId || b.operand2 === pinId || b.targetVar === pinId);
+        if (isUsed) {
+            dest = 'BLOCKS';
+        }
+    } else if (mode === 'python') {
+        const code = (node.params.code ?? '').toString();
+        if (code.includes(pinId)) {
+            dest = 'PYTHON';
+        }
+    } else if (node.type.startsWith('system/')) {
+        dest = 'SYSTEM';
+    }
+
+    let src = 'LITERAL';
+    const edge = appState.currentGraph.edges.find(e => e.targetNodeId === node.id && e.targetPinId === pinId);
+    if (edge) {
+        const srcNode = appState.currentGraph.nodes[edge.sourceNodeId];
+        const srcLabel = srcNode?.ui?.title || edge.sourceNodeId;
+        src = `${srcLabel}.${edge.sourcePinId}`;
+    }
+
+    return { src, dest };
+}
+
+function getOutputPinFlow(node: NodeState, pinId: string): { src: string; dest: string } {
+    const mode = getNodeMode(node);
+    let src = '—';
+    if (pinId === 'out0') {
+        if (mode === 'formula') src = 'FORMULA';
+        else if (mode === 'blocks') src = 'BLOCKS';
+        else if (mode === 'python') src = 'PYTHON';
+    } else if (node.type.startsWith('system/')) {
+        src = 'SYSTEM';
+    }
+
+    let dest = '—';
+    const edges = appState.currentGraph.edges.filter(e => e.sourceNodeId === node.id && e.sourcePinId === pinId);
+    if (edges.length > 0) {
+        dest = edges.map(e => {
+            const tgtNode = appState.currentGraph.nodes[e.targetNodeId];
+            const tgtLabel = tgtNode?.ui?.title || e.targetNodeId;
+            return `${tgtLabel}.${e.targetPinId}`;
+        }).join(', ');
+    }
+
+    return { src, dest };
 }

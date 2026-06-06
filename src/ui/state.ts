@@ -22,7 +22,7 @@ export const defaultGraph: GraphState = {
             type: 'node/formula',
             mode: 'formula',
             inputs: { a: 'any', b: 'any' },
-            outputs: { out: 'any' },
+            outputs: { out0: 'any' },
             params: { formula: 'a + b', a: 10, b: 20 },
             ui: { x: 100, y: 80, title: 'Input Adder' }
         }),
@@ -31,7 +31,7 @@ export const defaultGraph: GraphState = {
             type: 'node/formula',
             mode: 'formula',
             inputs: { a: 'any', b: 'any' },
-            outputs: { out: 'any' },
+            outputs: { out0: 'any' },
             params: { formula: 'a * b', b: 5 },
             ui: { x: 380, y: 150, title: 'Scaling Node' }
         }),
@@ -52,8 +52,8 @@ export const defaultGraph: GraphState = {
         })
     },
     edges: [
-        { id: 'edge1', sourceNodeId: 'add_4012', sourcePinId: 'out', targetNodeId: 'multiply_8930', targetPinId: 'a' },
-        { id: 'edge2', sourceNodeId: 'multiply_8930', sourcePinId: 'out', targetNodeId: 'log_1052', targetPinId: 'msg' }
+        { id: 'edge1', sourceNodeId: 'add_4012', sourcePinId: 'out0', targetNodeId: 'multiply_8930', targetPinId: 'a' },
+        { id: 'edge2', sourceNodeId: 'multiply_8930', sourcePinId: 'out0', targetNodeId: 'log_1052', targetPinId: 'msg' }
     ]
 };
 

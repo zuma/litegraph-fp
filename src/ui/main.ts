@@ -254,6 +254,28 @@ window.addEventListener('DOMContentLoaded', () => {
         if (menuChkAutoFront) setAutoFront(menuChkAutoFront.checked);
     });
 
+    // Initialize and bind Warn Before Delete state
+    const menuChkWarnDelete = document.getElementById('menu-chk-warn-delete') as HTMLInputElement | null;
+
+    if (menuChkWarnDelete) {
+        menuChkWarnDelete.checked = settings.canvas.warnOnDelete ?? true;
+    }
+
+    function setWarnDelete(enabled: boolean) {
+        if (menuChkWarnDelete) menuChkWarnDelete.checked = enabled;
+        updateSetting('canvas', 'warnOnDelete', enabled);
+    }
+
+    const menuToggleWarnDelete = document.getElementById('menu-toggle-warn-delete');
+    menuToggleWarnDelete?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (e.target !== menuChkWarnDelete) {
+            e.preventDefault();
+            if (menuChkWarnDelete) menuChkWarnDelete.checked = !menuChkWarnDelete.checked;
+        }
+        if (menuChkWarnDelete) setWarnDelete(menuChkWarnDelete.checked);
+    });
+
     // Initialize and bind Edge Style state
     const menuLblEdgeStyle = document.getElementById('menu-lbl-edge-style');
     const menuToggleEdgeStyle = document.getElementById('menu-toggle-edge-style');

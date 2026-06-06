@@ -234,11 +234,11 @@ export const evaluateGraph = async (
                 case 'formula': {
                     const formula = ((params as any).formula as string | undefined) ?? getDefaultFormulaForType(node.type);
                     const result = evaluateFormulaExpression(formula, inputs);
-                    return { out: result };
+                    return { out0: result };
                 }
                 case 'blocks': {
                     const result = evaluateBlockExpression(((params as any).blocks as ReadonlyArray<any> | undefined) ?? [], inputs);
-                    return { out: result };
+                    return { out0: result };
                 }
                 default: {
                     if (nodeDef && typeof nodeDef.execute === 'function') {
@@ -361,6 +361,16 @@ export const evaluateGraph = async (
     };
 };
 
+function tryNumberCoerce(val: any): any {
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (trimmed !== '' && !isNaN(Number(trimmed))) {
+            return Number(trimmed);
+        }
+    }
+    return val;
+}
+
 export function evaluateFormulaExpression(formula: string, inputs: Record<string, any>): any {
     let pos = 0;
     const cleanFormula = formula.trim();
@@ -469,11 +479,11 @@ export function evaluateFormulaExpression(formula: string, inputs: Record<string
         skipWhitespace();
         while (true) {
             if (consume('*')) {
-                val = val * parsePrimary();
+                val = Number(tryNumberCoerce(val)) * Number(tryNumberCoerce(parsePrimary()));
             } else if (consume('/')) {
-                val = val / parsePrimary();
+                val = Number(tryNumberCoerce(val)) / Number(tryNumberCoerce(parsePrimary()));
             } else if (consume('%')) {
-                val = val % parsePrimary();
+                val = Number(tryNumberCoerce(val)) % Number(tryNumberCoerce(parsePrimary()));
             } else {
                 break;
             }
@@ -487,9 +497,16 @@ export function evaluateFormulaExpression(formula: string, inputs: Record<string
         skipWhitespace();
         while (true) {
             if (consume('+')) {
-                val = val + parseMultiplicative();
+                const nextVal = parseMultiplicative();
+                const cVal = tryNumberCoerce(val);
+                const cNext = tryNumberCoerce(nextVal);
+                if (typeof cVal === 'number' && typeof cNext === 'number') {
+                    val = cVal + cNext;
+                } else {
+                    val = String(val) + String(nextVal);
+                }
             } else if (consume('-')) {
-                val = val - parseMultiplicative();
+                val = Number(tryNumberCoerce(val)) - Number(tryNumberCoerce(parseMultiplicative()));
             } else {
                 break;
             }
@@ -503,18 +520,33 @@ export function evaluateFormulaExpression(formula: string, inputs: Record<string
         skipWhitespace();
         if (consume('=')) {
             consume('=');
-            val = (val == parseAdditive());
+            const nextVal = parseAdditive();
+            const cVal = tryNumberCoerce(val);
+            const cNext = tryNumberCoerce(nextVal);
+            val = (cVal == cNext);
         } else if (consume('<')) {
             if (consume('=')) {
-                val = (val <= parseAdditive());
+                const nextVal = parseAdditive();
+                const cVal = tryNumberCoerce(val);
+                const cNext = tryNumberCoerce(nextVal);
+                val = (cVal <= cNext);
             } else {
-                val = (val < parseAdditive());
+                const nextVal = parseAdditive();
+                const cVal = tryNumberCoerce(val);
+                const cNext = tryNumberCoerce(nextVal);
+                val = (cVal < cNext);
             }
         } else if (consume('>')) {
             if (consume('=')) {
-                val = (val >= parseAdditive());
+                const nextVal = parseAdditive();
+                const cVal = tryNumberCoerce(val);
+                const cNext = tryNumberCoerce(nextVal);
+                val = (cVal >= cNext);
             } else {
-                val = (val > parseAdditive());
+                const nextVal = parseAdditive();
+                const cVal = tryNumberCoerce(val);
+                const cNext = tryNumberCoerce(nextVal);
+                val = (cVal > cNext);
             }
         }
         return val;
@@ -543,15 +575,24 @@ export function evaluateBlockExpression(blocks: ReadonlyArray<any>, inputs: Reco
         const op1Str = block.operand1.trim();
         const op2Str = block.operand2.trim();
         
-        const val1 = isNaN(Number(op1Str)) ? (scope[op1Str] ?? 0) : Number(op1Str);
-        const val2 = isNaN(Number(op2Str)) ? (scope[op2Str] ?? 0) : Number(op2Str);
+        const val1Raw = isNaN(Number(op1Str)) ? (scope[op1Str] ?? 0) : Number(op1Str);
+        const val2Raw = isNaN(Number(op2Str)) ? (scope[op2Str] ?? 0) : Number(op2Str);
+        
+        const val1 = tryNumberCoerce(val1Raw);
+        const val2 = tryNumberCoerce(val2Raw);
         
         let res: any = 0;
         switch (block.operator) {
-            case '+': res = val1 + val2; break;
-            case '-': res = val1 - val2; break;
-            case '*': res = val1 * val2; break;
-            case '/': res = val1 / val2; break;
+            case '+': 
+                if (typeof val1 === 'number' && typeof val2 === 'number') {
+                    res = val1 + val2;
+                } else {
+                    res = String(val1) + String(val2);
+                }
+                break;
+            case '-': res = Number(val1) - Number(val2); break;
+            case '*': res = Number(val1) * Number(val2); break;
+            case '/': res = Number(val1) / Number(val2); break;
             case 'and': res = Boolean(val1) && Boolean(val2); break;
             case 'or': res = Boolean(val1) || Boolean(val2); break;
             case '==': res = val1 == val2; break;

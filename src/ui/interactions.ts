@@ -21,30 +21,85 @@ export function deleteSelectedNodes() {
     
     if (idsToDelete.size === 0) return;
     
-    pushToHistory();
+    const executeDeletion = () => {
+        pushToHistory();
 
-    const updatedNodes = { ...appState.currentGraph.nodes };
-    idsToDelete.forEach(id => {
-        delete (updatedNodes as any)[id];
-    });
+        const updatedNodes = { ...appState.currentGraph.nodes };
+        idsToDelete.forEach(id => {
+            delete (updatedNodes as any)[id];
+        });
 
-    const updatedEdges = appState.currentGraph.edges.filter(
-        e => !idsToDelete.has(e.sourceNodeId) && !idsToDelete.has(e.targetNodeId)
-    );
+        const updatedEdges = appState.currentGraph.edges.filter(
+            e => !idsToDelete.has(e.sourceNodeId) && !idsToDelete.has(e.targetNodeId)
+        );
 
-    appState.currentGraph = {
-        nodes: updatedNodes,
-        edges: updatedEdges
+        appState.currentGraph = {
+            nodes: updatedNodes,
+            edges: updatedEdges
+        };
+
+        appState.selectedNodeId = null;
+        appState.selectedNodeIds.clear();
+        syncContextState();
+        
+        logToTerminal(`Deleted ${idsToDelete.size} selected node(s)`, 'system-msg');
+        
+        updateInspector();
+        triggerAutoRun();
     };
 
-    appState.selectedNodeId = null;
-    appState.selectedNodeIds.clear();
-    syncContextState();
+    const settings = loadSettings();
+    if (settings.canvas.warnOnDelete ?? true) {
+        showConfirmDeleteDialog(executeDeletion);
+    } else {
+        executeDeletion();
+    }
+}
+
+function showConfirmDeleteDialog(onConfirm: () => void) {
+    if (document.querySelector('.top-alert-card')) {
+        return;
+    }
+    const card = document.createElement('div');
+    card.className = 'top-alert-card glass-panel';
     
-    logToTerminal(`Deleted ${idsToDelete.size} selected node(s)`, 'system-msg');
+    card.innerHTML = `
+        <div class="top-alert-content">
+            <span class="top-alert-icon">⚠️</span>
+            <div class="top-alert-text">
+                <p class="top-alert-title">Delete Node?</p>
+                <p class="top-alert-desc">Delete selected node(s) and connected wires?</p>
+            </div>
+        </div>
+        <div class="top-alert-actions">
+            <label class="top-alert-chk">
+                <input type="checkbox" id="modal-chk-dont-ask-again">
+                <span>Don't ask again</span>
+            </label>
+            <button class="btn btn-secondary btn-sm" id="modal-btn-cancel" style="padding: 4px 10px; font-size: 11px;">Cancel</button>
+            <button class="btn btn-danger btn-sm" id="modal-btn-delete" style="padding: 4px 10px; font-size: 11px;">Delete</button>
+        </div>
+    `;
     
-    updateInspector();
-    triggerAutoRun();
+    document.body.appendChild(card);
+    
+    const btnCancel = card.querySelector('#modal-btn-cancel');
+    const btnDelete = card.querySelector('#modal-btn-delete');
+    const chkDontAsk = card.querySelector('#modal-chk-dont-ask-again') as HTMLInputElement | null;
+    
+    btnCancel?.addEventListener('click', () => {
+        document.body.removeChild(card);
+    });
+    
+    btnDelete?.addEventListener('click', () => {
+        if (chkDontAsk?.checked) {
+            updateSetting('canvas', 'warnOnDelete', false);
+            const menuChkWarnDelete = document.getElementById('menu-chk-warn-delete') as HTMLInputElement | null;
+            if (menuChkWarnDelete) menuChkWarnDelete.checked = false;
+        }
+        document.body.removeChild(card);
+        onConfirm();
+    });
 }
 
 function isEditingText(): boolean {
@@ -481,9 +536,14 @@ export function setupInteractions() {
         const adder = document.getElementById('node-adder');
         if (adder && !adder.classList.contains('hidden')) {
             const isClickInsideAdder = adder.contains(target);
+            const isClickInsideSidebar = document.getElementById('sidebar')?.contains(target);
             const isRightClickOnCanvas = e.button === 2 && target.id === 'graph-canvas';
             if (!isClickInsideAdder && !isRightClickOnCanvas) {
-                closeNodeAdder();
+                if (isClickInsideSidebar) {
+                    closeNodeAdder(false);
+                } else {
+                    closeNodeAdder(true);
+                }
             }
         }
     });
@@ -1108,6 +1168,7 @@ export function setupInteractions() {
     });
 
     canvas.addEventListener('mouseup', (e) => {
+        if (e.button === 2) return;
         const rect = canvas.getBoundingClientRect();
         const screenX = e.clientX - rect.left;
         const screenY = e.clientY - rect.top;
@@ -1656,13 +1717,13 @@ export function setupInteractions() {
 // NODE ADDER PANEL & SEARCH FILTER
 // ========================================================================
 
-export function closeNodeAdder() {
+export function closeNodeAdder(shouldDelete: boolean = true) {
     const adder = document.getElementById('node-adder');
     if (adder && !adder.classList.contains('hidden')) {
         adder.classList.add('hidden');
         
         // Clean up unconfigured node if creation was cancelled
-        if (appState.selectedNodeId) {
+        if (shouldDelete && appState.selectedNodeId) {
             const selectedNode = appState.currentGraph.nodes[appState.selectedNodeId];
             if (selectedNode && selectedNode.type === 'node/unconfigured') {
                 const nodesCopy = { ...appState.currentGraph.nodes };
@@ -1707,6 +1768,8 @@ export function showNodeAdder(screenX: number, screenY: number) {
     };
 
     appState.selectedNodeId = uniqueId;
+    appState.selectedNodeIds.clear();
+    appState.selectedNodeIds.add(uniqueId);
     syncContextState();
     updateInspector();
 
@@ -1733,6 +1796,12 @@ export function filterNodeAdderList(query: string) {
     const lowerQuery = query.toLowerCase();
     
     Object.entries(StandardNodes).forEach(([nodeType, nodeDef]) => {
+        // Only allow node/unconfigured from the node/* namespace to be spawned directly.
+        // Other types must be reached via morphing/configuring a neutral node.
+        if (nodeType.startsWith('node/') && nodeType !== 'node/unconfigured') {
+            return;
+        }
+
         if (query && !nodeType.toLowerCase().includes(lowerQuery)) {
             return; // Skips filtered node type
         }

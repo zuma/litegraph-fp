@@ -17,6 +17,7 @@ export interface AppSettings {
         gridStyle?: 'dot' | 'line';
         camera: { x: number; y: number; zoom: number };
         backgroundColor?: string;
+        warnOnDelete?: boolean;
     };
 }
 
@@ -39,6 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         gridStyle: 'dot',
         camera: { x: 0, y: 0, zoom: 1.0 },
         backgroundColor: '#f3f4f6',
+        warnOnDelete: true,
     },
 };
 
@@ -54,7 +56,7 @@ export function loadSettings(): AppSettings {
         return {
             ui: {
                 ...DEFAULT_SETTINGS.ui,
-                ...(parsed.ui || {})
+                theme: 'light'
             },
             layout: {
                 ...DEFAULT_SETTINGS.layout,

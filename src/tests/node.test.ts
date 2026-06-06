@@ -28,7 +28,7 @@ describe('Stem Cell Node Modes', () => {
         const result = await evaluateGraph(graph, inputs, {}, { executionMode: 'serial' });
         
         // Expected: (10 + 20) * 3 = 90
-        expect(result.state['node1.out']).toBe(90);
+        expect(result.state['node1.out0']).toBe(90);
     });
 
     it('should evaluate nodes in blocks mode (Scratch-like statements)', async () => {
@@ -41,7 +41,7 @@ describe('Stem Cell Node Modes', () => {
                     params: {
                         blocks: [
                             { id: 'b1', targetVar: 'temp', operand1: 'a', operator: '+', operand2: 'b' },
-                            { id: 'b2', targetVar: 'out', operand1: 'temp', operator: '*', operand2: 'c' }
+                            { id: 'b2', targetVar: 'out0', operand1: 'temp', operator: '*', operand2: 'c' }
                         ]
                     }
                 }
@@ -58,6 +58,6 @@ describe('Stem Cell Node Modes', () => {
         const result = await evaluateGraph(graph, inputs, {}, { executionMode: 'serial' });
 
         // Expected: (5 + 3) * 10 = 80
-        expect(result.state['node1.out']).toBe(80);
+        expect(result.state['node1.out0']).toBe(80);
     });
 });

@@ -18,11 +18,7 @@
     <script>
         (function() {
             try {
-                const settings = JSON.parse(localStorage.getItem('litegraph-fp-settings') || '{}');
-                const theme = (settings.ui && settings.ui.theme) || 'light';
-                if (theme !== 'dark') {
-                    document.body.classList.add('light-theme');
-                }
+                document.body.classList.add('light-theme');
             } catch (e) {}
         })();
     </script>
@@ -314,7 +310,7 @@
 
         <!-- Settings Submenu (Placed globally to avoid backdrop-filter hierarchy conflicts) -->
         <div id="main-settings-submenu" class="dropdown-submenu glass-panel">
-            <button class="dropdown-item" id="menu-toggle-darkmode">
+            <button class="dropdown-item" id="menu-toggle-darkmode" style="display: none;">
                 <span>🌙 Dark Mode</span>
                 <input type="checkbox" id="menu-chk-darkmode" style="margin-left: auto; cursor: pointer;">
             </button>
@@ -333,6 +329,10 @@
             <button class="dropdown-item" id="menu-toggle-auto-front">
                 <span>🔝 Auto Bring to Front</span>
                 <input type="checkbox" id="menu-chk-auto-front-opt" style="margin-left: auto; cursor: pointer;">
+            </button>
+            <button class="dropdown-item" id="menu-toggle-warn-delete">
+                <span>⚠️ Warning before delete</span>
+                <input type="checkbox" id="menu-chk-warn-delete" style="margin-left: auto; cursor: pointer;">
             </button>
             <button class="dropdown-item" id="menu-toggle-edge-style">
                 <span id="menu-lbl-edge-style">🔌 Edge Style: Spline</span>

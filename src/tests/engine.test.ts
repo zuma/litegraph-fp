@@ -32,7 +32,7 @@ describe('Engine Feedback Loops', () => {
                 {
                     id: 'e2',
                     sourceNodeId: 'add1',
-                    sourcePinId: 'out',
+                    sourcePinId: 'out0',
                     targetNodeId: 'state1',
                     targetPinId: 'nextValue'
                 }
@@ -67,7 +67,7 @@ describe('Engine Feedback Loops', () => {
             },
             edges: [
                 { id: 'e1', sourceNodeId: 'state1', sourcePinId: 'value', targetNodeId: 'add1', targetPinId: 'a' },
-                { id: 'e2', sourceNodeId: 'add1', sourcePinId: 'out', targetNodeId: 'state1', targetPinId: 'nextValue' }
+                { id: 'e2', sourceNodeId: 'add1', sourcePinId: 'out0', targetNodeId: 'state1', targetPinId: 'nextValue' }
             ]
         };
 
@@ -233,5 +233,34 @@ describe('Engine Feedback Loops', () => {
         expect(result.state['nodeA.a']).toBe(5);
         expect(result.state['nodeA.b']).toBe(10);
         expect(result.state['nodeDeleted.out']).toBeUndefined();
+    });
+
+    it('should coerce string numbers to numeric type in formula and block evaluation', async () => {
+        const graph: GraphState = {
+            nodes: {
+                'formulaNode': {
+                    id: 'formulaNode',
+                    type: 'node/formula',
+                    params: { formula: 'x + y', x: '10', y: '20' }
+                },
+                'blocksNode': {
+                    id: 'blocksNode',
+                    type: 'node/blocks',
+                    params: {
+                        blocks: [
+                            { id: '1', targetVar: 'out0', operand1: 'a', operator: '+', operand2: 'b' }
+                        ],
+                        a: '100',
+                        b: '200'
+                    }
+                }
+            },
+            edges: []
+        };
+
+        const result = await evaluateGraph(graph, {}, StandardNodes, { executionMode: 'serial' });
+        
+        expect(result.state['formulaNode.out0']).toBe(30);  // 10 + 20 = 30 (not '1020')
+        expect(result.state['blocksNode.out0']).toBe(300); // 100 + 200 = 300 (not '100200')
     });
 });
