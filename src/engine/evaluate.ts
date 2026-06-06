@@ -174,7 +174,7 @@ export const evaluateGraph = async (
     // Helper: Evaluates a single, mathematically pure node with Mars-Grade Resilience
     const evaluateNode = async (nodeId: NodeID) => {
         const node = graph.nodes[nodeId];
-        if (node.type === 'molecule/unconfigured') {
+        if (node.type === 'node/unconfigured') {
             return;
         }
         const mode = getNodeMode(node, registry);
@@ -195,7 +195,14 @@ export const evaluateGraph = async (
 
         const resolvedInputs: Record<string, unknown> = {};
         
-        // 1. Initialize strictly with any root inputs from active global state (like manually typed values) (Fix #3)
+        // 1. Initialize with manually typed values from node.params
+        Object.keys(getNodeInputs(node, resolvedTypes.inputs, registry)).forEach(pinName => {
+            if (node.params && node.params[pinName] !== undefined) {
+                resolvedInputs[pinName] = node.params[pinName];
+            }
+        });
+
+        // 2. Override with any root inputs from active global state (like manually typed values) (Fix #3)
         Object.keys(getNodeInputs(node, resolvedTypes.inputs, registry)).forEach(pinName => {
             const stateKey = `${nodeId}.${pinName}`;
             if (stateKey in activeState) {
@@ -233,8 +240,12 @@ export const evaluateGraph = async (
                     const result = evaluateBlockExpression(((params as any).blocks as ReadonlyArray<any> | undefined) ?? [], inputs);
                     return { out: result };
                 }
-                default:
+                default: {
+                    if (nodeDef && typeof nodeDef.execute === 'function') {
+                        return nodeDef.execute(inputs, params, signal) as Promise<Record<string, unknown>>;
+                    }
                     throw new Error(`Engine Error: Unsupported mode "${mode}"`);
+                }
             }
         };
 

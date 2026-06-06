@@ -19,9 +19,63 @@ export function updateInspector() {
     const isPinned = chkPinSidebar ? chkPinSidebar.checked : false;
     const shouldAutoCollapse = !isPinned;
 
+    const nodeCount = appState.selectedNodeIds.size;
+    const edgeCount = appState.selectedEdgeIds.size;
+    const totalSelected = nodeCount + edgeCount;
+
+    if (totalSelected === 0) {
+        content.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        placeholder.textContent = 'Select a node to view properties & edit inputs';
+        document.getElementById('btn-add-input')?.classList.add('hidden');
+        document.getElementById('btn-add-output')?.classList.add('hidden');
+        if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
+            (window as any).setSidebarCollapsed(true);
+        }
+        return;
+    }
+
+    if (totalSelected > 1) {
+        content.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        
+        let labelText = 'Multiple items selected';
+        const parts: string[] = [];
+        if (nodeCount > 0) parts.push(`${nodeCount} node${nodeCount > 1 ? 's' : ''}`);
+        if (edgeCount > 0) parts.push(`${edgeCount} connection${edgeCount > 1 ? 's' : ''}`);
+        labelText += ` (${parts.join(', ')})`;
+        
+        placeholder.textContent = labelText;
+        document.getElementById('btn-add-input')?.classList.add('hidden');
+        document.getElementById('btn-add-output')?.classList.add('hidden');
+        if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
+            (window as any).setSidebarCollapsed(false);
+        }
+        return;
+    }
+
+    if (edgeCount === 1 && nodeCount === 0) {
+        content.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        const edgeId = appState.selectedEdgeId || Array.from(appState.selectedEdgeIds)[0];
+        const edge = appState.currentGraph.edges.find(e => e.id === edgeId);
+        if (edge) {
+            placeholder.innerHTML = `<strong>Selected Connection</strong><br><br><span class="mono" style="font-size: 11px; opacity: 0.8; display: block; line-height: 1.5;">[Node ${edge.sourceNodeId}].${edge.sourcePinId}<br>➡️<br>[Node ${edge.targetNodeId}].${edge.targetPinId}</span>`;
+        } else {
+            placeholder.textContent = '1 connection selected';
+        }
+        document.getElementById('btn-add-input')?.classList.add('hidden');
+        document.getElementById('btn-add-output')?.classList.add('hidden');
+        if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
+            (window as any).setSidebarCollapsed(false);
+        }
+        return;
+    }
+
     if (!appState.selectedNodeId || !appState.currentGraph.nodes[appState.selectedNodeId]) {
         content.classList.add('hidden');
         placeholder.classList.remove('hidden');
+        placeholder.textContent = 'Select a node to view properties & edit inputs';
         document.getElementById('btn-add-input')?.classList.add('hidden');
         document.getElementById('btn-add-output')?.classList.add('hidden');
         if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
@@ -42,65 +96,28 @@ export function updateInspector() {
 
 
     // Add/Remove Pin buttons setup
+    // Add Pin buttons setup
     const btnAddInput = document.getElementById('btn-add-input');
-    const btnRemoveInput = document.getElementById('btn-remove-input');
     const btnAddOutput = document.getElementById('btn-add-output');
-    const btnRemoveOutput = document.getElementById('btn-remove-output');
 
-    if (btnAddInput && btnRemoveInput) {
-        if (nodeDef?.dynamicInputs) {
-            btnAddInput.classList.remove('hidden');
-            btnRemoveInput.classList.remove('hidden');
-            
-            const deletableInputs = node.inputs ? Object.keys(node.inputs).filter(
-                pinId => !(nodeDef && pinId in nodeDef.requires)
-            ) : [];
-            const hasCustomInputs = deletableInputs.length > 0;
-            
-            const newAddBtn = btnAddInput.cloneNode(true) as HTMLButtonElement;
-            btnAddInput.parentNode?.replaceChild(newAddBtn, btnAddInput);
-            newAddBtn.addEventListener('click', () => {
-                handleAddInputPin(node.id);
-            });
-
-            const newRemoveBtn = btnRemoveInput.cloneNode(true) as HTMLButtonElement;
-            btnRemoveInput.parentNode?.replaceChild(newRemoveBtn, btnRemoveInput);
-            newRemoveBtn.disabled = !hasCustomInputs;
-            newRemoveBtn.addEventListener('click', () => {
-                handleRemoveLastInputPin(node.id);
-            });
-        } else {
-            btnAddInput.classList.add('hidden');
-            btnRemoveInput.classList.add('hidden');
-        }
+    if (btnAddInput) {
+        btnAddInput.classList.remove('hidden');
+        
+        const newAddBtn = btnAddInput.cloneNode(true) as HTMLButtonElement;
+        btnAddInput.parentNode?.replaceChild(newAddBtn, btnAddInput);
+        newAddBtn.addEventListener('click', () => {
+            handleAddInputPin(node.id);
+        });
     }
 
-    if (btnAddOutput && btnRemoveOutput) {
-        if (nodeDef?.dynamicOutputs) {
-            btnAddOutput.classList.remove('hidden');
-            btnRemoveOutput.classList.remove('hidden');
-            
-            const deletableOutputs = node.outputs ? Object.keys(node.outputs).filter(
-                pinId => !(nodeDef && pinId in nodeDef.provides)
-            ) : [];
-            const hasCustomOutputs = deletableOutputs.length > 0;
-            
-            const newAddBtn = btnAddOutput.cloneNode(true) as HTMLButtonElement;
-            btnAddOutput.parentNode?.replaceChild(newAddBtn, btnAddOutput);
-            newAddBtn.addEventListener('click', () => {
-                handleAddOutputPin(node.id);
-            });
-
-            const newRemoveBtn = btnRemoveOutput.cloneNode(true) as HTMLButtonElement;
-            btnRemoveOutput.parentNode?.replaceChild(newRemoveBtn, btnRemoveOutput);
-            newRemoveBtn.disabled = !hasCustomOutputs;
-            newRemoveBtn.addEventListener('click', () => {
-                handleRemoveLastOutputPin(node.id);
-            });
-        } else {
-            btnAddOutput.classList.add('hidden');
-            btnRemoveOutput.classList.add('hidden');
-        }
+    if (btnAddOutput) {
+        btnAddOutput.classList.remove('hidden');
+        
+        const newAddBtn = btnAddOutput.cloneNode(true) as HTMLButtonElement;
+        btnAddOutput.parentNode?.replaceChild(newAddBtn, btnAddOutput);
+        newAddBtn.addEventListener('click', () => {
+            handleAddOutputPin(node.id);
+        });
     }
     // Node mode selector configuration
     const modeRow = document.getElementById('inspect-node-mode-row');
@@ -220,7 +237,7 @@ export function updateInspector() {
             logicContainer.appendChild(label);
 
             const blocksList = node.params.blocks ?? [];
-            blocksList.forEach((block) => {
+            blocksList.forEach((block, idx) => {
                 const blockRow = document.createElement('div');
                 blockRow.style.display = 'flex';
                 blockRow.style.alignItems = 'center';
@@ -244,6 +261,10 @@ export function updateInspector() {
                 targetInput.addEventListener('change', () => {
                     updateBlockField(node.id, block.id, 'targetVar', targetInput.value);
                 });
+                setupAutocomplete(targetInput, () => {
+                    const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
+                    return Array.from(new Set([...outputPins, 'out', 'temp', 'result', 'value']));
+                });
                 blockRow.appendChild(targetInput);
 
                 const eqLabel = document.createElement('span');
@@ -263,6 +284,15 @@ export function updateInspector() {
                 op1Input.addEventListener('change', () => {
                     updateBlockField(node.id, block.id, 'operand1', op1Input.value);
                 });
+                
+                const getOperandSuggestions = () => {
+                    const inputPins = Object.keys(getNodeInputs(node, appState.resolvedInputs));
+                    const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
+                    const priorVars = (node.params.blocks || []).slice(0, idx).map(b => b.targetVar.trim()).filter(Boolean);
+                    const mathHelpers = ['sin', 'cos', 'abs', 'round', 'min', 'max', 'pi', 'e', 'value'];
+                    return Array.from(new Set([...inputPins, ...outputPins, ...priorVars, ...mathHelpers]));
+                };
+                setupAutocomplete(op1Input, getOperandSuggestions);
                 blockRow.appendChild(op1Input);
 
                 const opSelect = document.createElement('select');
@@ -294,6 +324,7 @@ export function updateInspector() {
                 op2Input.addEventListener('change', () => {
                     updateBlockField(node.id, block.id, 'operand2', op2Input.value);
                 });
+                setupAutocomplete(op2Input, getOperandSuggestions);
                 blockRow.appendChild(op2Input);
 
                 const btnDelBlock = document.createElement('button');
@@ -426,13 +457,47 @@ export function updateInspector() {
             }
             row.appendChild(leftContainer);
 
-            const valSpan = document.createElement('span');
-            valSpan.className = 'pin-val';
-            
+            const rightContainer = document.createElement('div');
+            rightContainer.style.display = 'flex';
+            rightContainer.style.alignItems = 'center';
+            rightContainer.style.gap = '6px';
+
+            const isConnected = appState.currentGraph.edges.some(e => e.sourceNodeId === node.id && e.sourcePinId === pinId);
             const stateKey = `${node.id}.${pinId}`;
             const val = appState.latestExecutionState[stateKey];
+            const hasValue = val !== undefined;
+
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'badge';
+            statusBadge.style.fontSize = '9px';
+            statusBadge.style.padding = '1px 3px';
+            statusBadge.style.textTransform = 'uppercase';
+            statusBadge.style.fontWeight = 'bold';
+
+            if (isConnected) {
+                statusBadge.style.borderColor = 'rgba(255,255,255,0.05)';
+                statusBadge.style.background = 'rgba(255,255,255,0.02)';
+                statusBadge.style.color = 'var(--text-muted)';
+                statusBadge.textContent = '🔌 Wired';
+            } else if (hasValue) {
+                statusBadge.style.borderColor = 'rgba(0, 255, 128, 0.15)';
+                statusBadge.style.background = 'rgba(0, 255, 128, 0.03)';
+                statusBadge.style.color = '#00ff80';
+                statusBadge.textContent = '⚙️ Value';
+            } else {
+                statusBadge.style.borderColor = 'rgba(255, 70, 70, 0.15)';
+                statusBadge.style.background = 'rgba(255, 70, 70, 0.03)';
+                statusBadge.style.color = '#ff4646';
+                statusBadge.textContent = '❓ Undefined';
+            }
+            rightContainer.appendChild(statusBadge);
+
+            const valSpan = document.createElement('span');
+            valSpan.className = 'pin-val';
             valSpan.textContent = val !== undefined ? JSON.stringify(val) : 'undefined';
-            row.appendChild(valSpan);
+            rightContainer.appendChild(valSpan);
+
+            row.appendChild(rightContainer);
 
             outputsContainer.appendChild(row);
         });
@@ -624,32 +689,7 @@ export function handleDeleteOutputPin(nodeId: string, pinId: string) {
     triggerAutoRun();
 }
 
-export function handleRemoveLastInputPin(nodeId: string) {
-    const node = appState.currentGraph.nodes[nodeId];
-    if (!node || !node.inputs) return;
-    const nodeDef = StandardNodes[node.type];
 
-    const deletablePins = Object.keys(node.inputs).filter(
-        pinId => !(nodeDef && pinId in nodeDef.requires)
-    );
-    if (deletablePins.length === 0) return;
-
-    const pinIdToDelete = deletablePins[deletablePins.length - 1];
-    handleDeleteInputPin(nodeId, pinIdToDelete);
-}
-
-export function handleRemoveLastOutputPin(nodeId: string) {
-    const node = appState.currentGraph.nodes[nodeId];
-    if (!node || !node.outputs) return;
-    const nodeDef = StandardNodes[node.type];
-
-    const deletablePins = Object.keys(node.outputs).filter(
-        pinId => !(nodeDef && pinId in nodeDef.provides)
-    );
-    if (deletablePins.length === 0) return;
-
-    const pinIdToDelete = deletablePins[deletablePins.length - 1];
-}
 
 export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
     const node = appState.currentGraph.nodes[nodeId];
@@ -897,6 +937,11 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
         }
         row.appendChild(leftContainer);
 
+        const rightContainer = document.createElement('div');
+        rightContainer.style.display = 'flex';
+        rightContainer.style.alignItems = 'center';
+        rightContainer.style.gap = '6px';
+
         if (isConnected) {
             const badgeText = document.createElement('span');
             badgeText.className = 'badge';
@@ -906,9 +951,30 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
             badgeText.style.fontSize = '10px';
             badgeText.style.padding = '2px 4px';
             badgeText.textContent = '🔌 Wired';
-            row.appendChild(badgeText);
+            rightContainer.appendChild(badgeText);
         } else {
             const currentVal = node.params[pinId] ?? '';
+            const hasValue = node.params[pinId] !== undefined && node.params[pinId] !== '';
+
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'badge';
+            statusBadge.style.fontSize = '9px';
+            statusBadge.style.padding = '1px 3px';
+            statusBadge.style.textTransform = 'uppercase';
+            statusBadge.style.fontWeight = 'bold';
+
+            if (hasValue) {
+                statusBadge.style.borderColor = 'rgba(0, 255, 128, 0.15)';
+                statusBadge.style.background = 'rgba(0, 255, 128, 0.03)';
+                statusBadge.style.color = '#00ff80';
+                statusBadge.textContent = '⚙️ Value';
+            } else {
+                statusBadge.style.borderColor = 'rgba(255, 70, 70, 0.15)';
+                statusBadge.style.background = 'rgba(255, 70, 70, 0.03)';
+                statusBadge.style.color = '#ff4646';
+                statusBadge.textContent = '❓ Undefined';
+            }
+            rightContainer.appendChild(statusBadge);
             
             if (pinType === 'boolean') {
                 const checkbox = document.createElement('input');
@@ -921,7 +987,7 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
                     pushToHistory();
                     updateNodeParam(node.id, pinId, checkbox.checked);
                 });
-                row.appendChild(checkbox);
+                rightContainer.appendChild(checkbox);
             } else {
                 const textInput = document.createElement('input');
                 textInput.type = pinType === 'number' ? 'number' : 'text';
@@ -949,9 +1015,10 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
                     }
                     updateNodeParam(node.id, pinId, parsedVal);
                 });
-                row.appendChild(textInput);
+                rightContainer.appendChild(textInput);
             }
         }
+        row.appendChild(rightContainer);
         paramsContainer.appendChild(row);
     });
 }
@@ -1032,4 +1099,91 @@ export function reorderOutputPins(nodeId: string, draggedPinId: string, targetPi
         appState.renderingContext.needsRedraw = true;
     }
     triggerAutoRun();
+}
+
+export function setupAutocomplete(input: HTMLInputElement, getSuggestions: () => string[]) {
+    let activeIndex = -1;
+    let dropdown: HTMLDivElement | null = null;
+
+    const removeDropdown = () => {
+        if (dropdown) {
+            dropdown.remove();
+            dropdown = null;
+        }
+        activeIndex = -1;
+    };
+
+    const selectSuggestion = (val: string) => {
+        input.value = val;
+        input.dispatchEvent(new Event('change')); // Trigger update handlers
+        removeDropdown();
+    };
+
+    input.addEventListener('input', () => {
+        const query = input.value.trim().toLowerCase();
+        removeDropdown();
+
+        if (!query) return;
+
+        const allSuggestions = getSuggestions();
+        const matches = allSuggestions.filter(s => s.toLowerCase().startsWith(query) && s.toLowerCase() !== query);
+
+        if (matches.length === 0) return;
+
+        dropdown = document.createElement('div');
+        dropdown.className = 'autocomplete-dropdown';
+        
+        const rect = input.getBoundingClientRect();
+        dropdown.style.position = 'absolute';
+        dropdown.style.left = `${rect.left + window.scrollX}px`;
+        dropdown.style.top = `${rect.bottom + window.scrollY + 2}px`;
+        dropdown.style.minWidth = `${rect.width}px`;
+        
+        matches.forEach((suggestion, idx) => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.textContent = suggestion;
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault(); // Keep input focused
+                selectSuggestion(suggestion);
+            });
+            dropdown!.appendChild(item);
+        });
+
+        document.body.appendChild(dropdown);
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (!dropdown) return;
+        const items = dropdown.querySelectorAll('.autocomplete-item');
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (activeIndex < items.length - 1) {
+                if (activeIndex >= 0) items[activeIndex].classList.remove('active');
+                activeIndex++;
+                items[activeIndex].classList.add('active');
+                (items[activeIndex] as HTMLElement).scrollIntoView({ block: 'nearest' });
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (activeIndex > 0) {
+                items[activeIndex].classList.remove('active');
+                activeIndex--;
+                items[activeIndex].classList.add('active');
+                (items[activeIndex] as HTMLElement).scrollIntoView({ block: 'nearest' });
+            }
+        } else if (e.key === 'Enter') {
+            if (activeIndex >= 0 && activeIndex < items.length) {
+                e.preventDefault();
+                selectSuggestion(items[activeIndex].textContent || '');
+            }
+        } else if (e.key === 'Escape' || e.key === 'Tab') {
+            removeDropdown();
+        }
+    });
+
+    input.addEventListener('blur', () => {
+        setTimeout(removeDropdown, 150);
+    });
 }

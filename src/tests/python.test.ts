@@ -9,7 +9,9 @@ describe('Python Script Node', () => {
             nodes: {
                 'py1': {
                     id: 'py1',
-                    type: 'python/script',
+                    type: 'node/python',
+                    inputs: { a: 'any', b: 'any' },
+                    outputs: { out: 'any' },
                     params: {
                         code: `
 def execute(inputs):
@@ -40,7 +42,8 @@ def execute(inputs):
             nodes: {
                 'py1': {
                     id: 'py1',
-                    type: 'python/script',
+                    type: 'node/python',
+                    outputs: { out: 'any' },
                     params: {
                         code: `
 def execute(inputs):

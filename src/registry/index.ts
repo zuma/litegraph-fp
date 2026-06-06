@@ -1,11 +1,5 @@
 import { NodeRegistry } from './types.js';
 import { PinType, NodeState, NodeMode, BlockStatement } from '../core/ast.js';
-import { add, multiply, subtract, divide, modulo, sin, cos, tan, abs, round } from './math.js';
-import { invertBoolean, logicAnd, logicOr, logicXor } from './logic.js';
-import { delaySim, logToConsole, state } from './system.js';
-import { concat as stringConcat, split as stringSplit, replace as stringReplace, length as stringLength } from './strings.js';
-import { getField as objectGet, setField as objectSet, parseJson as objectParse, stringifyJson as objectStringify } from './objects.js';
-import { arrayLength, arraySlice } from './arrays.js';
 import { pythonScript } from './python.js';
 
 // ============================================================================
@@ -15,44 +9,9 @@ import { pythonScript } from './python.js';
 // to resolve the pure mathematical logic required for evaluation.
 
 export const StandardNodes: NodeRegistry = Object.freeze({
-    'math/add': add,
-    'math/multiply': multiply,
-    'math/subtract': subtract,
-    'math/divide': divide,
-    'math/modulo': modulo,
-    'math/sin': sin,
-    'math/cos': cos,
-    'math/tan': tan,
-    'math/abs': abs,
-    'math/round': round,
-    
-    'logic/not': invertBoolean,
-    'logic/and': logicAnd,
-    'logic/or': logicOr,
-    'logic/xor': logicXor,
-
-    'string/concat': stringConcat,
-    'string/split': stringSplit,
-    'string/replace': stringReplace,
-    'string/length': stringLength,
-
-    'object/get': objectGet,
-    'object/set': objectSet,
-    'object/parse': objectParse,
-    'object/stringify': objectStringify,
-
-    'array/length': arrayLength,
-    'array/slice': arraySlice,
-
-    'python/script': pythonScript,
-
-    'system/delay': delaySim,
-    'system/log': logToConsole,
-    'system/state': state,
-
-    'molecule/unconfigured': {
-        namespace: 'molecule',
-        category: 'molecule',
+    'node/unconfigured': {
+        namespace: 'node',
+        category: 'node',
         name: 'unconfigured',
         requires: {},
         provides: {},
@@ -60,19 +19,31 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         dynamicOutputs: true,
         execute: async () => ({})
     },
-    'molecule/formula': {
-        namespace: 'molecule',
-        category: 'molecule',
+    'node/generic': {
+        namespace: 'node',
+        category: 'node',
+        name: 'generic',
+        requires: {},
+        provides: {},
+        dynamicInputs: true,
+        dynamicOutputs: true,
+        execute: async (inputs, params) => {
+            return { ...inputs, ...params };
+        }
+    },
+    'node/formula': {
+        namespace: 'node',
+        category: 'node',
         name: 'formula',
-        requires: { a: 'any', b: 'any' },
+        requires: {},
         provides: { out: 'any' },
         dynamicInputs: true,
         dynamicOutputs: true,
         execute: async () => ({ out: 0 })
     },
-    'molecule/blocks': {
-        namespace: 'molecule',
-        category: 'molecule',
+    'node/blocks': {
+        namespace: 'node',
+        category: 'node',
         name: 'blocks',
         requires: {},
         provides: { out: 'any' },
@@ -80,20 +51,72 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         dynamicOutputs: true,
         execute: async () => ({ out: 0 })
     },
-    'molecule/python': {
-        namespace: 'molecule',
-        category: 'molecule',
+    'node/python': {
+        namespace: 'node',
+        category: 'node',
         name: 'python',
-        requires: { a: 'any', b: 'any', code: 'string' },
+        requires: { code: 'string' },
         provides: { out: 'any' },
         dynamicInputs: true,
         dynamicOutputs: true,
         execute: pythonScript.execute
+    },
+    'system/delay': {
+        namespace: 'system',
+        category: 'system',
+        name: 'delay',
+        requires: { a: 'any', ms: 'number' },
+        provides: { out: 'any' },
+        dynamicInputs: true,
+        dynamicOutputs: true,
+        execute: async (inputs, params, signal) => {
+            const ms = Number(inputs.ms ?? params.delayMs ?? 1000);
+            await new Promise((resolve, reject) => {
+                const t = setTimeout(resolve, ms);
+                signal?.addEventListener('abort', () => {
+                    clearTimeout(t);
+                    reject(new Error('Aborted'));
+                });
+            });
+            return { out: inputs.a };
+        }
+    },
+    'system/state': {
+        namespace: 'system',
+        category: 'system',
+        name: 'state',
+        requires: { value: 'any', defaultValue: 'any', nextValue: 'any' },
+        provides: { value: 'any' },
+        dynamicInputs: true,
+        dynamicOutputs: true,
+        execute: async (inputs, params) => {
+            return { value: inputs.value ?? inputs.defaultValue };
+        }
+    },
+    'system/log': {
+        namespace: 'system',
+        category: 'system',
+        name: 'log',
+        requires: { msg: 'any' },
+        provides: {},
+        dynamicInputs: true,
+        dynamicOutputs: true,
+        execute: async (inputs) => {
+            console.log('LOG NODE OUTPUT:', inputs.msg);
+            return {};
+        }
     }
 });
 
 export function getNodeMode(node: { type: string; mode?: NodeMode }, registry?: NodeRegistry): NodeMode {
     if (node.mode) return node.mode;
+
+    // Map default modes based on node type
+    if (node.type === 'node/formula') return 'formula';
+    if (node.type === 'node/blocks') return 'blocks';
+    if (node.type === 'node/python') return 'python';
+    if (node.type === 'node/generic') return 'state';
+
     const isRegistered = (registry && node.type in registry) || (node.type in StandardNodes);
     if (isRegistered) {
         if (node.type === 'system/delay') return 'delay';
@@ -104,26 +127,7 @@ export function getNodeMode(node: { type: string; mode?: NodeMode }, registry?: 
 }
 
 export function getDefaultFormulaForType(type: string): string {
-    switch (type) {
-        case 'math/add': return 'a + b';
-        case 'math/multiply': return 'a * b';
-        case 'math/subtract': return 'a - b';
-        case 'math/divide': return 'a / b';
-        case 'math/modulo': return 'a % b';
-        case 'math/sin': return 'sin(a)';
-        case 'math/cos': return 'cos(a)';
-        case 'math/tan': return 'tan(a)';
-        case 'math/abs': return 'abs(a)';
-        case 'math/round': return 'round(a)';
-        case 'logic/not': return 'not a';
-        case 'logic/and': return 'a and b';
-        case 'logic/or': return 'a or b';
-        case 'logic/xor': return 'a xor b';
-        case 'strings/concat': return 'concat(a, b)';
-        case 'strings/split': return 'split(a, b)';
-        case 'system/log': return 'msg';
-        default: return '';
-    }
+    return '';
 }
 
 export function extractVariablesFromFormula(formula: string): string[] {

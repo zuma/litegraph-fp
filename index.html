@@ -38,6 +38,10 @@
 
                 <span class="logo-glow"></span>
                 <h1>LITEGRAPH-FP</h1>
+                <div id="autosave-badge" class="autosave-badge">
+                    <span class="badge-dot"></span>
+                    <span class="badge-text">Saved</span>
+                </div>
             </div>
             
             <div id="global-controls">
@@ -130,6 +134,7 @@
                     <div class="context-menu-divider"></div>
                     <button class="context-menu-item" id="ctx-bring-to-front">🔝 Bring to Front</button>
                     <button class="context-menu-item" id="ctx-send-to-back">🔀 Send to Back</button>
+                    <button class="context-menu-item" id="ctx-delete-connection">🗑️ Delete Connection</button>
                 </div>
             </section>
 
@@ -155,20 +160,20 @@
                     </label>
                 </div>
 
-                <!-- MOLECULE INSPECTOR PANEL -->
+                <!-- NODE INSPECTOR PANEL -->
                 <section class="sidebar-section expanded" id="inspector-section">
                     <div class="section-header interactive" id="inspector-header">
-                        <h2>Molecule Inspector</h2>
+                        <h2>Node Inspector</h2>
                         <span class="toggle-icon">▼</span>
                     </div>
                     <div id="inspector-section-body" class="inspector-section-body">
                         <div id="inspector-placeholder" class="inspector-placeholder">
-                            Select a molecule to view properties & edit inputs
+                            Select a node to view properties & edit inputs
                         </div>
                         <div id="inspector-content" class="inspector-content hidden">
                             <div class="inspector-card">
                                 <div class="inspector-field-group">
-                                    <span class="inspector-label">Molecule ID</span>
+                                    <span class="inspector-label">Node ID</span>
                                     <span id="inspect-node-id" class="inspector-value mono"></span>
                                 </div>
                                 <div class="inspector-field-group">
@@ -190,7 +195,6 @@
                                  <h3>Inputs</h3>
                                  <div style="display: flex; gap: 6px;">
                                      <button id="btn-add-input" class="btn-add-pin hidden" title="Add input pin">+ Input</button>
-                                     <button id="btn-remove-input" class="btn-remove-pin hidden" title="Remove last input pin">- Input</button>
                                  </div>
                              </div>
                              <div id="inspect-parameters-container" class="inspector-card">
@@ -201,7 +205,6 @@
                                  <h3>Outputs</h3>
                                  <div style="display: flex; gap: 6px;">
                                      <button id="btn-add-output" class="btn-add-pin hidden" title="Add output pin">+ Output</button>
-                                     <button id="btn-remove-output" class="btn-remove-pin hidden" title="Remove last output pin">- Output</button>
                                  </div>
                              </div>
                              <div id="inspect-outputs-container" class="inspector-card">
@@ -212,7 +215,7 @@
                              </div>
                             
                             <button id="btn-delete-node" class="btn btn-danger">
-                                🗑️ Delete Molecule
+                                🗑️ Delete Node
                             </button>
                         </div>
                     </div>

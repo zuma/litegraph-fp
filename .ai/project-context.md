@@ -3,7 +3,7 @@
 ## The Vision
 litegraph-fp is an agnostic, long-lasting visual programming engine inspired by the philosophy of AutoCAD.
 Just as AutoCAD provides a neutral Cartesian coordinate system that can support civil engineering, architecture, mechanical design, and countless other domains without favoring any of them, this engine provides a fundamentally neutral foundation for visual programming.
-Nodes are treated as simple, untyped “molecules” — blank shells that have no inherent meaning until a user assigns behavior to them. Ports are completely flexible and untyped, allowing any output to connect to any input. The engine itself performs no type checking or enforcement, staying maximally permissive so users can freely explore ideas.
+Nodes are treated as simple, untyped blank shells that have no inherent meaning until a user assigns behavior to them. Ports are completely flexible and untyped, allowing any output to connect to any input. The engine itself performs no type checking or enforcement, staying maximally permissive so users can freely explore ideas.
 The core is built on pure functional principles: graphs are immutable JSON, nodes are pure functions, and execution is predictable and portable. The system is designed from the ground up to support multiple programming languages, so different communities can bring their own tools and logic into the same graph.
 The ultimate goal is to create a system flexible enough that it can evolve and remain useful across decades and many different domains, rather than being locked into one language, one paradigm, or one narrow use case.
 
@@ -25,10 +25,8 @@ src/
 │   └── evaluate.ts  # Core graph evaluator with watchdog timeouts
 ├── registry/        # Node function implementations
 │   ├── types.ts     # NodeFunction, NodeRegistry
-│   ├── math.ts      # add, multiply
-│   ├── logic.ts     # invertBoolean
-│   ├── system.ts    # delaySim, logToConsole
-│   └── index.ts     # StandardNodes registry assembly
+│   ├── python.ts    # pythonScript helper
+│   └── index.ts     # StandardNodes registry (generic/unconfigured shells)
 ├── events/          # Impure side-effect boundary
 │   ├── types.ts     # Command, SideEffectHandler
 │   └── dispatcher.ts # createDispatcher factory

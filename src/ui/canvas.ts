@@ -33,9 +33,13 @@ export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration):
 }
 
 // Calculate the dimensions of a node based on its registry definition
-export function getNodeHeight(node: NodeState, nodeDef?: NodeDefinition): number {
-    const numInputs = Object.keys(getNodeInputs(node)).length;
-    const numOutputs = Object.keys(getNodeOutputs(node)).length;
+export function getNodeHeight(
+    node: NodeState, 
+    resolvedInputs?: Record<string, Record<string, PinType>>, 
+    resolvedOutputs?: Record<string, Record<string, PinType>>
+): number {
+    const numInputs = Object.keys(getNodeInputs(node, resolvedInputs)).length;
+    const numOutputs = Object.keys(getNodeOutputs(node, resolvedOutputs)).length;
     const maxRows = Math.max(numInputs, numOutputs, 1);
     return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + 30; // 30px bottom padding to snap total height to multiple of 15
 }
@@ -127,7 +131,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     const x = node.ui?.x ?? 0;
     const y = node.ui?.y ?? 0;
     const w = node.ui?.width ?? NODE_WIDTH;
-    const h = getNodeHeight(node, nodeDef);
+    const h = getNodeHeight(node, ctx.resolvedInputs, ctx.resolvedOutputs);
 
     const isSelected = ctx.selectedNodeId === node.id || (ctx.selectedNodeIds && ctx.selectedNodeIds.has(node.id));
     const isHovered = ctx.hoveredNodeId === node.id;
@@ -333,14 +337,14 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         const isPinned = ctx.pinnedDrawerNodeIds?.has(node.id) ?? false;
         const isDrawerOpen = ctx.hoveredDrawerNodeId === node.id || isPinned;
 
-        // Draw ellipsis button at the bottom center of the node body
+        // Draw ellipsis button at the bottom right corner of the node body
         context.save();
         context.beginPath();
         
-        const btnW = 30;
+        const btnW = 20;
         const btnH = 12;
-        const btnX = x + w / 2 - btnW / 2;
-        const btnY = y + h - btnH / 2;
+        const btnX = x + w - btnW - 6;
+        const btnY = y + h - btnH - 6;
         
         context.roundRect(btnX, btnY, btnW, btnH, 6);
         context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
@@ -359,7 +363,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         context.font = 'bold 10px "Outfit", sans-serif';
         context.textAlign = 'center';
         context.textBaseline = 'middle';
-        context.fillText('...', x + w / 2, y + h);
+        context.fillText('...', btnX + btnW / 2, btnY + btnH / 2 - 1);
         context.restore();
 
         // Draw the drawer if open
@@ -447,11 +451,11 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         }
     }
     // 9. Draw Card Border Outline last (only on selection or error state to declutter the canvas)
-    if (isSelected || hasError || node.type === 'molecule/unconfigured') {
+    if (isSelected || hasError || node.type === 'node/unconfigured') {
         context.beginPath();
         context.roundRect(x, y, w, h, 10);
-        context.lineWidth = node.type === 'molecule/unconfigured' ? 1.5 : 2.5;
-        if (node.type === 'molecule/unconfigured') {
+        context.lineWidth = node.type === 'node/unconfigured' ? 1.5 : 2.5;
+        if (node.type === 'node/unconfigured') {
             context.setLineDash([4, 4]);
             context.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.24)' : 'rgba(255, 255, 255, 0.24)';
         } else if (hasError) {
@@ -525,42 +529,33 @@ export function drawEdge(
         }
     };
 
-    const isHovered = ctx.hoveredEdgeId === edge.id;
+    const isEdgeSelected = ctx.selectedEdgeId === edge.id || (ctx.selectedEdgeIds && ctx.selectedEdgeIds.has(edge.id));
+
+    // Dynamic styling values for distinct selection vs normal states
+    let glowWidth = 4;
+    let glowOpacity = isLight ? 0.35 : 0.25;
+    let coreWidth = 2;
+    let coreOpacity = 0.85;
+
+    if (isEdgeSelected) {
+        glowWidth = 7;
+        glowOpacity = isLight ? 0.7 : 0.6;
+        coreWidth = 3.5;
+        coreOpacity = 1.0;
+    }
 
     // 1. Draw main glowing conduit line background (semi-transparent)
     buildPath();
     context.strokeStyle = color;
-    context.globalAlpha = isHovered ? (isLight ? 0.6 : 0.5) : (isLight ? 0.35 : 0.25);
-    context.lineWidth = isHovered ? 6 : 4;
+    context.globalAlpha = glowOpacity;
+    context.lineWidth = glowWidth;
     context.stroke();
 
     // 2. Draw sharp internal edge path
     buildPath();
     context.strokeStyle = color;
-    context.globalAlpha = isHovered ? 1.0 : 0.85;
-    context.lineWidth = isHovered ? 3 : 2;
-    context.stroke();
-
-    // 3. Flowing Pulse Animation
-    // Create animated dash offsets shifting with the epoch timestamp to show active signal transmission
-    const isSelected = ctx.selectedNodeId === edge.sourceNodeId || 
-                       ctx.selectedNodeId === edge.targetNodeId || 
-                       (ctx.selectedNodeIds && (ctx.selectedNodeIds.has(edge.sourceNodeId) || ctx.selectedNodeIds.has(edge.targetNodeId)));
-    buildPath();
-    context.lineWidth = 2.5;
-
-    context.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.7)' : '#ffffff';
-    context.globalAlpha = isSelected || isHovered ? 0.9 : 0.6;
-    context.setLineDash([8, 12]);
-    
-    // Fix #14: Only animate dashes during the 1.5s post-execution window to avoid idle CPU usage, or if edge is hovered
-    const lastExec = ctx.lastExecutionTime ?? 0;
-    const timeSinceExec = Date.now() - lastExec;
-    if (isHovered || timeSinceExec < 1500) {
-        context.lineDashOffset = -(Date.now() / 24) % 20; // Flow direction left-to-right
-    } else {
-        context.lineDashOffset = 0; // Static dashes when idle
-    }
+    context.globalAlpha = coreOpacity;
+    context.lineWidth = coreWidth;
     context.stroke();
 
     context.restore();

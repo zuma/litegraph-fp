@@ -9,37 +9,8 @@ import { getNodeInputs, getNodeOutputs } from '../registry/index.js';
  * For Tensor types, dtype must match and shapes must match exactly (length and elements).
  */
 export const isCompatible = (source: PinType, target: PinType): boolean => {
-    // Crucial rule: 'any' is compatible with all types. Return true if source fits in target.
-    if (source === 'any' || target === 'any') {
-        return true;
-    }
-
-    if (typeof source === 'string' && typeof target === 'string') {
-        return source === target;
-    }
-
-    if (typeof source === 'object' && typeof target === 'object') {
-        if (source.type === 'tensor' && target.type === 'tensor') {
-            if (source.dtype !== target.dtype) {
-                return false;
-            }
-            if (source.shape.length !== target.shape.length) {
-                return false;
-            }
-            for (let i = 0; i < source.shape.length; i++) {
-                const sDim = source.shape[i];
-                const tDim = target.shape[i];
-                const isDynamicSource = sDim === -1 || sDim === null || sDim === undefined;
-                const isDynamicTarget = tDim === -1 || tDim === null || tDim === undefined;
-                if (!isDynamicSource && !isDynamicTarget && sDim !== tDim) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-
-    return false;
+    // Permissive vision: all ports are compatible and connectable.
+    return true;
 };
 
 /**
@@ -113,7 +84,7 @@ export const getGraphValidationErrors = (
             continue;
         }
 
-        if (sourceNode.type === 'molecule/unconfigured' || targetNode.type === 'molecule/unconfigured') {
+        if (sourceNode.type === 'node/unconfigured' || targetNode.type === 'node/unconfigured') {
             continue;
         }
 

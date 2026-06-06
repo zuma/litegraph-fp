@@ -1,9 +1,10 @@
 import { GraphState, NodeState, Edge, NodeMode } from '../core/ast.js';
+import { createNodeState } from '../core/factory.js';
 import { appState, screenToWorld, syncContextState, updateCursor, getNodeHeight, getInputPinCoords, getOutputPinCoords, GRID_SIZE } from './state.js';
 import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons, undo, redo } from './history.js';
 import { updateInspector } from './inspector.js';
 import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution.js';
-import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
+import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT, getInputPinPos, getOutputPinPos } from './canvas.js';
 import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
 import { isCompatible } from '../engine/validation.js';
 import { updateSetting, loadSettings } from './settings.js';
@@ -261,15 +262,69 @@ export function sendNodeToBack(nodeId: string) {
 function isPinHit(worldPos: { x: number; y: number }, pos: { x: number; y: number }, isInput: boolean): boolean {
     const dx = worldPos.x - pos.x;
     const dy = worldPos.y - pos.y;
-    
-    // Asymmetric horizontal tolerance to avoid overlapping text inside the card
-    if (isInput) {
-        if (dx > 6) return false; // Inside card (too far right) -> ignore
-    } else {
-        if (dx < -6) return false; // Inside card (too far left) -> ignore
-    }
-    
-    return Math.hypot(dx, dy) <= 22;
+    return Math.hypot(dx, dy) <= 6;
+}
+
+function configureContextMenuForNode() {
+    const deleteNode = document.getElementById('ctx-delete-node');
+    const disconnect = document.getElementById('ctx-disconnect-node');
+    const divider = document.querySelector('.context-menu-divider') as HTMLElement;
+    const bringFront = document.getElementById('ctx-bring-to-front');
+    const sendBack = document.getElementById('ctx-send-to-back');
+    const deleteConn = document.getElementById('ctx-delete-connection');
+
+    if (deleteNode) deleteNode.style.display = 'block';
+    if (disconnect) disconnect.style.display = 'block';
+    if (divider) divider.style.display = 'block';
+    if (bringFront) bringFront.style.display = 'block';
+    if (sendBack) sendBack.style.display = 'block';
+    if (deleteConn) deleteConn.style.display = 'none';
+}
+
+function configureContextMenuForEdge() {
+    const deleteNode = document.getElementById('ctx-delete-node');
+    const disconnect = document.getElementById('ctx-disconnect-node');
+    const divider = document.querySelector('.context-menu-divider') as HTMLElement;
+    const bringFront = document.getElementById('ctx-bring-to-front');
+    const sendBack = document.getElementById('ctx-send-to-back');
+    const deleteConn = document.getElementById('ctx-delete-connection');
+
+    if (deleteNode) deleteNode.style.display = 'none';
+    if (disconnect) disconnect.style.display = 'none';
+    if (divider) divider.style.display = 'none';
+    if (bringFront) bringFront.style.display = 'none';
+    if (sendBack) sendBack.style.display = 'none';
+    if (deleteConn) deleteConn.style.display = 'block';
+}
+
+let rightClickedEdgeId: string | null = null;
+
+function lineSegmentsIntersect(
+    x1: number, y1: number, x2: number, y2: number,
+    x3: number, y3: number, x4: number, y4: number
+): boolean {
+    const det = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3);
+    if (det === 0) return false; // Parallel
+
+    const lambda = ((y4 - y3) * (x4 - x1) + (x3 - x4) * (y4 - y1)) / det;
+    const gamma = ((y1 - y2) * (x4 - x1) + (x2 - x1) * (y4 - y1)) / det;
+
+    return (0 <= lambda && lambda <= 1) && (0 <= gamma && gamma <= 1);
+}
+
+function isLineIntersectingBox(
+    x1: number, y1: number, x2: number, y2: number,
+    bx: number, by: number, bw: number, bh: number
+): boolean {
+    // 1. Check if either endpoint is inside
+    const inside = (x: number, y: number) => x >= bx && x <= bx + bw && y >= by && y <= by + bh;
+    if (inside(x1, y1) || inside(x2, y2)) return true;
+
+    // 2. Check intersection with 4 sides of the box
+    return lineSegmentsIntersect(x1, y1, x2, y2, bx, by, bx + bw, by) || // Top
+           lineSegmentsIntersect(x1, y1, x2, y2, bx, by + bh, bx + bw, by + bh) || // Bottom
+           lineSegmentsIntersect(x1, y1, x2, y2, bx, by, bx, by + bh) || // Left
+           lineSegmentsIntersect(x1, y1, x2, y2, bx + bw, by, bx + bw, by + bh); // Right
 }
 
 // ============================================================================
@@ -287,6 +342,12 @@ export function setupInteractions() {
         if (e.key === 'Escape') {
             closeNodeAdder();
             document.getElementById('context-menu')?.classList.add('hidden');
+            appState.selectedNodeId = null;
+            appState.selectedNodeIds.clear();
+            appState.selectedEdgeId = null;
+            appState.selectedEdgeIds.clear();
+            syncContextState();
+            updateInspector();
         }
 
         if (e.key === 'Shift') {
@@ -332,9 +393,62 @@ export function setupInteractions() {
                     return;
                 }
                 const idsToDeleteCount = appState.selectedNodeIds.size + (appState.selectedNodeId && !appState.selectedNodeIds.has(appState.selectedNodeId) ? 1 : 0);
-                if (idsToDeleteCount > 0) {
+                const edgesToDeleteCount = appState.selectedEdgeIds.size + (appState.selectedEdgeId && !appState.selectedEdgeIds.has(appState.selectedEdgeId) ? 1 : 0);
+
+                if (idsToDeleteCount > 0 || edgesToDeleteCount > 0 || appState.hoveredEdgeId) {
                     e.preventDefault();
-                    deleteSelectedNodes();
+                    pushToHistory();
+
+                    // 1. Delete nodes if any selected
+                    const nodeIdsDeleted = new Set<string>();
+                    let updatedNodes = { ...appState.currentGraph.nodes };
+                    if (idsToDeleteCount > 0) {
+                        appState.selectedNodeIds.forEach(id => nodeIdsDeleted.add(id));
+                        if (appState.selectedNodeId) nodeIdsDeleted.add(appState.selectedNodeId);
+
+                        nodeIdsDeleted.forEach(id => {
+                            delete (updatedNodes as any)[id];
+                        });
+
+                        appState.selectedNodeId = null;
+                        appState.selectedNodeIds.clear();
+
+                        logToTerminal(`Deleted ${nodeIdsDeleted.size} selected node(s)`, 'system-msg');
+                    }
+
+                    // 2. Delete edges (connected to deleted nodes, or explicitly selected/hovered)
+                    const edgesToDelete = new Set<string>();
+                    appState.selectedEdgeIds.forEach(id => edgesToDelete.add(id));
+                    if (appState.selectedEdgeId) edgesToDelete.add(appState.selectedEdgeId);
+
+                    // Fallback to hovered edge if no explicit selection
+                    if (idsToDeleteCount === 0 && edgesToDeleteCount === 0 && appState.hoveredEdgeId) {
+                        edgesToDelete.add(appState.hoveredEdgeId);
+                    }
+
+                    const updatedEdges = appState.currentGraph.edges.filter(
+                        edge => !nodeIdsDeleted.has(edge.sourceNodeId) &&
+                                 !nodeIdsDeleted.has(edge.targetNodeId) &&
+                                 !edgesToDelete.has(edge.id)
+                    );
+
+                    appState.currentGraph = {
+                        nodes: updatedNodes,
+                        edges: updatedEdges
+                    };
+
+                    if (edgesToDelete.size > 0 && idsToDeleteCount === 0) {
+                        logToTerminal(`Deleted ${edgesToDelete.size} connection(s)`, 'system-msg');
+                    }
+
+                    // Clear edge selections
+                    appState.selectedEdgeId = null;
+                    appState.selectedEdgeIds.clear();
+                    appState.hoveredEdgeId = null;
+
+                    syncContextState();
+                    updateInspector();
+                    triggerAutoRun();
                 }
             }
         }
@@ -431,10 +545,10 @@ export function setupInteractions() {
             }
 
             // Check click on ellipsis button
-            const btnW = 30;
+            const btnW = 20;
             const btnH = 12;
-            const btnX = nx + w / 2 - btnW / 2;
-            const btnY = ny + h - btnH / 2;
+            const btnX = nx + w - btnW - 6;
+            const btnY = ny + h - btnH - 6;
             if (worldPos.x >= btnX && worldPos.x <= btnX + btnW && worldPos.y >= btnY && worldPos.y <= btnY + btnH) {
                 if (isPinned) {
                     appState.pinnedDrawerNodeIds.delete(node.id);
@@ -459,7 +573,7 @@ export function setupInteractions() {
             if (!nodeDef) continue;
 
             // Inputs
-            const inputs = Object.keys(getNodeInputs(node));
+            const inputs = Object.keys(getNodeInputs(node, appState.resolvedInputs));
             for (let i = 0; i < inputs.length; i++) {
                 const pos = getInputPinCoords(node, inputs[i]);
                 if (isPinHit(worldPos, pos, true)) {
@@ -485,7 +599,7 @@ export function setupInteractions() {
             if (pinClicked) break;
 
             // Outputs
-            const outputs = Object.keys(getNodeOutputs(node));
+            const outputs = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
             for (let i = 0; i < outputs.length; i++) {
                 const pos = getOutputPinCoords(node, outputs[i]);
                 if (isPinHit(worldPos, pos, false)) {
@@ -648,13 +762,17 @@ export function setupInteractions() {
         }
 
         if (clickedNodeId) {
+            if (!(e.shiftKey || e.ctrlKey || e.metaKey)) {
+                appState.selectedEdgeId = null;
+                appState.selectedEdgeIds.clear();
+            }
             // Bring clicked node to front
             if (loadSettings().canvas.autoBringToFront) {
                 bringNodeToFront(clickedNodeId);
             }
 
             // Toggle or set selection
-            if (e.shiftKey) {
+            if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 if (appState.selectedNodeIds.has(clickedNodeId)) {
                     appState.selectedNodeIds.delete(clickedNodeId);
                     if (appState.selectedNodeId === clickedNodeId) {
@@ -708,7 +826,42 @@ export function setupInteractions() {
             return;
         }
 
-        // 3. Fallback: Clicked empty canvas space. Start panning or selection box.
+        // 3. Check if clicked an edge
+        if (appState.hoveredEdgeId) {
+            const clickedEdgeId = appState.hoveredEdgeId;
+            if (!(e.shiftKey || e.ctrlKey || e.metaKey)) {
+                appState.selectedNodeId = null;
+                appState.selectedNodeIds.clear();
+            }
+
+            if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                if (appState.selectedEdgeIds.has(clickedEdgeId)) {
+                    appState.selectedEdgeIds.delete(clickedEdgeId);
+                    if (appState.selectedEdgeId === clickedEdgeId) {
+                        appState.selectedEdgeId = appState.selectedEdgeIds.size > 0 ? Array.from(appState.selectedEdgeIds)[0] : null;
+                    }
+                } else {
+                    appState.selectedEdgeIds.add(clickedEdgeId);
+                    appState.selectedEdgeId = clickedEdgeId;
+                }
+            } else {
+                if (!appState.selectedEdgeIds.has(clickedEdgeId)) {
+                    appState.selectedEdgeIds.clear();
+                    appState.selectedEdgeIds.add(clickedEdgeId);
+                    appState.selectedEdgeId = clickedEdgeId;
+                }
+            }
+
+            syncContextState();
+            updateInspector();
+            updateCursor();
+            if (appState.renderingContext) {
+                appState.renderingContext.needsRedraw = true;
+            }
+            return;
+        }
+
+        // 4. Fallback: Clicked empty canvas space. Start panning or selection box.
         closeNodeAdder();
 
         if (e.shiftKey) {
@@ -724,12 +877,7 @@ export function setupInteractions() {
                 };
             }
         } else {
-            // Panning: deselect all
-            appState.selectedNodeId = null;
-            appState.selectedNodeIds.clear();
-            syncContextState();
-            updateInspector();
-
+            // Panning: start pan without clearing selections
             appState.isPanning = true;
             appState.panStartX = e.clientX;
             appState.panStartY = e.clientY;
@@ -858,10 +1006,10 @@ export function setupInteractions() {
             }
 
             // Check if hovering ellipsis button
-            const btnW = 30;
+            const btnW = 20;
             const btnH = 12;
-            const btnX = nx + w / 2 - btnW / 2;
-            const btnY = ny + h - btnH / 2;
+            const btnX = nx + w - btnW - 6;
+            const btnY = ny + h - btnH - 6;
             if (worldPos.x >= btnX && worldPos.x <= btnX + btnW && worldPos.y >= btnY && worldPos.y <= btnY + btnH) {
                 hEllipsisNodeId = node.id;
                 hDrawerNodeId = node.id;
@@ -869,7 +1017,7 @@ export function setupInteractions() {
             }
 
             // Inputs
-            const inputs = Object.keys(getNodeInputs(node));
+            const inputs = Object.keys(getNodeInputs(node, appState.resolvedInputs));
             for (let i = 0; i < inputs.length; i++) {
                 const pos = getInputPinCoords(node, inputs[i]);
                 if (isPinHit(worldPos, pos, true)) {
@@ -880,7 +1028,7 @@ export function setupInteractions() {
 
             // Outputs
             if (!hPin) {
-                const outputs = Object.keys(getNodeOutputs(node));
+                const outputs = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
                 for (let i = 0; i < outputs.length; i++) {
                     const pos = getOutputPinCoords(node, outputs[i]);
                     if (isPinHit(worldPos, pos, false)) {
@@ -929,7 +1077,7 @@ export function setupInteractions() {
                 const targetPos = getInputPinCoords(targetNode, edge.targetPinId);
 
                 const { distance, midpoint } = getDistanceToEdge(worldPos.x, worldPos.y, sourcePos, targetPos, edgeStyle);
-                if (distance <= 8 && distance < minDistance) {
+                if (distance <= 12 && distance < minDistance) {
                     minDistance = distance;
                     hEdgeId = edge.id;
                     hEdgePos = midpoint;
@@ -979,13 +1127,20 @@ export function setupInteractions() {
                 const sourceNode = appState.currentGraph.nodes[sourceNodeId];
                 const targetNode = appState.currentGraph.nodes[targetNodeId];
                 
+                logToTerminal(`mouseup: hoveredPin={nodeId: ${appState.hoveredPin.nodeId}, pinId: ${appState.hoveredPin.pinId}, isInput: ${appState.hoveredPin.isInput}}`, 'system-msg');
+                logToTerminal(`mouseup: sourceNode=${sourceNode?.id} (${sourceNode?.type}), targetNode=${targetNode?.id} (${targetNode?.type})`, 'system-msg');
+
                 if (sourceNode && targetNode) {
                     const sourceDef = StandardNodes[sourceNode.type];
                     const targetDef = StandardNodes[targetNode.type];
                     
+                    logToTerminal(`mouseup: sourceDef=${!!sourceDef}, targetDef=${!!targetDef}`, 'system-msg');
+
                     if (sourceDef && targetDef) {
-                        const sourceType = getNodeOutputs(sourceNode)[sourcePinId];
-                        const targetType = getNodeInputs(targetNode)[targetPinId];
+                        const sourceType = getNodeOutputs(sourceNode, appState.resolvedOutputs)[sourcePinId];
+                        const targetType = getNodeInputs(targetNode, appState.resolvedInputs)[targetPinId];
+                        
+                        logToTerminal(`mouseup: sourcePin=${sourcePinId} (${sourceType}), targetPin=${targetPinId} (${targetType})`, 'system-msg');
 
                         if (isCompatible(sourceType, targetType)) {
                             pushToHistory();
@@ -1124,7 +1279,7 @@ export function setupInteractions() {
         // B. Resolve Node Drag completion
         if (appState.draggedNodeId) {
             // Click-without-drag selection resolution
-            if (!appState.dragHasMoved && !e.shiftKey) {
+            if (!appState.dragHasMoved && !(e.shiftKey || e.ctrlKey || e.metaKey)) {
                 appState.selectedNodeIds.clear();
                 appState.selectedNodeIds.add(appState.draggedNodeId);
                 appState.selectedNodeId = appState.draggedNodeId;
@@ -1155,6 +1310,7 @@ export function setupInteractions() {
 
             if (bw >= 2 || bh >= 2) {
                 const selectedFromBox: string[] = [];
+                const selectedEdgesFromBox: string[] = [];
 
                 for (const nodeId in appState.currentGraph.nodes) {
                     const node = appState.currentGraph.nodes[nodeId];
@@ -1176,6 +1332,42 @@ export function setupInteractions() {
                     }
                 }
 
+                // Resolve Edges selection from box
+                appState.currentGraph.edges.forEach(edge => {
+                    const sourceNode = appState.currentGraph.nodes[edge.sourceNodeId];
+                    const targetNode = appState.currentGraph.nodes[edge.targetNodeId];
+                    if (sourceNode && targetNode) {
+                        const sourceDef = StandardNodes[sourceNode.type];
+                        const targetDef = StandardNodes[targetNode.type];
+                        if (sourceDef && targetDef) {
+                            const outPinNames = Object.keys(getNodeOutputs(sourceNode, appState.resolvedOutputs));
+                            const inPinNames = Object.keys(getNodeInputs(targetNode, appState.resolvedInputs));
+                            const outIndex = outPinNames.indexOf(edge.sourcePinId);
+                            const inIndex = inPinNames.indexOf(edge.targetPinId);
+
+                            if (outIndex !== -1 && inIndex !== -1) {
+                                const sourcePos = getOutputPinPos(sourceNode, sourceDef, outIndex);
+                                const targetPos = getInputPinPos(targetNode, inIndex);
+
+                                let isEdgeSelected = false;
+                                if (isEnclosing) {
+                                    // Enclosing: both endpoints must be inside
+                                    const sxIn = sourcePos.x >= bx && sourcePos.x <= bx + bw && sourcePos.y >= by && sourcePos.y <= by + bh;
+                                    const txIn = targetPos.x >= bx && targetPos.x <= bx + bw && targetPos.y >= by && targetPos.y <= by + bh;
+                                    isEdgeSelected = sxIn && txIn;
+                                } else {
+                                    // Crossing: line segment intersects the selection box
+                                    isEdgeSelected = isLineIntersectingBox(sourcePos.x, sourcePos.y, targetPos.x, targetPos.y, bx, by, bw, bh);
+                                }
+
+                                if (isEdgeSelected) {
+                                    selectedEdgesFromBox.push(edge.id);
+                                }
+                            }
+                        }
+                    }
+                });
+
                 // If Ctrl/Cmd is held down, toggle/add to existing selection.
                 // Otherwise, replace the selection.
                 if (e.ctrlKey || e.metaKey) {
@@ -1186,16 +1378,30 @@ export function setupInteractions() {
                             appState.selectedNodeIds.add(id);
                         }
                     });
+
+                    selectedEdgesFromBox.forEach(id => {
+                        if (appState.selectedEdgeIds.has(id)) {
+                            appState.selectedEdgeIds.delete(id);
+                        } else {
+                            appState.selectedEdgeIds.add(id);
+                        }
+                    });
                 } else {
                     appState.selectedNodeIds.clear();
                     selectedFromBox.forEach(id => appState.selectedNodeIds.add(id));
+
+                    appState.selectedEdgeIds.clear();
+                    selectedEdgesFromBox.forEach(id => appState.selectedEdgeIds.add(id));
                 }
 
                 appState.selectedNodeId = appState.selectedNodeIds.size > 0 ? Array.from(appState.selectedNodeIds)[0] : null;
+                appState.selectedEdgeId = appState.selectedEdgeIds.size > 0 ? Array.from(appState.selectedEdgeIds)[0] : null;
             } else {
                 // Click on empty space: clear selection
                 appState.selectedNodeIds.clear();
                 appState.selectedNodeId = null;
+                appState.selectedEdgeIds.clear();
+                appState.selectedEdgeId = null;
             }
 
             appState.renderingContext.selectionBox = null;
@@ -1203,8 +1409,23 @@ export function setupInteractions() {
             updateInspector();
         }
 
+        // D. Resolve Pan completion
+        if (appState.isPanning) {
+            const dx = e.clientX - appState.panStartX;
+            const dy = e.clientY - appState.panStartY;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 3) {
+                appState.selectedNodeId = null;
+                appState.selectedNodeIds.clear();
+                appState.selectedEdgeId = null;
+                appState.selectedEdgeIds.clear();
+                syncContextState();
+                updateInspector();
+            }
+            appState.isPanning = false;
+        }
+
         appState.draggedNodeId = null;
-        appState.isPanning = false;
         updateCursor();
         if (appState.renderingContext) {
             appState.renderingContext.needsRedraw = true;
@@ -1299,6 +1520,7 @@ export function setupInteractions() {
 
         if (clickedNodeId) {
             // Right-clicked a node: select it, hide node adder, show context menu
+            configureContextMenuForNode();
             if (loadSettings().canvas.autoBringToFront) {
                 bringNodeToFront(clickedNodeId);
             }
@@ -1314,6 +1536,22 @@ export function setupInteractions() {
                 const rect = canvas.getBoundingClientRect();
                 const menuWidth = 180;
                 const menuHeight = 160;
+                const posX = Math.max(10, Math.min(mouseX, rect.width - menuWidth - 10));
+                const posY = Math.max(10, Math.min(mouseY, rect.height - menuHeight - 10));
+                ctxMenu.style.left = `${posX}px`;
+                ctxMenu.style.top = `${posY}px`;
+                ctxMenu.classList.remove('hidden');
+            }
+        } else if (appState.hoveredEdgeId) {
+            // Right-clicked an edge: configure context menu and show it
+            rightClickedEdgeId = appState.hoveredEdgeId;
+            closeNodeAdder();
+            configureContextMenuForEdge();
+            
+            if (ctxMenu) {
+                const rect = canvas.getBoundingClientRect();
+                const menuWidth = 180;
+                const menuHeight = 50;
                 const posX = Math.max(10, Math.min(mouseX, rect.width - menuWidth - 10));
                 const posY = Math.max(10, Math.min(mouseY, rect.height - menuHeight - 10));
                 ctxMenu.style.left = `${posX}px`;
@@ -1385,6 +1623,27 @@ export function setupInteractions() {
         document.getElementById('context-menu')?.classList.add('hidden');
     });
 
+    document.getElementById('ctx-delete-connection')?.addEventListener('click', () => {
+        if (!rightClickedEdgeId) return;
+
+        pushToHistory();
+
+        const edgeToDelete = appState.currentGraph.edges.find(e => e.id === rightClickedEdgeId);
+        appState.currentGraph = {
+            ...appState.currentGraph,
+            edges: appState.currentGraph.edges.filter(e => e.id !== rightClickedEdgeId)
+        };
+
+        if (edgeToDelete) {
+            logToTerminal(`Deleted connection [Node ${edgeToDelete.sourceNodeId}].${edgeToDelete.sourcePinId} ➡️ [Node ${edgeToDelete.targetNodeId}].${edgeToDelete.targetPinId}`, 'system-msg');
+        }
+
+        rightClickedEdgeId = null;
+        document.getElementById('context-menu')?.classList.add('hidden');
+        syncContextState();
+        triggerAutoRun();
+    });
+
     // Node search input listener
     const searchInput = document.getElementById('node-search-input');
     searchInput?.addEventListener('input', (e) => {
@@ -1405,7 +1664,7 @@ export function closeNodeAdder() {
         // Clean up unconfigured node if creation was cancelled
         if (appState.selectedNodeId) {
             const selectedNode = appState.currentGraph.nodes[appState.selectedNodeId];
-            if (selectedNode && selectedNode.type === 'molecule/unconfigured') {
+            if (selectedNode && selectedNode.type === 'node/unconfigured') {
                 const nodesCopy = { ...appState.currentGraph.nodes };
                 delete nodesCopy[appState.selectedNodeId];
                 appState.currentGraph = {
@@ -1428,16 +1687,16 @@ export function showNodeAdder(screenX: number, screenY: number) {
 
     // 1. Immediately instantiate unconfigured node in graph
     const uniqueId = `unconfigured_${Date.now().toString().slice(-4)}`;
-    const newNode: NodeState = {
+    const newNode = createNodeState({
         id: uniqueId,
-        type: 'molecule/unconfigured',
+        type: 'node/unconfigured',
         params: {},
         ui: {
             x: appState.spawnX,
             y: appState.spawnY,
-            title: 'NEW MOLECULE'
+            title: 'NEW NODE'
         }
-    };
+    });
 
     appState.currentGraph = {
         ...appState.currentGraph,
@@ -1510,8 +1769,8 @@ export function addNewNode(type: string) {
     const nodeDef = StandardNodes[type];
     
     let mode: NodeMode | undefined = undefined;
-    if (type.startsWith('molecule/')) {
-        mode = type === 'molecule/blocks' ? 'blocks' : (type === 'molecule/python' ? 'python' : 'formula');
+    if (type.startsWith('node/')) {
+        mode = type === 'node/blocks' ? 'blocks' : (type === 'node/python' ? 'python' : 'formula');
     }
     
     // Prepare initial parameter fields based on required pins
@@ -1535,7 +1794,7 @@ export function addNewNode(type: string) {
     }
 
     const unconfiguredNode = appState.selectedNodeId ? appState.currentGraph.nodes[appState.selectedNodeId] : null;
-    const isMorphing = unconfiguredNode && unconfiguredNode.type === 'molecule/unconfigured';
+    const isMorphing = unconfiguredNode && unconfiguredNode.type === 'node/unconfigured';
 
     let spawnX = 0;
     let spawnY = 0;
@@ -1556,20 +1815,20 @@ export function addNewNode(type: string) {
         }
     }
 
-    const newNode: NodeState = {
+    const newNode = createNodeState({
         id: uniqueId,
         type,
         mode,
         params: initialParams,
-        inputs: (isMorphing && unconfiguredNode) ? unconfiguredNode.inputs : undefined,
-        outputs: (isMorphing && unconfiguredNode) ? unconfiguredNode.outputs : undefined,
+        inputs: (isMorphing && unconfiguredNode) ? (unconfiguredNode.inputs as any) : undefined,
+        outputs: (isMorphing && unconfiguredNode) ? (unconfiguredNode.outputs as any) : undefined,
         ui: {
             x: spawnX,
             y: spawnY,
             title: baseId.toUpperCase(),
             isMorphing: true
         }
-    };
+    });
 
     appState.currentGraph = {
         ...appState.currentGraph,
@@ -1582,6 +1841,8 @@ export function addNewNode(type: string) {
     logToTerminal(`Spawned node ${uniqueId} of type '${type}'`, 'system-msg');
     
     appState.selectedNodeId = uniqueId;
+    appState.selectedNodeIds.clear();
+    appState.selectedNodeIds.add(uniqueId);
 
     const adder = document.getElementById('node-adder');
     const adderContent = document.getElementById('node-adder-content');
@@ -1608,7 +1869,7 @@ export function addNewNode(type: string) {
         } else if (category === 'system') {
             accentColor = 'var(--accent-purple)';
             glowColor = 'var(--accent-purple-glow)';
-        } else if (category === 'molecule') {
+        } else if (category === 'node') {
             accentColor = 'var(--accent-orange)';
             glowColor = 'var(--accent-orange-glow)';
         } else if (category === 'string' || category === 'array' || category === 'object') {
@@ -1716,7 +1977,7 @@ export function getDistanceToEdge(
         const P2 = { x: targetPos.x - cpOffset, y: targetPos.y };
         const P3 = targetPos;
 
-        const numPoints = 12;
+        const numPoints = 20;
         let minDistance = Infinity;
         let prevPoint = P0;
         

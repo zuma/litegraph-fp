@@ -31,6 +31,8 @@ export interface RenderingContext {
     backgroundColor?: string;
     selectedNodeId: string | null;
     selectedNodeIds: Set<string>;
+    selectedEdgeId?: string | null;
+    selectedEdgeIds?: Set<string>;
     hoveredNodeId: string | null;
     hoveredPin: { nodeId: string; pinId: string; isInput: boolean } | null;
     draggingConnection: DraggingConnection | null;

@@ -3,12 +3,13 @@ import { createRenderer } from './renderer.js';
 import { StandardNodes } from '../registry/index.js';
 import { NODE_WIDTH } from './canvas.js';
 import { appState, syncContextState, updateCursor, getNodeHeight } from './state.js';
-import { runExecutionPipeline, logToTerminal } from './execution.js';
+import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution.js';
 import { setupInteractions, deleteSelectedNodes, zoomExtents, closeNodeAdder } from './interactions.js';
 import { undo, redo, pushToHistory } from './history.js';
 import { loadSettings, updateSetting } from './settings.js';
 import { autoLayoutGraph } from './layout.js';
 import { watchLiquidGlass } from './liquid_glass.js';
+import { updateInspector } from './inspector.js';
 
 window.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('graph-canvas') as HTMLCanvasElement;
@@ -16,6 +17,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
     appState.canvas = canvas;
     appState.ctx = ctx;
+
+    (window as any).appState = appState;
+    (window as any).syncContextState = syncContextState;
+    (window as any).updateInspector = updateInspector;
+    (window as any).triggerAutoRun = triggerAutoRun;
 
     const settings = loadSettings();
 
@@ -65,6 +71,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // Instantiate and start renderer
     const renderer = createRenderer(renderingContext, () => appState.currentGraph, StandardNodes);
     renderer.start();
+    (window as any).appState = appState;
     updateCursor();
 
     // Sidebar Collapsible Management
@@ -670,5 +677,34 @@ window.addEventListener('DOMContentLoaded', () => {
             downsample: 2
         });
         glassCleanups.push(cleanup);
+    });
+
+    // Register Service Worker for offline support
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').then(registration => {
+                console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            }, err => {
+                console.error('ServiceWorker registration failed: ', err);
+            });
+        });
+    }
+
+    // Network status listeners
+    window.addEventListener('online', () => {
+        import('./state.js').then(mod => mod.updateOnlineStatus());
+    });
+    window.addEventListener('offline', () => {
+        import('./state.js').then(mod => mod.updateOnlineStatus());
+    });
+
+    // Initial check
+    import('./state.js').then(mod => {
+        mod.updateOnlineStatus();
+        
+        // Quietly update the relative saved time label every 10 seconds (e.g. Saved -> Saved 10s ago)
+        setInterval(() => {
+            mod.updateSavedTimeLabel();
+        }, 10000);
     });
 });

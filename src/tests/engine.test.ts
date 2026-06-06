@@ -16,8 +16,9 @@ describe('Engine Feedback Loops', () => {
                 },
                 'add1': {
                     id: 'add1',
-                    type: 'math/add',
-                    params: { b: 1 } // Adding 1 every tick
+                    type: 'node/formula',
+                    mode: 'formula',
+                    params: { formula: 'a + 1' }
                 }
             },
             edges: [
@@ -62,7 +63,7 @@ describe('Engine Feedback Loops', () => {
         const graph: GraphState = {
             nodes: {
                 'state1': { id: 'state1', type: 'system/state', params: { defaultValue: 100 } },
-                'add1': { id: 'add1', type: 'math/add', params: {} }
+                'add1': { id: 'add1', type: 'node/formula', mode: 'formula', params: { formula: 'a + 1' } }
             },
             edges: [
                 { id: 'e1', sourceNodeId: 'state1', sourcePinId: 'value', targetNodeId: 'add1', targetPinId: 'a' },
@@ -76,26 +77,56 @@ describe('Engine Feedback Loops', () => {
             .resolves.not.toThrow();
     });
 
-    it('should catch static validation errors before execution and return them', async () => {
+    it('should not throw on mismatching types during static validation', async () => {
+        const customRegistry = {
+            'custom/prod': {
+                namespace: 'custom',
+                category: 'test',
+                name: 'prod',
+                requires: {},
+                provides: { out: 'number' },
+                execute: () => ({ out: 1 })
+            },
+            'custom/cons': {
+                namespace: 'custom',
+                category: 'test',
+                name: 'cons',
+                requires: { a: 'boolean' },
+                provides: {},
+                execute: () => ({})
+            }
+        };
         const graph: GraphState = {
             nodes: {
-                'nodeC': { id: 'nodeC', type: 'math/multiply', params: {} },
-                'nodeD': { id: 'nodeD', type: 'logic/not', params: {} }
+                'nodeC': { id: 'nodeC', type: 'custom/prod', params: {} },
+                'nodeD': { id: 'nodeD', type: 'custom/cons', params: {} }
             },
             edges: [
                 { id: 'edge3', sourceNodeId: 'nodeC', sourcePinId: 'out', targetNodeId: 'nodeD', targetPinId: 'a' }
             ]
         };
 
-        const result = await evaluateGraph(graph, {}, StandardNodes, { executionMode: 'serial' });
-        expect(result.errors['nodeD']).toContain('Type validation failed');
+        const result = await evaluateGraph(graph, {}, customRegistry, { executionMode: 'serial' });
+        expect(result.errors['nodeD']).toBeUndefined();
     });
 
     it('should catch circular dependency cycle errors and place them under __global__', async () => {
         const graph: GraphState = {
             nodes: {
-                'nodeA': { id: 'nodeA', type: 'math/add', params: {} },
-                'nodeB': { id: 'nodeB', type: 'math/add', params: {} }
+                'nodeA': {
+                    id: 'nodeA',
+                    type: 'node/generic',
+                    inputs: { a: 'any' },
+                    outputs: { out: 'any' },
+                    params: {}
+                },
+                'nodeB': {
+                    id: 'nodeB',
+                    type: 'node/generic',
+                    inputs: { a: 'any' },
+                    outputs: { out: 'any' },
+                    params: {}
+                }
             },
             edges: [
                 { id: 'e1', sourceNodeId: 'nodeA', sourcePinId: 'out', targetNodeId: 'nodeB', targetPinId: 'a' },
@@ -109,17 +140,28 @@ describe('Engine Feedback Loops', () => {
 
     it('should propagate upstream failures and skip downstream evaluations', async () => {
         const faultyRegistry = {
-            ...StandardNodes,
-            'math/add': {
-                ...StandardNodes['math/add'],
-                execute: () => { throw new Error('Add exploded!'); }
+            'custom/faulty': {
+                namespace: 'custom',
+                category: 'test',
+                name: 'faulty',
+                requires: {},
+                provides: { out: 'any' },
+                execute: () => { throw new Error('Exploded!'); }
+            },
+            'custom/generic': {
+                namespace: 'custom',
+                category: 'test',
+                name: 'generic',
+                requires: { a: 'any' },
+                provides: { out: 'any' },
+                execute: async (inputs: any) => ({ out: inputs.a })
             }
         };
 
         const graph: GraphState = {
             nodes: {
-                'nodeA': { id: 'nodeA', type: 'math/add', params: {} },
-                'nodeB': { id: 'nodeB', type: 'math/multiply', params: {} }
+                'nodeA': { id: 'nodeA', type: 'custom/faulty', params: {} },
+                'nodeB': { id: 'nodeB', type: 'custom/generic', params: {} }
             },
             edges: [
                 { id: 'e1', sourceNodeId: 'nodeA', sourcePinId: 'out', targetNodeId: 'nodeB', targetPinId: 'a' }
@@ -127,7 +169,7 @@ describe('Engine Feedback Loops', () => {
         };
 
         const result = await evaluateGraph(graph, {}, faultyRegistry, { executionMode: 'serial' });
-        expect(result.errors['nodeA']).toBe('Add exploded!');
+        expect(result.errors['nodeA']).toBe('Exploded!');
         expect(result.errors['nodeB']).toContain("Skipped: Upstream dependency 'nodeA' failed");
     });
 
@@ -170,7 +212,12 @@ describe('Engine Feedback Loops', () => {
     it('should garbage collect stale activeState keys of deleted/renamed elements', async () => {
         const graph: GraphState = {
             nodes: {
-                'nodeA': { id: 'nodeA', type: 'math/add', params: {} }
+                'nodeA': {
+                    id: 'nodeA',
+                    type: 'node/generic',
+                    inputs: { a: 'any', b: 'any' },
+                    params: {}
+                }
             },
             edges: []
         };

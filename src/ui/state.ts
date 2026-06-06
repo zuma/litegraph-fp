@@ -1,4 +1,5 @@
 import { GraphState, NodeState, PinType } from '../core/ast.js';
+import { createNodeState } from '../core/factory.js';
 import { RenderingContext, Viewport } from './types.js';
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
 import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
@@ -16,30 +17,39 @@ export const GRID_SIZE = 30;        // Grid spacing for snapping (half the 60px 
 // ============================================================================
 export const defaultGraph: GraphState = {
     nodes: {
-        'add_4012': {
+        'add_4012': createNodeState({
             id: 'add_4012',
-            type: 'math/add',
-            params: { a: 10, b: 20 },
+            type: 'node/formula',
+            mode: 'formula',
+            inputs: { a: 'any', b: 'any' },
+            outputs: { out: 'any' },
+            params: { formula: 'a + b', a: 10, b: 20 },
             ui: { x: 100, y: 80, title: 'Input Adder' }
-        },
-        'multiply_8930': {
+        }),
+        'multiply_8930': createNodeState({
             id: 'multiply_8930',
-            type: 'math/multiply',
-            params: { b: 5 },
+            type: 'node/formula',
+            mode: 'formula',
+            inputs: { a: 'any', b: 'any' },
+            outputs: { out: 'any' },
+            params: { formula: 'a * b', b: 5 },
             ui: { x: 380, y: 150, title: 'Scaling Node' }
-        },
-        'log_1052': {
+        }),
+        'log_1052': createNodeState({
             id: 'log_1052',
             type: 'system/log',
+            inputs: { msg: 'any' },
             params: {},
             ui: { x: 650, y: 180, title: 'Output Logger' }
-        },
-        'delay_7701': {
+        }),
+        'delay_7701': createNodeState({
             id: 'delay_7701',
             type: 'system/delay',
-            params: { ms: 999999 }, // High delay to demonstrate watchdog cull!
+            inputs: { a: 'any', ms: 'number' },
+            outputs: { out: 'any' },
+            params: { delayMs: 999999 }, // High delay to demonstrate watchdog cull!
             ui: { x: 100, y: 350, title: 'Rogue Delayer' }
-        }
+        })
     },
     edges: [
         { id: 'edge1', sourceNodeId: 'add_4012', sourcePinId: 'out', targetNodeId: 'multiply_8930', targetPinId: 'a' },
@@ -47,16 +57,35 @@ export const defaultGraph: GraphState = {
     ]
 };
 
+const GRAPH_STATE_KEY = 'litegraph_fp_current_graph_state';
+
+function loadSavedGraph(): GraphState {
+    try {
+        const raw = localStorage.getItem(GRAPH_STATE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && parsed.nodes && parsed.edges) {
+                return parsed;
+            }
+        }
+    } catch (e) {
+        // fail silently
+    }
+    return defaultGraph;
+}
+
 // ============================================================================
 // APP STATE SINGLETON
 // ============================================================================
 const initialSettings = loadSettings();
 
 export const appState = {
-    currentGraph: defaultGraph as GraphState,
+    currentGraph: loadSavedGraph() as GraphState,
     viewport: { ...initialSettings.canvas.camera } as Viewport,
     selectedNodeId: null as string | null,
     selectedNodeIds: new Set<string>(),
+    selectedEdgeId: null as string | null,
+    selectedEdgeIds: new Set<string>(),
 
     hoveredNodeId: null as string | null,
     hoveredPin: null as { nodeId: string; pinId: string; isInput: boolean } | null,
@@ -119,14 +148,56 @@ export function screenToWorld(sx: number, sy: number) {
 // RENDERING CONTEXT SYNC
 // ============================================================================
 
+let lastSavedTime = Date.now();
+
+export function updateSavedTimeLabel() {
+    const badge = document.getElementById('autosave-badge');
+    if (!badge) return;
+    const text = badge.querySelector('.badge-text');
+    if (!text) return;
+    
+    if (!navigator.onLine) {
+        badge.classList.add('offline');
+        text.textContent = 'Offline (Saved)';
+        return;
+    }
+    
+    badge.classList.remove('offline');
+    const diffMs = Date.now() - lastSavedTime;
+    const diffSec = Math.floor(diffMs / 1000);
+    
+    if (diffSec < 5) {
+        text.textContent = 'Saved';
+    } else if (diffSec < 60) {
+        text.textContent = `Saved ${diffSec}s ago`;
+    } else {
+        const diffMin = Math.floor(diffSec / 60);
+        text.textContent = `Saved ${diffMin}m ago`;
+    }
+}
+
+export function updateOnlineStatus() {
+    updateSavedTimeLabel();
+}
+
 export function syncContextState() {
     const { inputs, outputs } = resolveGraphTypes(appState.currentGraph);
     appState.resolvedInputs = inputs;
     appState.resolvedOutputs = outputs;
 
+    try {
+        localStorage.setItem(GRAPH_STATE_KEY, JSON.stringify(appState.currentGraph));
+        lastSavedTime = Date.now();
+        updateSavedTimeLabel();
+    } catch (e) {
+        // fail silently
+    }
+
     if (appState.renderingContext) {
         appState.renderingContext.selectedNodeId = appState.selectedNodeId;
         appState.renderingContext.selectedNodeIds = appState.selectedNodeIds;
+        appState.renderingContext.selectedEdgeId = appState.selectedEdgeId;
+        appState.renderingContext.selectedEdgeIds = appState.selectedEdgeIds;
         appState.renderingContext.nodeErrors = appState.nodeErrors;
         appState.renderingContext.pinnedDrawerNodeIds = appState.pinnedDrawerNodeIds;
         appState.renderingContext.hoveredDrawerNodeId = appState.hoveredDrawerNodeId;
@@ -199,13 +270,13 @@ export function updateCursor() {
 // ============================================================================
 
 export function getNodeHeight(node: NodeState): number {
-    const numInputs = Object.keys(getNodeInputs(node)).length;
-    const numOutputs = Object.keys(getNodeOutputs(node)).length;
+    const numInputs = Object.keys(getNodeInputs(node, appState.resolvedInputs)).length;
+    const numOutputs = Object.keys(getNodeOutputs(node, appState.resolvedOutputs)).length;
     return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + 30; // 30px bottom padding
 }
 
 export function getInputPinCoords(node: NodeState, pinId: string): { x: number, y: number } {
-    const inputs = Object.keys(getNodeInputs(node));
+    const inputs = Object.keys(getNodeInputs(node, appState.resolvedInputs));
     const idx = inputs.indexOf(pinId);
     const nx = node.ui?.x ?? 0;
     const ny = node.ui?.y ?? 0;
@@ -216,7 +287,7 @@ export function getInputPinCoords(node: NodeState, pinId: string): { x: number, 
 }
 
 export function getOutputPinCoords(node: NodeState, pinId: string): { x: number, y: number } {
-    const outputs = Object.keys(getNodeOutputs(node));
+    const outputs = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
     const idx = outputs.indexOf(pinId);
     const nx = node.ui?.x ?? 0;
     const ny = node.ui?.y ?? 0;

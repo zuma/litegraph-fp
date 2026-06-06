@@ -8,7 +8,7 @@ describe('Stem Cell Node Modes', () => {
             nodes: {
                 'node1': {
                     id: 'node1',
-                    type: 'molecule/formula',
+                    type: 'node/formula',
                     mode: 'formula',
                     params: {
                         formula: '(a + b) * c'
@@ -36,7 +36,7 @@ describe('Stem Cell Node Modes', () => {
             nodes: {
                 'node1': {
                     id: 'node1',
-                    type: 'molecule/blocks',
+                    type: 'node/blocks',
                     mode: 'blocks',
                     params: {
                         blocks: [

@@ -19,7 +19,7 @@ describe('Engine Middleware Pipeline', () => {
 
         const graph: GraphState = {
             nodes: {
-                'add1': { id: 'add1', type: 'math/add', params: {} }
+                'add1': { id: 'add1', type: 'node/generic', params: {} }
             },
             edges: []
         };

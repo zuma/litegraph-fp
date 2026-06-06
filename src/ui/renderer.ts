@@ -3,6 +3,7 @@ import { RenderingContext } from './types.js';
 import { drawGrid, drawNode, drawEdge, getInputPinPos, getOutputPinPos } from './canvas.js';
 import { NodeRegistry } from '../registry/types.js';
 import { appState } from './state.js';
+import { getNodeInputs, getNodeOutputs } from '../registry/index.js';
 
 /**
  * Impure rendering loop that binds Graph State to a Canvas.
@@ -44,8 +45,11 @@ export const createRenderer = (
             if (!sourceDef || !targetDef) return;
 
             // Find indexes of connected pins to calculate coordinates
-            const outPinNames = Object.keys(sourceDef.provides);
-            const inPinNames = Object.keys(targetDef.requires);
+            const outPins = getNodeOutputs(sourceNode, context.resolvedOutputs);
+            const inPins = getNodeInputs(targetNode, context.resolvedInputs);
+            
+            const outPinNames = Object.keys(outPins);
+            const inPinNames = Object.keys(inPins);
             
             const outIndex = outPinNames.indexOf(edge.sourcePinId);
             const inIndex = inPinNames.indexOf(edge.targetPinId);
@@ -54,7 +58,7 @@ export const createRenderer = (
 
             const sourcePos = getOutputPinPos(sourceNode, sourceDef, outIndex);
             const targetPos = getInputPinPos(targetNode, inIndex);
-            const pinType = sourceDef.provides[edge.sourcePinId];
+            const pinType = outPins[edge.sourcePinId];
 
             drawEdge(context, edge, sourcePos, targetPos, pinType, computedStyle);
         });

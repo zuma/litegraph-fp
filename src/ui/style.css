@@ -627,7 +627,7 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
     border: 1px solid rgba(100, 200, 255, 0.2);
 }
 
-.node-item-category.molecule {
+.node-item-category.node {
     background: rgba(255, 170, 0, 0.08);
     color: var(--accent-orange);
     border: 1px solid rgba(255, 170, 0, 0.18);
@@ -1702,4 +1702,60 @@ body.light-theme .context-menu-item:hover {
 }
 .btn-delete-pin:hover {
     color: var(--accent-red);
+}
+
+/* Autosave status indicator */
+.autosave-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 16px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.autosave-badge .badge-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.autosave-badge.offline {
+    color: var(--accent-orange);
+}
+
+.autosave-badge.offline .badge-dot {
+    background: var(--accent-orange);
+}
+
+/* ============================================================================
+   AUTOCOMPLETE DROPDOWN STYLING
+   ============================================================================ */
+.autocomplete-dropdown {
+    background: var(--bg-panel-solid);
+    border: 1px solid var(--border-panel);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(12px);
+    z-index: 999999;
+    max-height: 150px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.autocomplete-item {
+    padding: 6px 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+    user-select: none;
+}
+
+.autocomplete-item:hover, .autocomplete-item.active {
+    background: var(--bg-hover);
+    color: var(--accent-cyan);
 }
