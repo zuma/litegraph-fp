@@ -56,7 +56,7 @@ export function loadSettings(): AppSettings {
         return {
             ui: {
                 ...DEFAULT_SETTINGS.ui,
-                theme: 'light'
+                theme: parsed.ui?.theme || DEFAULT_SETTINGS.ui.theme
             },
             layout: {
                 ...DEFAULT_SETTINGS.layout,

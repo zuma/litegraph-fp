@@ -330,9 +330,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
     function applyTheme(theme: 'light' | 'dark') {
         if (theme === 'light') {
+            document.documentElement.classList.add('light-theme');
             document.body.classList.add('light-theme');
             if (chkDarkMode) chkDarkMode.checked = false;
         } else {
+            document.documentElement.classList.remove('light-theme');
             document.body.classList.remove('light-theme');
             if (chkDarkMode) chkDarkMode.checked = true;
         }

@@ -71,7 +71,7 @@
     --font-mono: 'Fira Code', 'Courier New', Courier, monospace;
 }
 
-body.light-theme {
+:root.light-theme, html.light-theme, body.light-theme {
     --bg-obsidian: hsl(210, 40%, 98%);
     --bg-panel: hsla(210, 40%, 98%, 0.24);
     --bg-panel-solid: hsl(210, 40%, 95%);

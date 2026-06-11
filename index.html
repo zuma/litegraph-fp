@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="light-theme">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,16 +12,26 @@
     
     <!-- Link styles -->
     <link rel="stylesheet" href="/src/ui/style.css">
-</head>
-<body>
+    
     <!-- Inline blocking script to prevent unstyled theme flashing (FOUC) -->
     <script>
         (function() {
             try {
-                document.body.classList.add('light-theme');
-            } catch (e) {}
+                const raw = localStorage.getItem('litegraph-fp-settings');
+                const settings = raw ? JSON.parse(raw) : null;
+                const theme = (settings && settings.ui && settings.ui.theme) ? settings.ui.theme : 'light';
+                if (theme === 'light') {
+                    document.documentElement.classList.add('light-theme');
+                } else {
+                    document.documentElement.classList.remove('light-theme');
+                }
+            } catch (e) {
+                document.documentElement.classList.add('light-theme');
+            }
         })();
     </script>
+</head>
+<body>
     <div id="app-container">
         <!-- 1. HEADER BAR -->
         <header id="app-header" class="glass-panel">
@@ -310,7 +320,7 @@
 
         <!-- Settings Submenu (Placed globally to avoid backdrop-filter hierarchy conflicts) -->
         <div id="main-settings-submenu" class="dropdown-submenu glass-panel">
-            <button class="dropdown-item" id="menu-toggle-darkmode" style="display: none;">
+            <button class="dropdown-item" id="menu-toggle-darkmode">
                 <span>🌙 Dark Mode</span>
                 <input type="checkbox" id="menu-chk-darkmode" style="margin-left: auto; cursor: pointer;">
             </button>
