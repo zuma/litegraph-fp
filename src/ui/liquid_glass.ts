@@ -161,11 +161,29 @@ export function applyLiquidGlass(element: HTMLElement, options: LiquidGlassOptio
     (element.style as any).webkitBackdropFilter = '';
     void element.offsetHeight;
 
-    // Apply the chained backdrop-filter with CSS blur first, then SVG refraction/specular
+    // Detect if the browser is WebKit/Safari
+    const isSafari = navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome') && !navigator.userAgent.includes('Chromium');
+
     const backdropBlur = options.backdropBlur ?? 20;
-    const filterStyle = backdropBlur > 0 ? `blur(${backdropBlur}px) url(#${filterId})` : `url(#${filterId})`;
-    element.style.backdropFilter = filterStyle;
-    (element.style as any).webkitBackdropFilter = filterStyle;
+
+    if (isSafari) {
+        // Safari does not support SVG url() references inside backdrop-filter.
+        // We fall back to native CSS blur and saturate, and overlay the specular highlight as a background-image.
+        const filterStyle = backdropBlur > 0 ? `blur(${backdropBlur}px) saturate(${saturation * 100}%)` : '';
+        element.style.backdropFilter = filterStyle;
+        (element.style as any).webkitBackdropFilter = filterStyle;
+
+        // Apply specular highlight as background image overlay
+        element.style.backgroundImage = `url(${specularMapUrl})`;
+        element.style.backgroundSize = '100% 100%';
+        element.style.backgroundRepeat = 'no-repeat';
+    } else {
+        // Apply the chained backdrop-filter with CSS blur first, then SVG refraction/specular
+        const filterStyle = backdropBlur > 0 ? `blur(${backdropBlur}px) url(#${filterId})` : `url(#${filterId})`;
+        element.style.backdropFilter = filterStyle;
+        (element.style as any).webkitBackdropFilter = filterStyle;
+        element.style.backgroundImage = '';
+    }
     
     // Apple Liquid Glass looks best with a highly translucent base background.
     // Ensure the element has a slightly transparent background to let the refraction show through.
@@ -195,5 +213,8 @@ export function watchLiquidGlass(element: HTMLElement, options: LiquidGlassOptio
         }
         element.style.backdropFilter = '';
         (element.style as any).webkitBackdropFilter = '';
+        element.style.backgroundImage = '';
+        element.style.backgroundSize = '';
+        element.style.backgroundRepeat = '';
     };
 }
