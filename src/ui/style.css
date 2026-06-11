@@ -139,6 +139,8 @@ body.light-theme {
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-panel);
     box-shadow: var(--glass-shadow);
+    transform: translateZ(0);
+    will-change: transform, backdrop-filter;
 }
 
 /* ============================================================================
@@ -654,6 +656,8 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
     backdrop-filter: var(--sidebar-blur);
     -webkit-backdrop-filter: var(--sidebar-blur);
     box-shadow: var(--glass-clear-shadow);
+    transform: translate3d(0, 0, 0);
+    will-change: transform, backdrop-filter;
 }
 
 #sidebar.collapsed {
@@ -1121,14 +1125,25 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
 }
 
 .btn-danger {
-    background-color: transparent;
-    border-color: var(--accent-red-glow);
-    color: var(--accent-red);
+    background: hsla(355, 85%, 52%, 0.42);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid hsla(355, 85%, 52%, 0.35);
+    color: #ffffff;
+    font-weight: 600;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+    transform: translateZ(0);
+    transition: background-color 0.2s, box-shadow 0.2s, transform 0.1s;
 }
 .btn-danger:hover {
-    background-color: var(--accent-red);
-    color: var(--text-btn-primary);
-    box-shadow: var(--neon-shadow-red);
+    background: hsla(355, 85%, 52%, 0.52);
+    color: #ffffff;
+    box-shadow: 0 6px 18px rgba(239, 68, 68, 0.25);
+    transform: translateZ(0);
+}
+.btn-danger:active {
+    transform: translateZ(0) scale(0.97);
 }
 
 .btn-sm {
@@ -1807,6 +1822,7 @@ body.light-theme .context-menu-item:hover {
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     z-index: 999999;
     max-height: 150px;
     overflow-y: auto;
@@ -1832,7 +1848,7 @@ body.light-theme .context-menu-item:hover {
     position: fixed;
     top: 16px;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) translateZ(0);
     width: 380px;
     padding: 12px 16px;
     border-radius: 8px;
@@ -1846,6 +1862,7 @@ body.light-theme .context-menu-item:hover {
     flex-direction: column;
     gap: 10px;
     animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    will-change: top, backdrop-filter;
 }
 
 .top-alert-content {
