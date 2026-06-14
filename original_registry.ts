@@ -61,34 +61,6 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         dynamicOutputs: true,
         execute: pythonScript.execute
     },
-    'system/input': {
-        namespace: 'system',
-        category: 'system',
-        name: 'input',
-        requires: { value: 'any' },
-        provides: { out: 'any' },
-        dynamicInputs: true,
-        dynamicOutputs: true,
-        execute: async (inputs, params) => {
-            const raw = inputs.value !== undefined ? inputs.value : (params.value ?? '');
-            if (typeof raw === 'string') {
-                const trimmed = raw.trim();
-                if (trimmed === 'true') return { out: true };
-                if (trimmed === 'false') return { out: false };
-                if (trimmed === 'null') return { out: null };
-                if (trimmed !== '' && !isNaN(Number(trimmed))) return { out: Number(trimmed) };
-                if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
-                    try {
-                        return { out: JSON.parse(trimmed) };
-                    } catch (e) {
-                        // ignore
-                    }
-                }
-                return { out: raw };
-            }
-            return { out: raw };
-        }
-    },
     'system/delay': {
         namespace: 'system',
         category: 'system',
@@ -131,12 +103,7 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         dynamicOutputs: true,
         execute: async (inputs) => {
             console.log('LOG NODE OUTPUT:', inputs.msg);
-            return {
-                $commands: [{
-                    type: 'CONSOLE_LOG',
-                    payload: { message: inputs.msg !== undefined ? String(inputs.msg) : '' }
-                }]
-            };
+            return {};
         }
     }
 });
@@ -149,7 +116,6 @@ export function getNodeMode(node: { type: string; mode?: NodeMode }, registry?: 
     if (node.type === 'node/blocks') return 'blocks';
     if (node.type === 'node/python') return 'python';
     if (node.type === 'node/unconfigured') return 'formula';
-    if (node.type === 'node/generic') return 'formula';
 
     const isRegistered = (registry && node.type in registry) || (node.type in StandardNodes);
     if (isRegistered) {
@@ -187,7 +153,7 @@ export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: No
         case 'state':
             return { value: 'any', defaultValue: 'any', nextValue: 'any' };
         case 'formula': {
-            const formula = (node.params && node.params.formula) ?? getDefaultFormulaForType(node.type);
+            const formula = node.params.formula ?? getDefaultFormulaForType(node.type);
             const vars = extractVariablesFromFormula(formula);
             const pins: Record<string, PinType> = {};
             vars.forEach(v => {
@@ -198,7 +164,7 @@ export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: No
         case 'blocks': {
             const defined = new Set<string>();
             const inputs = new Set<string>();
-            ((node.params && node.params.blocks) || []).forEach(block => {
+            (node.params.blocks || []).forEach(block => {
                 const op1 = block.operand1.trim();
                 const op2 = block.operand2.trim();
                 if (op1 && isNaN(Number(op1)) && !defined.has(op1)) {
@@ -218,20 +184,6 @@ export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: No
             return pins;
         }
         case 'python':
-            if (node.type === 'node/generic') {
-                return {};
-            }
-            if (node.type === 'node/python') {
-                return { code: 'string' };
-            }
-            {
-                const def = registry ? registry[node.type] : StandardNodes[node.type];
-                return def ? def.requires : {};
-            }
-        case 'input':
-            return { value: 'any' };
-        case 'log':
-            return { msg: 'any' };
         default: {
             const def = registry ? registry[node.type] : StandardNodes[node.type];
             return def ? def.requires : {};
@@ -242,7 +194,7 @@ export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: No
 export function getBaseNodeInputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
     const mode = getNodeMode(node, registry);
     const base = getModeBaseInputs(mode, node, registry);
-    return { ...base, ...(node.inputs ?? {}) };
+    return { ...base, ...node.inputs };
 }
 
 export function getNodeInputs(node: NodeState, resolvedInputs?: Record<string, Record<string, PinType>>, registry?: NodeRegistry): Record<string, PinType> {
@@ -263,17 +215,6 @@ export function getModeBaseOutputs(mode: NodeMode, nodeType: string, registry?: 
         case 'blocks':
             return { out0: 'any' };
         case 'python':
-            if (nodeType === 'node/generic' || nodeType === 'node/python') {
-                return { out: 'any' };
-            }
-            {
-                const def = registry ? registry[nodeType] : StandardNodes[nodeType];
-                return def ? def.provides : {};
-            }
-        case 'input':
-            return { out: 'any' };
-        case 'log':
-            return {};
         default: {
             const def = registry ? registry[nodeType] : StandardNodes[nodeType];
             return def ? def.provides : {};
@@ -284,7 +225,7 @@ export function getModeBaseOutputs(mode: NodeMode, nodeType: string, registry?: 
 export function getBaseNodeOutputs(node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
     const mode = getNodeMode(node, registry);
     const base = getModeBaseOutputs(mode, node.type, registry);
-    return { ...base, ...(node.outputs ?? {}) };
+    return { ...base, ...node.outputs };
 }
 
 export function getNodeOutputs(node: NodeState, resolvedOutputs?: Record<string, Record<string, PinType>>, registry?: NodeRegistry): Record<string, PinType> {

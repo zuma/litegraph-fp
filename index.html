@@ -95,52 +95,80 @@
                 </div>
             </div>
         </header>
+        <!-- WORKSPACE TABS BAR -->
+        <div id="workspace-tabs-bar" class="workspace-tabs-bar glass-panel">
+            <div id="workspace-tabs-container" class="workspace-tabs-container">
+                <!-- Dynamically populated via typescript main -->
+            </div>
+            <button id="btn-new-workspace-tab" class="btn btn-secondary btn-sm" title="Create a new workspace tab">+ New Tab</button>
+        </div>
 
         <!-- 2. MAIN SPLIT SCREEN AREA -->
         <main id="main-content">
             <!-- CANVAS COLUMN -->
             <section id="canvas-container">
-                <canvas id="graph-canvas"></canvas>
-                
-                <!-- Floating canvas overlays -->
-                <div id="canvas-overlays">
-                    <div id="zoom-toolbar" class="zoom-controls glass-panel">
-                        <button id="btn-zoom-in" title="Zoom In">+</button>
-                        <button id="btn-zoom-reset" title="Reset view">100%</button>
-                        <button id="btn-zoom-fit" title="Fit Graph to Screen">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
-                                <path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5" />
-                            </svg>
-                        </button>
-                        <button id="btn-zoom-out" title="Zoom Out">-</button>
+                <div id="canvas-wrapper">
+                    <canvas id="graph-canvas"></canvas>
+                    
+                    <!-- Floating canvas overlays -->
+                    <div id="canvas-overlays">
+                        <div id="zoom-toolbar" class="zoom-controls glass-panel">
+                            <button id="btn-zoom-in" title="Zoom In">+</button>
+                            <button id="btn-zoom-reset" title="Reset view">100%</button>
+                            <button id="btn-zoom-fit" title="Fit Graph to Screen">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+                                    <path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5" />
+                                </svg>
+                            </button>
+                            <button id="btn-zoom-out" title="Zoom Out">-</button>
+                        </div>
+
                     </div>
 
-                </div>
+                    <!-- Double click / Right click Node Adder Panel -->
+                    <div id="node-adder" class="floating-panel glass-panel hidden">
+                        <div id="node-adder-content" style="width: 100%; height: 100%; display: flex; flex-direction: column; transition: opacity 0.12s ease;">
+                            <div class="panel-header">
+                                <h3>Add Node</h3>
+                                <button id="btn-close-adder" class="btn-close">&times;</button>
+                            </div>
+                            <div class="search-box">
+                                <input type="text" id="node-search-input" placeholder="Search node type..." autocomplete="off">
+                            </div>
+                            <div id="node-type-list" class="node-type-list">
+                                <!-- Populated dynamically via textContent & createElement -->
+                            </div>
+                        </div>
+                    </div>
 
-                <!-- Double click / Right click Node Adder Panel -->
-                <div id="node-adder" class="floating-panel glass-panel hidden">
-                    <div id="node-adder-content" style="width: 100%; height: 100%; display: flex; flex-direction: column; transition: opacity 0.12s ease;">
-                        <div class="panel-header">
-                            <h3>Add Node</h3>
-                            <button id="btn-close-adder" class="btn-close">&times;</button>
-                        </div>
-                        <div class="search-box">
-                            <input type="text" id="node-search-input" placeholder="Search node type..." autocomplete="off">
-                        </div>
-                        <div id="node-type-list" class="node-type-list">
-                            <!-- Populated dynamically via textContent & createElement -->
-                        </div>
+                    <!-- Sleek right-click Context Menu for Nodes -->
+                    <div id="context-menu" class="context-menu glass-panel hidden">
+                        <button class="context-menu-item" id="ctx-delete-node">🗑️ Delete Node</button>
+                        <button class="context-menu-item" id="ctx-duplicate-node">👯 Duplicate Node</button>
+                        <button class="context-menu-item" id="ctx-disconnect-node">🔌 Disconnect All</button>
+                        <div class="context-menu-divider"></div>
+                        <button class="context-menu-item" id="ctx-bring-to-front">🔝 Bring to Front</button>
+                        <button class="context-menu-item" id="ctx-send-to-back">🔀 Send to Back</button>
+                        <button class="context-menu-item" id="ctx-delete-connection">🗑️ Delete Connection</button>
                     </div>
                 </div>
 
-                <!-- Sleek right-click Context Menu for Nodes -->
-                <div id="context-menu" class="context-menu glass-panel hidden">
-                    <button class="context-menu-item" id="ctx-delete-node">🗑️ Delete Node</button>
-                    <button class="context-menu-item" id="ctx-disconnect-node">🔌 Disconnect All</button>
-                    <div class="context-menu-divider"></div>
-                    <button class="context-menu-item" id="ctx-bring-to-front">🔝 Bring to Front</button>
-                    <button class="context-menu-item" id="ctx-send-to-back">🔀 Send to Back</button>
-                    <button class="context-menu-item" id="ctx-delete-connection">🗑️ Delete Connection</button>
+                <!-- Bottom Drawer Panel (Console) -->
+                <div id="bottom-drawer" class="bottom-drawer glass-panel">
+                    <div id="bottom-drawer-resizer" class="bottom-drawer-resizer"></div>
+                    <div class="panel-header" id="bottom-drawer-header">
+                        <div class="drawer-actions" style="display: flex; align-items: center; gap: 8px;">
+                            <button id="btn-toggle-bottom-drawer" class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 11px;">▼ Collapse</button>
+                            <button id="btn-clear-logs" class="btn btn-secondary btn-sm">Clear</button>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="status-dot idle" id="bottom-drawer-status-dot" style="width: 8px; height: 8px;"></span>
+                            <h3>Side-Effects Dispatch Console</h3>
+                        </div>
+                    </div>
+                    <div id="terminal-console" class="terminal-view">
+                        <div class="terminal-line system-msg">> Boundary dispatcher initialized. Ready to execute side effects.</div>
+                    </div>
                 </div>
             </section>
 
@@ -227,18 +255,6 @@
                     </div>
                 </section>
 
-                <!-- DISPATCHED COMMAND LOGS PANEL -->
-                <section class="sidebar-section" id="logs-section">
-                    <div class="section-header interactive" id="logs-header">
-                        <h2>Side-Effects Dispatch Console</h2>
-                        <button id="btn-clear-logs" class="btn btn-secondary btn-sm" style="margin-left: auto; margin-right: 12px; z-index: 10;">Clear</button>
-                        <span class="toggle-icon">▼</span>
-                    </div>
-                    <div id="terminal-console" class="terminal-view">
-                        <div class="terminal-line system-msg">> Boundary dispatcher initialized. Ready to execute side effects.</div>
-                    </div>
-                </section>
-
                 <!-- AST JSON PREVIEW -->
                 <section class="sidebar-section collapsed" id="ast-section">
                     <div class="section-header interactive" id="ast-header">
@@ -300,6 +316,7 @@
 
         <!-- Main Dropdown Menu -->
         <div id="main-dropdown-menu" class="main-dropdown glass-panel hidden">
+            <button class="dropdown-item" id="menu-new-workspace">➕ New Workspace</button>
             <button class="dropdown-item" id="menu-load-demo">📁 Load Demo Graph</button>
             <button class="dropdown-item" id="menu-import-json">📥 Import JSON AST</button>
             <button class="dropdown-item" id="menu-export-json">💾 Export JSON AST</button>

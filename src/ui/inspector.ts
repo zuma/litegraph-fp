@@ -152,7 +152,9 @@ export function updateInspector() {
             { value: 'blocks', label: 'Blocks Expression' },
             { value: 'python', label: 'Python Script' },
             { value: 'delay', label: 'Time Delay' },
-            { value: 'state', label: 'State Loop' }
+            { value: 'state', label: 'State Loop' },
+            { value: 'input', label: 'Input Value' },
+            { value: 'log', label: 'Console Log' }
         ];
         modes.forEach(m => {
             const opt = document.createElement('option');
@@ -801,21 +803,11 @@ export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
         initialParams.delayMs = 1000;
     } else if (newMode === 'state') {
         initialParams.defaultValue = 0;
+    } else if (newMode === 'input') {
+        initialParams.value = '';
     }
 
-    let newType = node.type;
-    if (newMode === 'formula') {
-        newType = 'node/formula';
-    } else if (newMode === 'blocks') {
-        newType = 'node/blocks';
-    } else if (newMode === 'python') {
-        newType = 'node/python';
-    } else if (newMode === 'delay') {
-        newType = 'system/delay';
-    } else if (newMode === 'state') {
-        newType = 'system/state';
-    }
-
+    let newType = 'node/generic';
     const tempNode = { ...node, type: newType, mode: newMode, params: initialParams };
     const nextInputs = getNodeInputs(tempNode);
     const nextOutputs = getNodeOutputs(tempNode);
@@ -848,7 +840,7 @@ export function updateNodeFormula(nodeId: string, formula: string) {
 
     let newType = node.type;
     if (node.type === 'node/unconfigured') {
-        newType = 'node/formula';
+        newType = 'node/generic';
     }
     const tempNode = { ...node, type: newType, params: { ...node.params, formula } };
     const nextInputs = getNodeInputs(tempNode);
@@ -886,7 +878,7 @@ export function updateBlockField(nodeId: string, blockId: string, field: string,
 
     let newType = node.type;
     if (node.type === 'node/unconfigured') {
-        newType = 'node/blocks';
+        newType = 'node/generic';
     }
     const tempNode = { ...node, type: newType, params: { ...node.params, blocks: updatedBlocks } };
     const nextInputs = getNodeInputs(tempNode);

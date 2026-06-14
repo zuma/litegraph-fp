@@ -18,12 +18,18 @@ dispatcher.on('CONSOLE_LOG', async (cmd, sourceNodeId) => {
 
 export async function runExecutionPipeline() {
     const statusDot = document.getElementById('engine-status-dot');
+    const drawerStatusDot = document.getElementById('bottom-drawer-status-dot');
     const statusText = document.getElementById('engine-status-text');
     const timeValue = document.getElementById('execution-time-value');
     
-    if (statusDot && statusText) {
-        statusDot.className = 'status-dot running';
+    if (statusText) {
         statusText.textContent = 'Engine: Running...';
+    }
+    if (statusDot) {
+        statusDot.className = 'status-dot running';
+    }
+    if (drawerStatusDot) {
+        drawerStatusDot.className = 'status-dot running';
     }
 
     const tStart = performance.now();
@@ -55,14 +61,16 @@ export async function runExecutionPipeline() {
         timeValue.textContent = `${Math.round(tEnd - tStart)}ms`;
     }
 
-    if (statusDot && statusText) {
+    if (statusText) {
         const errorCount = Object.keys(result.errors).length;
         if (errorCount > 0) {
-            statusDot.className = 'status-dot error';
             statusText.textContent = `Engine: Error (${errorCount} culled)`;
+            if (statusDot) statusDot.className = 'status-dot error';
+            if (drawerStatusDot) drawerStatusDot.className = 'status-dot error';
         } else {
-            statusDot.className = 'status-dot idle';
             statusText.textContent = 'Engine: Success';
+            if (statusDot) statusDot.className = 'status-dot idle';
+            if (drawerStatusDot) drawerStatusDot.className = 'status-dot idle';
         }
     }
 

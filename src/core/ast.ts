@@ -29,7 +29,7 @@ export interface Edge {
     readonly targetPinId: string;
 }
 
-export type NodeMode = 'python' | 'formula' | 'blocks' | 'state' | 'delay';
+export type NodeMode = 'python' | 'formula' | 'blocks' | 'state' | 'delay' | 'input' | 'log';
 
 export interface BlockStatement {
     readonly id: string;

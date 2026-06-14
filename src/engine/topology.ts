@@ -1,4 +1,6 @@
 import { GraphState, NodeID } from '../core/ast.js';
+import { getNodeMode } from '../registry/index.js';
+import { NodeRegistry } from '../registry/types.js';
 
 // ============================================================================
 // TOPOLOGY & GRAPH ANALYSIS (Execution Preparation)
@@ -13,9 +15,10 @@ import { GraphState, NodeID } from '../core/ast.js';
  * Throws an error if a circular dependency is detected.
  * 
  * @param graph The immutable graph state
+ * @param registry The node registry to resolve dynamic node modes
  * @returns 2D Array of NodeIDs representing sequential tiers of concurrent execution
  */
-export const sortTopologically = (graph: GraphState): NodeID[][] => {
+export const sortTopologically = (graph: GraphState, registry?: NodeRegistry): NodeID[][] => {
     const { nodes, edges } = graph;
     
     // Track in-degrees (number of incoming edges) for each node
@@ -42,9 +45,10 @@ export const sortTopologically = (graph: GraphState): NodeID[][] => {
         // CRITICAL: Ignore edges targeting the state node feedback pin (nextValue)
         // to prevent circular dependency errors. Feedback loops are resolved 
         // across execution ticks by the engine.
-        if (nodes[target].type === 'system/state' && edge.targetPinId === 'nextValue') {
+        if (getNodeMode(nodes[target], registry) === 'state' && edge.targetPinId === 'nextValue') {
             return;
         }
+
 
         adjList.get(source)!.push(target);
         inDegree.set(target, inDegree.get(target)! + 1);

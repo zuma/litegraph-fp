@@ -41,7 +41,7 @@ export function getNodeHeight(
     const numInputs = Object.keys(getNodeInputs(node, resolvedInputs)).length;
     const numOutputs = Object.keys(getNodeOutputs(node, resolvedOutputs)).length;
     const maxRows = Math.max(numInputs, numOutputs, 1);
-    return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + 30; // 30px bottom padding to snap total height to multiple of 15
+    return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + 45; // 45px bottom padding to snap total height to multiple of 15
 }
 
 // Get the coordinates for an input pin relative to the node

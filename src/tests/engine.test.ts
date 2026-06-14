@@ -71,11 +71,40 @@ describe('Engine Feedback Loops', () => {
             ]
         };
 
-        // If this throws, the test fails. 
-        // We are checking that sortTopologically finds a valid order.
-        await expect(evaluateGraph(graph, {}, StandardNodes, { executionMode: 'serial', nodeTimeoutMs: 1000 }))
-            .resolves.not.toThrow();
+        const result = await evaluateGraph(graph, {}, StandardNodes, { executionMode: 'serial', nodeTimeoutMs: 1000 });
+        expect(result.errors['__global__']).toBeUndefined();
     });
+
+    it('should not throw circular dependency error for generic state mode node nextValue edges and accumulate state', async () => {
+        const graph: GraphState = {
+            nodes: {
+                'state1': { id: 'state1', type: 'node/generic', mode: 'state', params: { defaultValue: 100 } },
+                'add1': { id: 'add1', type: 'node/generic', mode: 'formula', params: { formula: 'a + 1' } }
+            },
+            edges: [
+                { id: 'e1', sourceNodeId: 'state1', sourcePinId: 'value', targetNodeId: 'add1', targetPinId: 'a' },
+                { id: 'e2', sourceNodeId: 'add1', sourcePinId: 'out0', targetNodeId: 'state1', targetPinId: 'nextValue' }
+            ]
+        };
+
+        const config = { executionMode: 'serial' as const, nodeTimeoutMs: 1000 };
+        const registry = StandardNodes;
+
+        // Tick 1
+        let result = await evaluateGraph(graph, {}, registry, config);
+        expect(result.errors['__global__']).toBeUndefined();
+        expect(result.state['state1.value']).toBe(101);
+
+        // Tick 2
+        result = await evaluateGraph(graph, result.state, registry, config);
+        expect(result.state['state1.value']).toBe(102);
+
+        // Tick 3
+        result = await evaluateGraph(graph, result.state, registry, config);
+        expect(result.state['state1.value']).toBe(103);
+    });
+
+
 
     it('should not throw on mismatching types during static validation', async () => {
         const customRegistry = {

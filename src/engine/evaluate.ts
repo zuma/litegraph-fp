@@ -5,6 +5,7 @@ import { Command } from '../events/types.js';
 import { sortTopologically } from './topology.js';
 import { getGraphValidationErrors, resolveGraphTypes } from './validation.js';
 import { getNodeInputs, getNodeOutputs, getNodeMode, getDefaultFormulaForType } from '../registry/index.js';
+import { pythonScript } from '../registry/python.js';
 
 // ============================================================================
 // CORE EXECUTION ENGINE (Primary Entry Point)
@@ -143,7 +144,7 @@ export const evaluateGraph = async (
     // 2. Calculate our Tiered topological order maps with circular dependency protection
     let executionTiers: NodeID[][];
     try {
-        executionTiers = sortTopologically(graph);
+        executionTiers = sortTopologically(graph, registry);
     } catch (cycleError: any) {
         return {
             state: Object.freeze({ ...initialInputs }) as ExecutionState,
@@ -210,8 +211,8 @@ export const evaluateGraph = async (
             }
         });
 
-        // For system/state nodes, also initialize inputs with the previous 'value' from activeState
-        if (node.type === 'system/state') {
+        // For state-mode nodes, also initialize inputs with the previous 'value' from activeState
+        if (getNodeMode(node, registry) === 'state') {
             const stateKey = `${nodeId}.value`;
             if (stateKey in activeState) {
                 resolvedInputs['value'] = activeState[stateKey];
@@ -226,10 +227,58 @@ export const evaluateGraph = async (
 
         const coreExecute: NodeExecuteFn = async (inputs, params, signal) => {
             switch (mode) {
-                case 'python':
-                case 'delay':
+                case 'python': {
+                    if (node.type === 'node/generic' || node.type === 'node/python') {
+                        return pythonScript.execute(inputs, params as any, signal);
+                    }
+                    if (nodeDef && typeof nodeDef.execute === 'function') {
+                        return nodeDef.execute(inputs, params, signal) as Promise<Record<string, unknown>>;
+                    }
+                    return pythonScript.execute(inputs, params as any, signal);
+                }
+                case 'delay': {
+                    const ms = Number(inputs.ms ?? params.delayMs ?? 1000);
+                    return new Promise((resolve, reject) => {
+                        const timer = setTimeout(() => {
+                            resolve({ out: inputs.in0 });
+                        }, ms);
+                        signal?.addEventListener('abort', () => {
+                            clearTimeout(timer);
+                            reject(new Error('Aborted'));
+                        });
+                    });
+                }
                 case 'state': {
-                    return nodeDef!.execute(inputs, params, signal) as Promise<Record<string, unknown>>;
+                    const current = inputs.value !== undefined ? inputs.value : inputs.defaultValue;
+                    return { value: inputs.nextValue !== undefined ? inputs.nextValue : current };
+                }
+                case 'input': {
+                    const raw = inputs.value !== undefined ? inputs.value : (params.value ?? '');
+                    if (typeof raw === 'string') {
+                        const trimmed = raw.trim();
+                        if (trimmed === 'true') return { out: true };
+                        if (trimmed === 'false') return { out: false };
+                        if (trimmed === 'null') return { out: null };
+                        if (trimmed !== '' && !isNaN(Number(trimmed))) return { out: Number(trimmed) };
+                        if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+                            try {
+                                return { out: JSON.parse(trimmed) };
+                            } catch (e) {
+                                // ignore
+                            }
+                        }
+                        return { out: raw };
+                    }
+                    return { out: raw };
+                }
+                case 'log': {
+                    console.log('LOG NODE OUTPUT:', inputs.msg);
+                    return {
+                        $commands: [{
+                            type: 'CONSOLE_LOG',
+                            payload: { message: inputs.msg !== undefined ? String(inputs.msg) : '' }
+                        }]
+                    };
                 }
                 case 'formula': {
                     const formula = ((params as any).formula as string | undefined) ?? getDefaultFormulaForType(node.type);
@@ -311,10 +360,10 @@ export const evaluateGraph = async (
     }
 
     // 5. Phase 2: Atomic State Commitment
-    // Iterate through all nodes looking for system/state types to commit nextValue -> value
+    // Iterate through all nodes looking for state-mode nodes to commit nextValue -> value
     Object.keys(graph.nodes).forEach(nodeId => {
         const node = graph.nodes[nodeId];
-        if (node.type === 'system/state') {
+        if (getNodeMode(node, registry) === 'state') {
             const nextValuePin = 'nextValue';
             const valueKey = `${nodeId}.value`;
             
@@ -374,6 +423,7 @@ function tryNumberCoerce(val: any): any {
 export function evaluateFormulaExpression(formula: string, inputs: Record<string, any>): any {
     let pos = 0;
     const cleanFormula = formula.trim();
+    if (!cleanFormula) return 0;
 
     function peek() {
         return cleanFormula[pos] || '';

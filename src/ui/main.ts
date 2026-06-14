@@ -1,10 +1,10 @@
 import { RenderingContext } from './types.js';
 import { createRenderer } from './renderer.js';
 import { StandardNodes } from '../registry/index.js';
-import { appState, syncContextState, updateCursor } from './state.js';
+import { appState, syncContextState, updateCursor, defaultGraph } from './state.js';
 import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution.js';
 import { setupInteractions, deleteSelectedNodes, zoomExtents, closeNodeAdder } from './interactions.js';
-import { undo, redo, pushToHistory } from './history.js';
+import { undo, redo, pushToHistory, undoStack, redoStack, updateUndoRedoButtons } from './history.js';
 import { loadSettings, updateSetting } from './settings.js';
 import { autoLayoutGraph } from './layout.js';
 import { watchLiquidGlass } from './liquid_glass.js';
@@ -479,21 +479,111 @@ window.addEventListener('DOMContentLoaded', () => {
         updateSetting('layout', 'astExpanded', !!wasExpanded);
     });
 
-    // Toggle Logs Collapsible block
-    const logsHeader = document.getElementById('logs-header');
-    const logsSection = document.getElementById('logs-section');
-    if (logsSection) {
-        if (settings.layout.logsExpanded !== false) {
-            logsSection.classList.add('expanded');
+    // Toggle Bottom Drawer (Console) Collapsible block
+    const bottomDrawer = document.getElementById('bottom-drawer');
+    const bottomDrawerHeader = document.getElementById('bottom-drawer-header');
+    const btnToggleBottomDrawer = document.getElementById('btn-toggle-bottom-drawer');
+
+    const setBottomDrawerCollapsed = (collapsed: boolean) => {
+        if (!bottomDrawer) return;
+        if (collapsed) {
+            bottomDrawer.classList.add('collapsed');
+            bottomDrawer.style.height = '';
+            if (btnToggleBottomDrawer) {
+                btnToggleBottomDrawer.textContent = '▲ Expand';
+            }
         } else {
-            logsSection.classList.remove('expanded');
+            bottomDrawer.classList.remove('collapsed');
+            const savedHeight = localStorage.getItem('litegraph-fp-custom-logs-height') || '220';
+            bottomDrawer.style.height = `${savedHeight}px`;
+            if (btnToggleBottomDrawer) {
+                btnToggleBottomDrawer.textContent = '▼ Collapse';
+            }
         }
-    }
-    logsHeader?.addEventListener('click', (e) => {
-        // Clear button click should not trigger collapse
-        if ((e.target as HTMLElement).closest('#btn-clear-logs')) return;
-        const wasExpanded = logsSection?.classList.toggle('expanded');
-        updateSetting('layout', 'logsExpanded', !!wasExpanded);
+        updateSetting('layout', 'logsExpanded', !collapsed);
+
+        // Animate resize smoothly over transition
+        let startTime = Date.now();
+        const animateResize = () => {
+            resizeCanvas();
+            renderer.triggerSingleFrame();
+            if (Date.now() - startTime < 350) {
+                requestAnimationFrame(animateResize);
+            }
+        };
+        animateResize();
+    };
+
+    // Initialize state
+    const logsExpanded = settings.layout.logsExpanded !== false;
+    setBottomDrawerCollapsed(!logsExpanded);
+
+    bottomDrawerHeader?.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('#btn-clear-logs') || (e.target as HTMLElement).closest('#btn-toggle-bottom-drawer')) return;
+        const isCollapsed = bottomDrawer?.classList.contains('collapsed');
+        setBottomDrawerCollapsed(!isCollapsed);
+    });
+
+    btnToggleBottomDrawer?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isCollapsed = bottomDrawer?.classList.contains('collapsed');
+        setBottomDrawerCollapsed(!isCollapsed);
+    });
+
+    // Bottom Drawer Drag-to-Resize Logic
+    const resizer = document.getElementById('bottom-drawer-resizer');
+    let isResizing = false;
+
+    resizer?.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isResizing = true;
+        document.body.style.cursor = 'ns-resize';
+        bottomDrawer?.classList.add('resizing');
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isResizing || !bottomDrawer) return;
+
+        const footer = document.getElementById('app-footer');
+        const footerHeight = footer ? footer.getBoundingClientRect().height : 30;
+        let newHeight = window.innerHeight - e.clientY - footerHeight;
+
+        // Bounding
+        const minH = 48;
+        const maxH = window.innerHeight - 150;
+        if (newHeight < minH) newHeight = minH;
+        if (newHeight > maxH) newHeight = maxH;
+
+        bottomDrawer.style.height = `${newHeight}px`;
+
+        if (newHeight <= 60) {
+            bottomDrawer.classList.add('collapsed');
+            if (btnToggleBottomDrawer) {
+                btnToggleBottomDrawer.textContent = '▲ Expand';
+            }
+        } else {
+            bottomDrawer.classList.remove('collapsed');
+            if (btnToggleBottomDrawer) {
+                btnToggleBottomDrawer.textContent = '▼ Collapse';
+            }
+        }
+
+        resizeCanvas();
+        renderer.triggerSingleFrame();
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.cursor = '';
+            bottomDrawer?.classList.remove('resizing');
+            
+            if (bottomDrawer && !bottomDrawer.classList.contains('collapsed')) {
+                const currentHeight = bottomDrawer.getBoundingClientRect().height;
+                updateSetting('layout', 'logsExpanded', true);
+                localStorage.setItem('litegraph-fp-custom-logs-height', currentHeight.toString());
+            }
+        }
     });
 
     // Close Adder
@@ -720,6 +810,205 @@ window.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('offline', () => {
         import('./state.js').then(mod => mod.updateOnlineStatus());
     });
+
+    // ============================================================================
+    // WORKSPACE TABS MANAGEMENT
+    // ============================================================================
+    const tabsContainer = document.getElementById('workspace-tabs-container') as HTMLElement;
+    const btnNewTab = document.getElementById('btn-new-workspace-tab') as HTMLElement;
+    const btnMenuNewWorkspace = document.getElementById('menu-new-workspace') as HTMLElement;
+
+    function renderWorkspaceTabs() {
+        if (!tabsContainer) return;
+        tabsContainer.innerHTML = '';
+        appState.workspaces.forEach(ws => {
+            const tab = document.createElement('div');
+            tab.className = `workspace-tab${ws.id === appState.activeWorkspaceId ? ' active' : ''}`;
+            tab.dataset.id = ws.id;
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'workspace-tab-name';
+            nameSpan.textContent = ws.name;
+            tab.appendChild(nameSpan);
+
+            // Double click to rename
+            tab.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                const newName = prompt('Enter new workspace name:', ws.name);
+                if (newName && newName.trim()) {
+                    ws.name = newName.trim();
+                    syncContextState();
+                    renderWorkspaceTabs();
+                }
+            });
+
+            // Close button
+            const closeBtn = document.createElement('span');
+            closeBtn.className = 'workspace-tab-close';
+            closeBtn.innerHTML = '&times;';
+            closeBtn.title = 'Close Workspace';
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeWorkspace(ws.id);
+            });
+            tab.appendChild(closeBtn);
+
+            // Click to switch
+            tab.addEventListener('click', () => {
+                switchWorkspace(ws.id);
+            });
+
+            tabsContainer.appendChild(tab);
+        });
+    }
+
+    function switchWorkspace(id: string) {
+        if (appState.activeWorkspaceId === id) return;
+        appState.activeWorkspaceId = id;
+
+        // Reset undo/redo stacks
+        undoStack.length = 0;
+        redoStack.length = 0;
+        updateUndoRedoButtons();
+
+        // Clear selection/hover states
+        appState.selectedNodeId = null;
+        appState.selectedNodeIds.clear();
+        appState.selectedEdgeId = null;
+        appState.selectedEdgeIds.clear();
+        appState.hoveredNodeId = null;
+        appState.hoveredPin = null;
+        appState.hoveredEdgeId = null;
+        appState.nodeErrors = {};
+        appState.latestExecutionState = {};
+
+        syncContextState();
+        renderWorkspaceTabs();
+
+        // Sync viewport in renderingContext
+        if (renderingContext) {
+            renderingContext.viewport = appState.viewport;
+            renderingContext.selectedNodeId = null;
+            renderingContext.selectedNodeIds = appState.selectedNodeIds;
+            renderingContext.selectedEdgeId = null;
+            renderingContext.selectedEdgeIds = appState.selectedEdgeIds;
+            renderingContext.nodeErrors = appState.nodeErrors;
+            renderingContext.needsRedraw = true;
+        }
+
+        triggerAutoRun();
+        updateInspector();
+    }
+
+    function createNewWorkspace() {
+        const id = `ws_${Date.now()}`;
+        let nameIndex = 1;
+        while (appState.workspaces.some(w => w.name === `Workspace ${nameIndex}`)) {
+            nameIndex++;
+        }
+        const name = `Workspace ${nameIndex}`;
+        const newWs = {
+            id,
+            name,
+            graph: JSON.parse(JSON.stringify(defaultGraph)),
+            camera: { x: 0, y: 0, zoom: 1.0 }
+        };
+        appState.workspaces.push(newWs);
+        appState.activeWorkspaceId = id;
+
+        // Reset undo/redo stacks
+        undoStack.length = 0;
+        redoStack.length = 0;
+        updateUndoRedoButtons();
+
+        // Clear selection/hover states
+        appState.selectedNodeId = null;
+        appState.selectedNodeIds.clear();
+        appState.selectedEdgeId = null;
+        appState.selectedEdgeIds.clear();
+        appState.hoveredNodeId = null;
+        appState.hoveredPin = null;
+        appState.hoveredEdgeId = null;
+        appState.nodeErrors = {};
+        appState.latestExecutionState = {};
+
+        syncContextState();
+        renderWorkspaceTabs();
+
+        // Sync viewport in renderingContext
+        if (renderingContext) {
+            renderingContext.viewport = appState.viewport;
+            renderingContext.selectedNodeId = null;
+            renderingContext.selectedNodeIds = appState.selectedNodeIds;
+            renderingContext.selectedEdgeId = null;
+            renderingContext.selectedEdgeIds = appState.selectedEdgeIds;
+            renderingContext.nodeErrors = appState.nodeErrors;
+            renderingContext.needsRedraw = true;
+        }
+
+        triggerAutoRun();
+        updateInspector();
+        logToTerminal(`Created and switched to workspace "${name}"`, 'system-msg');
+    }
+
+    function closeWorkspace(id: string) {
+        if (appState.workspaces.length <= 1) {
+            alert("Cannot close the last workspace tab.");
+            return;
+        }
+        const index = appState.workspaces.findIndex(w => w.id === id);
+        if (index === -1) return;
+
+        const confirmed = confirm(`Are you sure you want to close workspace "${appState.workspaces[index].name}"? All unsaved data in this tab will be lost.`);
+        if (!confirmed) return;
+
+        appState.workspaces.splice(index, 1);
+
+        if (appState.activeWorkspaceId === id) {
+            const nextActiveIndex = Math.min(index, appState.workspaces.length - 1);
+            appState.activeWorkspaceId = appState.workspaces[nextActiveIndex].id;
+        }
+
+        // Reset undo/redo stacks
+        undoStack.length = 0;
+        redoStack.length = 0;
+        updateUndoRedoButtons();
+
+        // Clear selection/hover states
+        appState.selectedNodeId = null;
+        appState.selectedNodeIds.clear();
+        appState.selectedEdgeId = null;
+        appState.selectedEdgeIds.clear();
+        appState.hoveredNodeId = null;
+        appState.hoveredPin = null;
+        appState.hoveredEdgeId = null;
+        appState.nodeErrors = {};
+        appState.latestExecutionState = {};
+
+        syncContextState();
+        renderWorkspaceTabs();
+
+        // Sync viewport in renderingContext
+        if (renderingContext) {
+            renderingContext.viewport = appState.viewport;
+            renderingContext.selectedNodeId = null;
+            renderingContext.selectedNodeIds = appState.selectedNodeIds;
+            renderingContext.selectedEdgeId = null;
+            renderingContext.selectedEdgeIds = appState.selectedEdgeIds;
+            renderingContext.nodeErrors = appState.nodeErrors;
+            renderingContext.needsRedraw = true;
+        }
+
+        triggerAutoRun();
+        updateInspector();
+    }
+
+    // Initial render
+    renderWorkspaceTabs();
+
+    // Event listeners
+    btnNewTab?.addEventListener('click', createNewWorkspace);
+    btnMenuNewWorkspace?.addEventListener('click', createNewWorkspace);
 
     // Initial check
     import('./state.js').then(mod => {

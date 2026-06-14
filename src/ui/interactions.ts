@@ -314,6 +314,52 @@ export function sendNodeToBack(nodeId: string) {
     }
 }
 
+export function duplicateNode(nodeId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+
+    pushToHistory();
+
+    const baseId = node.type.split('/')[1] || 'node';
+    const newId = `${baseId}_${Date.now().toString().slice(-4)}_${Math.floor(Math.random() * 100)}`;
+
+    const snapEnabled = loadSettings().canvas.snapToGrid;
+    const offset = 40; 
+    let px = (node.ui?.x ?? 0) + offset;
+    let py = (node.ui?.y ?? 0) + offset;
+    if (snapEnabled) {
+        px = Math.round(px / GRID_SIZE) * GRID_SIZE;
+        py = Math.round(py / GRID_SIZE) * GRID_SIZE;
+    }
+
+    const updatedNodes = {
+        ...appState.currentGraph.nodes,
+        [newId]: {
+            ...node,
+            id: newId,
+            ui: {
+                ...(node.ui ?? {}),
+                x: px,
+                y: py
+            }
+        }
+    };
+
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: updatedNodes
+    };
+
+    appState.selectedNodeId = newId;
+    appState.selectedNodeIds.clear();
+    appState.selectedNodeIds.add(newId);
+
+    syncContextState();
+    updateInspector();
+    triggerAutoRun();
+    logToTerminal(`Duplicated node [${nodeId}] to [${newId}]`, 'system-msg');
+}
+
 function isPinHit(worldPos: { x: number; y: number }, pos: { x: number; y: number }, isInput: boolean): boolean {
     const dx = worldPos.x - pos.x;
     const dy = worldPos.y - pos.y;
@@ -322,6 +368,7 @@ function isPinHit(worldPos: { x: number; y: number }, pos: { x: number; y: numbe
 
 function configureContextMenuForNode() {
     const deleteNode = document.getElementById('ctx-delete-node');
+    const duplicateNodeBtn = document.getElementById('ctx-duplicate-node');
     const disconnect = document.getElementById('ctx-disconnect-node');
     const divider = document.querySelector('.context-menu-divider') as HTMLElement;
     const bringFront = document.getElementById('ctx-bring-to-front');
@@ -329,6 +376,7 @@ function configureContextMenuForNode() {
     const deleteConn = document.getElementById('ctx-delete-connection');
 
     if (deleteNode) deleteNode.style.display = 'block';
+    if (duplicateNodeBtn) duplicateNodeBtn.style.display = 'block';
     if (disconnect) disconnect.style.display = 'block';
     if (divider) divider.style.display = 'block';
     if (bringFront) bringFront.style.display = 'block';
@@ -338,6 +386,7 @@ function configureContextMenuForNode() {
 
 function configureContextMenuForEdge() {
     const deleteNode = document.getElementById('ctx-delete-node');
+    const duplicateNodeBtn = document.getElementById('ctx-duplicate-node');
     const disconnect = document.getElementById('ctx-disconnect-node');
     const divider = document.querySelector('.context-menu-divider') as HTMLElement;
     const bringFront = document.getElementById('ctx-bring-to-front');
@@ -345,6 +394,7 @@ function configureContextMenuForEdge() {
     const deleteConn = document.getElementById('ctx-delete-connection');
 
     if (deleteNode) deleteNode.style.display = 'none';
+    if (duplicateNodeBtn) duplicateNodeBtn.style.display = 'none';
     if (disconnect) disconnect.style.display = 'none';
     if (divider) divider.style.display = 'none';
     if (bringFront) bringFront.style.display = 'none';
@@ -1648,6 +1698,13 @@ export function setupInteractions() {
         document.getElementById('context-menu')?.classList.add('hidden');
     });
 
+    document.getElementById('ctx-duplicate-node')?.addEventListener('click', () => {
+        if (appState.selectedNodeId) {
+            duplicateNode(appState.selectedNodeId);
+        }
+        document.getElementById('context-menu')?.classList.add('hidden');
+    });
+
     document.getElementById('ctx-disconnect-node')?.addEventListener('click', () => {
         if (!appState.selectedNodeId) return;
 
@@ -1787,6 +1844,16 @@ export function showNodeAdder(screenX: number, screenY: number) {
     searchInput.focus();
 }
 
+const AVAILABLE_MODES = [
+    { mode: 'formula', label: 'Math Formula', category: 'node' },
+    { mode: 'blocks', label: 'Blocks Expression', category: 'node' },
+    { mode: 'python', label: 'Python Script', category: 'node' },
+    { mode: 'delay', label: 'Time Delay', category: 'system' },
+    { mode: 'state', label: 'State Loop', category: 'system' },
+    { mode: 'input', label: 'Input Value', category: 'system' },
+    { mode: 'log', label: 'Console Log', category: 'system' },
+] as const;
+
 export function filterNodeAdderList(query: string) {
     const listContainer = document.getElementById('node-type-list');
     if (!listContainer) return;
@@ -1795,54 +1862,36 @@ export function filterNodeAdderList(query: string) {
 
     const lowerQuery = query.toLowerCase();
     
-    Object.entries(StandardNodes).forEach(([nodeType, nodeDef]) => {
-        // Only allow node/unconfigured from the node/* namespace to be spawned directly.
-        // Other types must be reached via morphing/configuring a neutral node.
-        if (nodeType.startsWith('node/') && nodeType !== 'node/unconfigured') {
+    AVAILABLE_MODES.forEach(({ mode, label, category }) => {
+        if (query && !label.toLowerCase().includes(lowerQuery) && !mode.toLowerCase().includes(lowerQuery)) {
             return;
-        }
-
-        if (query && !nodeType.toLowerCase().includes(lowerQuery)) {
-            return; // Skips filtered node type
         }
 
         const btn = document.createElement('button');
         btn.className = 'node-item-btn';
         
-        // Name label text
         const nameLabel = document.createElement('span');
-        nameLabel.textContent = nodeType;
+        nameLabel.textContent = label;
         btn.appendChild(nameLabel);
 
-        // Category badge
         const catBadge = document.createElement('span');
-        catBadge.className = `node-item-category ${nodeDef.category}`;
-        catBadge.textContent = nodeDef.category;
+        catBadge.className = `node-item-category ${category}`;
+        catBadge.textContent = category;
         btn.appendChild(catBadge);
 
         btn.addEventListener('click', () => {
-            addNewNode(nodeType);
+            addNewNodeWithMode(mode as NodeMode);
         });
 
         listContainer.appendChild(btn);
     });
 }
 
-export function addNewNode(type: string) {
-    // Capture snapshot before spawning node
+export function addNewNodeWithMode(mode: NodeMode) {
     pushToHistory();
 
-    const baseId = type.split('/')[1] || 'node';
-    const uniqueId = `${baseId}_${Date.now().toString().slice(-4)}`;
+    const uniqueId = `${mode}_${Date.now().toString().slice(-4)}`;
     
-    const nodeDef = StandardNodes[type];
-    
-    let mode: NodeMode | undefined = undefined;
-    if (type.startsWith('node/')) {
-        mode = type === 'node/blocks' ? 'blocks' : (type === 'node/python' ? 'python' : 'formula');
-    }
-    
-    // Prepare initial parameter fields based on required pins
     const initialParams: Record<string, any> = {};
     if (mode === 'formula') {
         initialParams.formula = 'a + b';
@@ -1852,14 +1901,12 @@ export function addNewNode(type: string) {
         ];
     } else if (mode === 'python') {
         initialParams.code = 'def execute(inputs):\n    # inputs: dict\n    # return dict\n    return { "out": inputs.get("a", 0) + inputs.get("b", 0) }';
-    } else if (nodeDef) {
-        const requires = getNodeInputs({ type } as any);
-        Object.keys(requires).forEach(pin => {
-            initialParams[pin] = pin === 'ms' ? 1000 : (pin === 'code' ? 'def execute(inputs):\n    # inputs: dict, e.g. {"a": 10, "b": 20}\n    # return a dict with output pin values\n    a = inputs.get("a", 0)\n    b = inputs.get("b", 0)\n    return { "out": a + b }' : (requires[pin] === 'number' ? 0 : ''));
-        });
-        if (type === 'system/state') {
-            initialParams['defaultValue'] = 0;
-        }
+    } else if (mode === 'delay') {
+        initialParams.ms = 1000;
+    } else if (mode === 'state') {
+        initialParams.defaultValue = 0;
+    } else if (mode === 'input') {
+        initialParams.value = '';
     }
 
     const unconfiguredNode = appState.selectedNodeId ? appState.currentGraph.nodes[appState.selectedNodeId] : null;
@@ -1886,7 +1933,7 @@ export function addNewNode(type: string) {
 
     const newNode = createNodeState({
         id: uniqueId,
-        type,
+        type: 'node/generic',
         mode,
         params: initialParams,
         inputs: (isMorphing && unconfiguredNode) ? (unconfiguredNode.inputs as any) : undefined,
@@ -1894,7 +1941,7 @@ export function addNewNode(type: string) {
         ui: {
             x: spawnX,
             y: spawnY,
-            title: baseId.toUpperCase(),
+            title: mode.toUpperCase(),
             isMorphing: true
         }
     });
@@ -1907,7 +1954,7 @@ export function addNewNode(type: string) {
         }
     };
 
-    logToTerminal(`Spawned node ${uniqueId} of type '${type}'`, 'system-msg');
+    logToTerminal(`Spawned node ${uniqueId} of type 'node/generic' [mode: ${mode}]`, 'system-msg');
     
     appState.selectedNodeId = uniqueId;
     appState.selectedNodeIds.clear();
@@ -1926,24 +1973,15 @@ export function addNewNode(type: string) {
         const sx = newNode.ui!.x * appState.viewport.zoom + appState.viewport.x;
         const sy = newNode.ui!.y * appState.viewport.zoom + appState.viewport.y;
 
-        const category = nodeDef?.category || 'system';
+        const category = mode === 'delay' || mode === 'state' || mode === 'input' || mode === 'log' ? 'system' : 'node';
         let accentColor = 'var(--accent-cyan)';
         let glowColor = 'var(--accent-cyan-glow)';
-        if (category === 'math') {
-            accentColor = 'var(--accent-red)';
-            glowColor = 'var(--accent-red-glow)';
-        } else if (category === 'logic') {
-            accentColor = 'var(--accent-cyan)';
-            glowColor = 'var(--accent-cyan-glow)';
-        } else if (category === 'system') {
+        if (category === 'system') {
             accentColor = 'var(--accent-purple)';
             glowColor = 'var(--accent-purple-glow)';
         } else if (category === 'node') {
             accentColor = 'var(--accent-orange)';
             glowColor = 'var(--accent-orange-glow)';
-        } else if (category === 'string' || category === 'array' || category === 'object') {
-            accentColor = 'var(--accent-emerald)';
-            glowColor = 'var(--accent-emerald-glow)';
         }
 
         adder.style.transition = 'width 0.22s cubic-bezier(0.19, 1, 0.22, 1), height 0.22s cubic-bezier(0.19, 1, 0.22, 1), left 0.22s cubic-bezier(0.19, 1, 0.22, 1), top 0.22s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.22s ease';
@@ -1952,7 +1990,6 @@ export function addNewNode(type: string) {
         adder.style.width = `${screenW}px`;
         adder.style.height = `${screenH}px`;
         
-        // Dynamically style background/border/shadow to match theme/category
         adder.style.borderColor = accentColor;
         adder.style.boxShadow = `0 0 20px ${glowColor}`;
 
@@ -2008,6 +2045,18 @@ export function addNewNode(type: string) {
         updateInspector();
         triggerAutoRun();
     }
+}
+
+export function addNewNode(type: string) {
+    let mode: NodeMode = 'formula';
+    if (type === 'system/input') mode = 'input';
+    else if (type === 'system/delay') mode = 'delay';
+    else if (type === 'system/state') mode = 'state';
+    else if (type === 'system/log') mode = 'log';
+    else if (type === 'node/blocks') mode = 'blocks';
+    else if (type === 'node/python') mode = 'python';
+
+    addNewNodeWithMode(mode);
 }
 
 function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {

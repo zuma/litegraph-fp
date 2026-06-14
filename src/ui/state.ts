@@ -19,7 +19,7 @@ export const defaultGraph: GraphState = {
     nodes: {
         'add_4012': createNodeState({
             id: 'add_4012',
-            type: 'node/formula',
+            type: 'node/generic',
             mode: 'formula',
             inputs: { in0: 'any', in1: 'any' },
             outputs: { out0: 'any' },
@@ -28,7 +28,7 @@ export const defaultGraph: GraphState = {
         }),
         'multiply_8930': createNodeState({
             id: 'multiply_8930',
-            type: 'node/formula',
+            type: 'node/generic',
             mode: 'formula',
             inputs: { in0: 'any', in1: 'any' },
             outputs: { out0: 'any' },
@@ -57,31 +57,84 @@ export const defaultGraph: GraphState = {
     ]
 };
 
-const GRAPH_STATE_KEY = 'litegraph_fp_current_graph_state';
+const WORKSPACES_STATE_KEY = 'litegraph_fp_workspaces_list';
+const ACTIVE_WORKSPACE_KEY = 'litegraph_fp_active_workspace_id';
 
-function loadSavedGraph(): GraphState {
+export interface Workspace {
+    id: string;
+    name: string;
+    graph: GraphState;
+    camera: Viewport;
+}
+
+const initialSettings = loadSettings();
+
+function loadWorkspaces(): { workspaces: Workspace[], activeId: string } {
     try {
-        const raw = localStorage.getItem(GRAPH_STATE_KEY);
-        if (raw) {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === 'object' && parsed.nodes && parsed.edges) {
-                return parsed;
+        const rawList = localStorage.getItem(WORKSPACES_STATE_KEY);
+        const rawActive = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+        if (rawList && rawActive) {
+            const list = JSON.parse(rawList);
+            if (Array.isArray(list) && list.length > 0) {
+                return { workspaces: list, activeId: rawActive };
             }
         }
     } catch (e) {
         // fail silently
     }
-    return defaultGraph;
+    
+    // Migration fallback: check if old currentGraph exists
+    let oldGraph = defaultGraph;
+    try {
+        const raw = localStorage.getItem('litegraph_fp_current_graph_state');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && parsed.nodes && parsed.edges) {
+                oldGraph = parsed;
+            }
+        }
+    } catch (e) {}
+
+    const defaultWs: Workspace = {
+        id: 'ws_default',
+        name: 'Workspace 1',
+        graph: oldGraph,
+        camera: { ...initialSettings.canvas.camera }
+    };
+    return { workspaces: [defaultWs], activeId: 'ws_default' };
 }
 
 // ============================================================================
 // APP STATE SINGLETON
 // ============================================================================
-const initialSettings = loadSettings();
+const loadedState = loadWorkspaces();
 
 export const appState = {
-    currentGraph: loadSavedGraph() as GraphState,
-    viewport: { ...initialSettings.canvas.camera } as Viewport,
+    workspaces: loadedState.workspaces as Workspace[],
+    activeWorkspaceId: loadedState.activeId as string,
+
+    get currentGraph(): GraphState {
+        const active = this.workspaces.find(w => w.id === this.activeWorkspaceId);
+        return active ? active.graph : defaultGraph;
+    },
+    set currentGraph(g: GraphState) {
+        const active = this.workspaces.find(w => w.id === this.activeWorkspaceId);
+        if (active) {
+            active.graph = g;
+        }
+    },
+
+    get viewport(): Viewport {
+        const active = this.workspaces.find(w => w.id === this.activeWorkspaceId);
+        return active ? active.camera : { x: 0, y: 0, zoom: 1.0 };
+    },
+    set viewport(v: Viewport) {
+        const active = this.workspaces.find(w => w.id === this.activeWorkspaceId);
+        if (active) {
+            active.camera = v;
+        }
+    },
+
     selectedNodeId: null as string | null,
     selectedNodeIds: new Set<string>(),
     selectedEdgeId: null as string | null,
@@ -186,7 +239,8 @@ export function syncContextState() {
     appState.resolvedOutputs = outputs;
 
     try {
-        localStorage.setItem(GRAPH_STATE_KEY, JSON.stringify(appState.currentGraph));
+        localStorage.setItem(WORKSPACES_STATE_KEY, JSON.stringify(appState.workspaces));
+        localStorage.setItem(ACTIVE_WORKSPACE_KEY, appState.activeWorkspaceId);
         lastSavedTime = Date.now();
         updateSavedTimeLabel();
     } catch (e) {
@@ -272,7 +326,7 @@ export function updateCursor() {
 export function getNodeHeight(node: NodeState): number {
     const numInputs = Object.keys(getNodeInputs(node, appState.resolvedInputs)).length;
     const numOutputs = Object.keys(getNodeOutputs(node, appState.resolvedOutputs)).length;
-    return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + 30; // 30px bottom padding
+    return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + 45; // 45px bottom padding
 }
 
 export function getInputPinCoords(node: NodeState, pinId: string): { x: number, y: number } {
