@@ -14,7 +14,8 @@ export type NodeExecuteFn = (
 export type Middleware = (
     nodeId: NodeID,
     nodeType: string,
-    next: NodeExecuteFn
+    next: NodeExecuteFn,
+    context?: { readonly mode?: string }
 ) => NodeExecuteFn;
 
 /**

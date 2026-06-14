@@ -42,9 +42,22 @@ export const sortTopologically = (graph: GraphState, registry?: NodeRegistry): N
         // Safety check if an edge references a deleted node
         if (!nodes[source] || !nodes[target]) return; 
 
-        // CRITICAL: Ignore edges targeting the state node feedback pin (nextValue)
-        // to prevent circular dependency errors. Feedback loops are resolved 
-        // across execution ticks by the engine.
+        // ====================================================================
+        // FEEDBACK LOOP RESOLUTION (AI/HUMAN ARCHITECTURE NOTE)
+        // ====================================================================
+        // In purely functional graphs, true cycles result in infinite recursion.
+        // To support stateful feedback loops (e.g. counters, accumulators):
+        // 1. A node running in 'state' mode acts as a "delay register" (flip-flop).
+        // 2. The 'nextValue' input pin represents the state input for the NEXT execution tick.
+        // 3. By ignoring edges targeting 'nextValue' during topological sorting, we break the 
+        //    cycle at compile-time, allowing evaluation of the rest of the graph.
+        // 4. At execution-time, Phase 2 commits 'nextValue' to the current 'value' to be consumed 
+        //    on the subsequent evaluation tick.
+        //
+        // NOTE FOR AI CODERS: Never change this exemption check to inspect 'node.type === "system/state"'
+        // directly. Under the "Lego base plate" model, any generic node (node/generic) operating
+        // in 'state' mode must qualify for this exemption.
+        // ====================================================================
         if (getNodeMode(nodes[target], registry) === 'state' && edge.targetPinId === 'nextValue') {
             return;
         }

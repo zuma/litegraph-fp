@@ -85,9 +85,14 @@ export const createWatchdogMiddleware = (timeoutMs: number): Middleware => {
 };
 
 export const createCacheMiddleware = (cache: Map<string, { inputs: any; params: any; outputs: any }>): Middleware => {
-    return (nodeId, nodeType, next) => {
+    return (nodeId, nodeType, next, context) => {
         return async (inputs, params, signal) => {
-            if (nodeType === 'system/state' || nodeType === 'system/delay') {
+            if (
+                nodeType === 'system/state' ||
+                nodeType === 'system/delay' ||
+                context?.mode === 'state' ||
+                context?.mode === 'delay'
+            ) {
                 return next(inputs, params, signal);
             }
             const cached = cache.get(nodeId);
@@ -105,11 +110,12 @@ const composeMiddlewares = (
     middlewares: ReadonlyArray<Middleware>,
     coreExecute: NodeExecuteFn,
     nodeId: NodeID,
-    nodeType: string
+    nodeType: string,
+    context?: { readonly mode?: string }
 ): NodeExecuteFn => {
     let execute = coreExecute;
     for (let i = middlewares.length - 1; i >= 0; i--) {
-        execute = middlewares[i](nodeId, nodeType, execute);
+        execute = middlewares[i](nodeId, nodeType, execute, context);
     }
     return execute;
 };
@@ -196,14 +202,25 @@ export const evaluateGraph = async (
 
         const resolvedInputs: Record<string, unknown> = {};
         
-        // 1. Initialize with manually typed values from node.params
+        // ====================================================================
+        // INPUT RESOLUTION PIPELINE (PRECEDENCE HIERARCHY)
+        // ====================================================================
+        // Inputs are resolved in order of increasing priority (last wins):
+        // 
+        // 1. Static Parameters: Initialize from values typed in the inspector panel (node.params)
+        // 2. Global Active State: Restore saved values or persist values across iterations
+        // 3. Stateful Restore: For state-mode nodes, load the persisted 'value' from previous ticks
+        // 4. Live Cable Edge Connections: Overwrite with outputs propagated from upstream source nodes
+        // ====================================================================
+
+        // 1. Static Parameters
         Object.keys(getNodeInputs(node, resolvedTypes.inputs, registry)).forEach(pinName => {
             if (node.params && node.params[pinName] !== undefined) {
                 resolvedInputs[pinName] = node.params[pinName];
             }
         });
 
-        // 2. Override with any root inputs from active global state (like manually typed values) (Fix #3)
+        // 2. Global Active State
         Object.keys(getNodeInputs(node, resolvedTypes.inputs, registry)).forEach(pinName => {
             const stateKey = `${nodeId}.${pinName}`;
             if (stateKey in activeState) {
@@ -211,7 +228,7 @@ export const evaluateGraph = async (
             }
         });
 
-        // For state-mode nodes, also initialize inputs with the previous 'value' from activeState
+        // 3. Stateful Restore (State-mode nodes load their value from the previous tick)
         if (getNodeMode(node, registry) === 'state') {
             const stateKey = `${nodeId}.value`;
             if (stateKey in activeState) {
@@ -219,7 +236,7 @@ export const evaluateGraph = async (
             }
         }
 
-        // 2. Override with live Edge Data (Cables always win over typed values)
+        // 4. Live Cable Edge Connections (Cables always win over typed values)
         incomingEdges.forEach(edge => {
             const stateKey = `${edge.sourceNodeId}.${edge.sourcePinId}`;
             resolvedInputs[edge.targetPinId] = activeState[stateKey];
@@ -308,7 +325,7 @@ export const evaluateGraph = async (
         const timeoutMs = config.nodeTimeoutMs ?? 5000;
         pipeline.push(createWatchdogMiddleware(timeoutMs));
 
-        const composedExecute = composeMiddlewares(pipeline, coreExecute, nodeId, node.type);
+        const composedExecute = composeMiddlewares(pipeline, coreExecute, nodeId, node.type, { mode });
         const computedOutput = await composedExecute(resolvedInputs, node.params);
 
         if (!computedOutput || typeof computedOutput !== 'object') {
@@ -359,8 +376,16 @@ export const evaluateGraph = async (
         }
     }
 
-    // 5. Phase 2: Atomic State Commitment
-    // Iterate through all nodes looking for state-mode nodes to commit nextValue -> value
+    // ====================================================================
+    // PHASE 2: ATOMIC STATE COMMITMENT (TICK TRANSITION)
+    // ====================================================================
+    // In a purely functional system, state cannot mutate mid-execution.
+    // Therefore, all state adjustments are deferred until Phase 2:
+    // 1. Every node in 'state' mode is checked.
+    // 2. The new state received at its 'nextValue' pin is committed to 'value'.
+    // 3. This ensures feedback loops consume the *previous* tick's state
+    //    during evaluation, and transition to the *new* state atomically at the tick end.
+    // ====================================================================
     Object.keys(graph.nodes).forEach(nodeId => {
         const node = graph.nodes[nodeId];
         if (getNodeMode(node, registry) === 'state') {

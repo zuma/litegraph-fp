@@ -141,6 +141,24 @@ export const StandardNodes: NodeRegistry = Object.freeze({
     }
 });
 
+/**
+ * Resolves the functional execution mode of a node.
+ * 
+ * ============================================================================
+ * LEGO BASE PLATE / BREADBOARD ARCHITECTURE (AI & HUMAN NOTES)
+ * ============================================================================
+ * In this system, user-spawned nodes are unified under a single structural type:
+ * `node/generic`. The specialization of a node (e.g. math formula, state cell, 
+ * python script) is determined solely by its `mode` parameter.
+ * 
+ * Resolution Priority:
+ * 1. Node Mode Override: If `node.mode` is explicitly set, we return it.
+ * 2. Type-based defaults: Legacy/built-in type names map directly to modes.
+ * 3. Registry Lookup: Registered custom nodes default to 'python' unless 
+ *    explicitly mapping to system behaviors like delay or state.
+ * 4. General Default: Falls back to 'formula'.
+ * ============================================================================
+ */
 export function getNodeMode(node: { type: string; mode?: NodeMode }, registry?: NodeRegistry): NodeMode {
     if (node.mode) return node.mode;
 

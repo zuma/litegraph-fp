@@ -6,16 +6,25 @@ import { runExecutionPipeline, logToTerminal } from './execution.js';
 // ============================================================================
 // UNDO/REDO HISTORY STACKS
 // ============================================================================
+// The engine tracks history state via simple immutable snapshots of the graph state.
+// Since all GraphStates are frozen, pushing to history clones the current state, 
+// ensuring canvas modifications do not mutate past points in time.
+// ============================================================================
 
 export const undoStack: GraphState[] = [];
 export const redoStack: GraphState[] = [];
 
+/**
+ * Pushes the current active graph state onto the undo stack.
+ * Bounded to a maximum size of 50 to conserve memory.
+ * Clears the redo stack on any new canvas interactions.
+ */
 export function pushToHistory() {
-    // Fix #13: Use structuredClone instead of JSON.parse(JSON.stringify) for performance and safety
+    // Clone via structuredClone to ensure complete independence of history nodes
     const cloned = structuredClone(appState.currentGraph);
     undoStack.push(cloned);
     
-    // Enforce history threshold size
+    // Bounding threshold constraint: shift old history snapshots out of memory
     if (undoStack.length > 50) {
         undoStack.shift();
     }

@@ -60,6 +60,18 @@ export const defaultGraph: GraphState = {
 const WORKSPACES_STATE_KEY = 'litegraph_fp_workspaces_list';
 const ACTIVE_WORKSPACE_KEY = 'litegraph_fp_active_workspace_id';
 
+/**
+ * Represents a single independent visual workspace.
+ * 
+ * ============================================================================
+ * MULTI-WORKSPACE DATA STRUCTURE (AI & HUMAN NOTES)
+ * ============================================================================
+ * Each workspace maintains its own independent:
+ * 1. Graph State (`graph`): Nodes, edges, parameters, and dynamic custom pins.
+ * 2. Viewport Camera (`camera`): Pan offsets (x, y) and zoom scaling coefficient.
+ * This structure allows users to tab between different contexts seamlessly.
+ * ============================================================================
+ */
 export interface Workspace {
     id: string;
     name: string;
@@ -69,6 +81,10 @@ export interface Workspace {
 
 const initialSettings = loadSettings();
 
+/**
+ * Loads workspaces list from localStorage, with silent error fallback.
+ * Migrates old legacy single-graph state if it exists.
+ */
 function loadWorkspaces(): { workspaces: Workspace[], activeId: string } {
     try {
         const rawList = localStorage.getItem(WORKSPACES_STATE_KEY);
@@ -107,12 +123,14 @@ function loadWorkspaces(): { workspaces: Workspace[], activeId: string } {
 // ============================================================================
 // APP STATE SINGLETON
 // ============================================================================
+// Contains all UI state and virtualization properties for active workspace data routing.
 const loadedState = loadWorkspaces();
 
 export const appState = {
     workspaces: loadedState.workspaces as Workspace[],
     activeWorkspaceId: loadedState.activeId as string,
 
+    // Virtualized current graph targeting the active tab workspace
     get currentGraph(): GraphState {
         const active = this.workspaces.find(w => w.id === this.activeWorkspaceId);
         return active ? active.graph : defaultGraph;

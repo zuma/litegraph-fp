@@ -7,6 +7,11 @@ import { getNodeInputs, getNodeOutputs } from '../registry/index.js';
  * 'any' is compatible with everything.
  * For basic types (string), they must match exactly.
  * For Tensor types, dtype must match and shapes must match exactly (length and elements).
+ * 
+ * NOTE ON PERMISSIVE VISION:
+ * Under the current implementation, this checks returns `true` (permissive connectability)
+ * to prevent strict type failures from breaking canvas flexibility. However, it can
+ * be customized in the future to enforce type safety rules strictly.
  */
 export const isCompatible = (source: PinType, target: PinType): boolean => {
     // Permissive vision: all ports are compatible and connectable.
@@ -14,9 +19,21 @@ export const isCompatible = (source: PinType, target: PinType): boolean => {
 };
 
 /**
- * Static graph validation.
- * Performs deep checks for node existence, pin existence, single-source connections, and type safety.
- * Returns a dictionary of errors mapped to NodeIDs.
+ * Static type inference and propagation solver.
+ * Resolves wildcard 'any' types on pins by propagating known types along edges (cables).
+ * Performs up to 3 passes of bidirectional unification constraints.
+ * 
+ * ============================================================================
+ * TYPE PROPAGATION MECHANISM (AI & HUMAN NOTES)
+ * ============================================================================
+ * 1. Initialize: Map all nodes to their baseline inputs/outputs defined by their type/mode.
+ * 2. Unify Constraints: Iterate through all graph edges. If a pin on one end of a cable 
+ *    is 'any', and the other has a concrete type (e.g. 'number', 'string'), propagate
+ *    the concrete type to the wildcard pin.
+ * 3. Bidirectional: Refines both upstream source outputs and downstream target inputs.
+ * 4. Iterate: Repeats the constraint-solving pass up to 3 times to allow types to propagate 
+ *    across multiple hops of connected generic nodes.
+ * ============================================================================
  */
 export function resolveGraphTypes(graph: GraphState, registry?: NodeRegistry): {
     inputs: Record<string, Record<string, PinType>>;

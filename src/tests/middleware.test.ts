@@ -80,4 +80,51 @@ describe('Engine Middleware Pipeline', () => {
         expect(res3.state['c1.out']).toBe(30);
         expect(executions).toBe(2); // Counter incremented!
     });
+
+    it('should bypass cache for generic node in state mode', async () => {
+        const graph: GraphState = {
+            nodes: {
+                's1': { id: 's1', type: 'node/generic', mode: 'state', params: { defaultValue: 42 } }
+            },
+            edges: []
+        };
+
+        const cache = new Map();
+        const config = {
+            executionMode: 'serial' as const,
+            nodeTimeoutMs: 1000,
+            cache
+        };
+
+        const res = await evaluateGraph(graph, {}, StandardNodes, config);
+        expect(res.state['s1.value']).toBe(42);
+        // The node should bypass the cache and not write to it
+        expect(cache.has('s1')).toBe(false);
+    });
+
+    it('should pass mode in context to middlewares', async () => {
+        let passedMode: string | undefined;
+        const customMiddleware: Middleware = (nodeId, nodeType, next, context) => {
+            passedMode = context?.mode;
+            return async (inputs, params, signal) => {
+                return next(inputs, params, signal);
+            };
+        };
+
+        const graph: GraphState = {
+            nodes: {
+                's1': { id: 's1', type: 'node/generic', mode: 'state', params: {} }
+            },
+            edges: []
+        };
+
+        const config = {
+            executionMode: 'serial' as const,
+            nodeTimeoutMs: 1000,
+            middlewares: [customMiddleware]
+        };
+
+        await evaluateGraph(graph, {}, StandardNodes, config);
+        expect(passedMode).toBe('state');
+    });
 });

@@ -1,7 +1,16 @@
 import { NodeDefinition } from './types.js';
 
+// Detect if running in Node.js backend vs. Browser environment
 const isNode = typeof process !== 'undefined' && process.release?.name === 'node';
 
+/**
+ * Executes Python script code locally by spawning a python3 subprocess.
+ * Communicates with the subprocess using JSON over stdin/stdout.
+ * 
+ * @param spawn Child process spawning utility
+ * @param code User-written python code containing the 'execute' function
+ * @param inputs Map of inputs to feed into the 'execute' function
+ */
 function runPythonLocally(spawn: any, code: string, inputs: any): Promise<any> {
     return new Promise((resolve, reject) => {
         const pythonCode = `
@@ -52,6 +61,21 @@ except Exception as e:
     });
 }
 
+/**
+ * Dynamic Python script node definition.
+ * 
+ * ============================================================================
+ * PYTHON CODE NODE RULES (AI & HUMAN NOTES)
+ * ============================================================================
+ * 1. Structure: The user code MUST define a function:
+ *    `def execute(inputs):`
+ *    which accepts a dictionary of inputs and returns a dictionary of output values.
+ * 2. Execution environment:
+ *    - In Node.js (e.g. backend / CLI testing): runs locally via `runPythonLocally`.
+ *    - In the browser: proxy requests to the dev server via `/api/execute-python`.
+ * 3. Dynamic pins: Supports arbitrary runtime input/output definitions.
+ * ============================================================================
+ */
 export const pythonScript: NodeDefinition = {
     namespace: 'core',
     category: 'python',
