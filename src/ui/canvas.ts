@@ -255,6 +255,9 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     } else if (nodeDef?.category === 'state') {
         startVar = '--node-state-header-start';
         endVar = '--node-state-header-end';
+    } else if (nodeDef?.category === 'database') {
+        startVar = '--node-database-header-start';
+        endVar = '--node-database-header-end';
     }
     
     const headerStart = computedStyle.getPropertyValue(startVar).trim() || 'hsla(190, 80%, 30%, 0.4)';

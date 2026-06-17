@@ -12,7 +12,7 @@
     --bg-nested-card: rgba(0, 0, 0, 0.60);
     --bg-terminal: hsla(222, 30%, 5%, 0.45);
     --bg-sidebar: hsla(222, 22%, 8%, 0.25);
-    --sidebar-blur: blur(40px) saturate(220%);
+    --sidebar-blur: blur(36px) saturate(220%);
     --bg-helper: rgba(11, 13, 17, 0.7);
     
     --border-glow: hsla(190, 100%, 50%, 0.15);
@@ -53,15 +53,19 @@
     --node-default-header-end: hsla(190, 80%, 15%, 0.1);
     --node-default-specular: hsla(190, 90%, 80%, 0.45);
     --node-default-shadow: rgba(12, 25, 38, 0.65);
+    --node-database-header-start: hsla(210, 80%, 35%, 0.45);
+    --node-database-header-end: hsla(210, 80%, 15%, 0.1);
+    --node-database-specular: hsla(210, 90%, 80%, 0.45);
+    --node-database-shadow: rgba(12, 22, 38, 0.65);
     
     /* Layout constants */
     --header-height: 72px;
     --footer-height: 30px;
-    --tabs-height: 40px;
+    --tabs-height: 36px;
     --sidebar-width: 300px;
     
     /* Effects */
-    --glass-shadow: inset 0 1px 0 0 hsla(0, 0%, 100%, 0.16), 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+    --glass-shadow: inset 0 1px 0 0 hsla(0, 0%, 100%, 0.16), 0 12px 36px 0 rgba(0, 0, 0, 0.45);
     --glass-blur: blur(32px) saturate(210%);
     --bg-clear-panel: hsla(222, 22%, 8%, 0.18);
     --border-clear-panel: hsla(0, 0%, 100%, 0.08);
@@ -81,7 +85,7 @@
     --bg-nested-card: rgba(255, 255, 255, 0.78);
     --bg-terminal: hsla(210, 25%, 93%, 0.45);
     --bg-sidebar: hsla(210, 40%, 98%, 0.35);
-    --sidebar-blur: blur(40px) saturate(220%);
+    --sidebar-blur: blur(36px) saturate(220%);
     --bg-helper: rgba(255, 255, 255, 0.85);
     
     --border-glow: hsla(210, 100%, 45%, 0.15);
@@ -105,7 +109,7 @@
     --text-muted: hsl(215, 15%, 55%);
     --text-btn-primary: hsl(0, 0%, 100%);
     
-    --glass-shadow: inset 0 1px 0 0 hsla(0, 0%, 100%, 0.65), 0 12px 40px 0 rgba(15, 23, 42, 0.08);
+    --glass-shadow: inset 0 1px 0 0 hsla(0, 0%, 100%, 0.65), 0 12px 36px 0 rgba(15, 23, 42, 0.08);
     --glass-blur: blur(32px) saturate(210%);
     --bg-clear-panel: hsla(0, 0%, 100%, 0.24);
     --border-clear-panel: hsla(0, 0%, 0%, 0.06);
@@ -129,6 +133,10 @@
     --node-default-header-end: hsla(210, 90%, 95%, 0.3);
     --node-default-specular: hsla(210, 95%, 93%, 0.8);
     --node-default-shadow: rgba(14, 165, 233, 0.08);
+    --node-database-header-start: hsla(210, 85%, 80%, 0.85);
+    --node-database-header-end: hsla(210, 85%, 95%, 0.3);
+    --node-database-specular: hsla(210, 95%, 93%, 0.8);
+    --node-database-shadow: rgba(15, 23, 42, 0.04);
 }
 
 /* ============================================================================
@@ -1978,7 +1986,7 @@ body.light-theme .context-menu-item:hover {
    BOTTOM DRAWER (CONSOLE) PANEL
    ============================================================================ */
 .bottom-drawer {
-    height: 140px;
+    height: 144px;
     width: 100%;
     display: flex;
     flex-direction: column;

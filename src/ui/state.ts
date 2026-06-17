@@ -2,9 +2,10 @@ import { GraphState, NodeState, PinType } from '../core/ast.js';
 import { createNodeState } from '../core/factory.js';
 import { RenderingContext, Viewport } from './types.js';
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT, BOTTOM_PADDING } from './canvas.js';
-import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
+import { StandardNodes, getNodeInputs, getNodeOutputs, CustomRegistry } from '../registry/index.js';
 import { loadSettings } from './settings.js';
 import { resolveGraphTypes } from '../engine/validation.js';
+import { evaluateGraph } from '../engine/evaluate.js';
 
 // ============================================================================
 // GRID CONSTANT
@@ -484,7 +485,62 @@ function deleteExternalEdges(workspaces: Workspace[], nodeId: string, pinId: str
     });
 }
 
+export function syncWorkspaceNodeRegistrations() {
+    appState.workspaces.forEach(ws => {
+        const typeName = `workspace/${ws.id}`;
+        
+        // Find inputs (composite/input nodes)
+        const inputsSchema: Record<string, PinType> = {};
+        const inputNodeIds: Record<string, string> = {};
+        Object.values(ws.graph.nodes).forEach(n => {
+            if (n.type === 'composite/input') {
+                const pinName = String(n.params.name || n.ui?.title || n.id);
+                inputsSchema[pinName] = 'any';
+                inputNodeIds[pinName] = n.id;
+            }
+        });
+
+        // Find outputs (composite/output nodes)
+        const outputsSchema: Record<string, PinType> = {};
+        const outputNodeIds: Record<string, string> = {};
+        Object.values(ws.graph.nodes).forEach(n => {
+            if (n.type === 'composite/output') {
+                const pinName = String(n.params.name || n.ui?.title || n.id);
+                outputsSchema[pinName] = 'any';
+                outputNodeIds[pinName] = n.id;
+            }
+        });
+
+        CustomRegistry[typeName] = {
+            namespace: 'workspace',
+            category: 'workspace',
+            name: ws.name,
+            requires: inputsSchema,
+            provides: outputsSchema,
+            execute: async (inputs: Record<string, any>) => {
+                const initialInputs: Record<string, any> = {};
+                Object.entries(inputs).forEach(([pinName, val]) => {
+                    const nodeId = inputNodeIds[pinName];
+                    if (nodeId) {
+                        initialInputs[`${nodeId}.value`] = val;
+                    }
+                });
+
+                const res = await evaluateGraph(ws.graph, initialInputs, { ...StandardNodes, ...CustomRegistry }, { executionMode: 'serial' });
+                
+                const outputsResult: Record<string, any> = {};
+                Object.entries(outputNodeIds).forEach(([pinName, nodeId]) => {
+                    outputsResult[pinName] = res.state[`${nodeId}.value`] ?? res.state[`${nodeId}.in`] ?? null;
+                });
+
+                return outputsResult;
+            }
+        };
+    });
+}
+
 export function syncContextState() {
+    syncWorkspaceNodeRegistrations();
     reconcileBoundaryPinsAndNodes(appState.workspaces);
 
     const { inputs, outputs } = resolveGraphTypes(appState.currentGraph);

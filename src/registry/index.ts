@@ -162,6 +162,18 @@ export const StandardNodes: NodeRegistry = Object.freeze({
         execute: async (inputs) => {
             return { value: inputs.in };
         }
+    },
+    'database/table': {
+        namespace: 'database',
+        category: 'database',
+        name: 'table',
+        requires: {},
+        provides: {},
+        dynamicInputs: true,
+        dynamicOutputs: true,
+        execute: async (inputs, params) => {
+            return { rows: params.rows || [] };
+        }
     }
 });
 
@@ -222,6 +234,8 @@ export function extractVariablesFromFormula(formula: string): string[] {
     return Array.from(vars);
 }
 
+export const CustomRegistry: Record<string, any> = {};
+
 export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: NodeRegistry): Record<string, PinType> {
     switch (mode) {
         case 'delay':
@@ -267,7 +281,7 @@ export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: No
                 return { code: 'string' };
             }
             {
-                const def = registry ? registry[node.type] : StandardNodes[node.type];
+                const def = registry ? registry[node.type] : (StandardNodes[node.type] || CustomRegistry[node.type]);
                 return def ? def.requires : {};
             }
         case 'input':
@@ -275,7 +289,7 @@ export function getModeBaseInputs(mode: NodeMode, node: NodeState, registry?: No
         case 'log':
             return { msg: 'any' };
         default: {
-            const def = registry ? registry[node.type] : StandardNodes[node.type];
+            const def = registry ? registry[node.type] : (StandardNodes[node.type] || CustomRegistry[node.type]);
             return def ? def.requires : {};
         }
     }
@@ -309,7 +323,7 @@ export function getModeBaseOutputs(mode: NodeMode, nodeType: string, registry?: 
                 return { out: 'any' };
             }
             {
-                const def = registry ? registry[nodeType] : StandardNodes[nodeType];
+                const def = registry ? registry[nodeType] : (StandardNodes[nodeType] || CustomRegistry[nodeType]);
                 return def ? def.provides : {};
             }
         case 'input':
@@ -317,7 +331,7 @@ export function getModeBaseOutputs(mode: NodeMode, nodeType: string, registry?: 
         case 'log':
             return {};
         default: {
-            const def = registry ? registry[nodeType] : StandardNodes[nodeType];
+            const def = registry ? registry[nodeType] : (StandardNodes[nodeType] || CustomRegistry[nodeType]);
             return def ? def.provides : {};
         }
     }

@@ -4,6 +4,8 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { getDriver } from '../dist/src/io/index.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -27,6 +29,72 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/api/import-sqlite') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+            res.setHeader('Content-Type', 'application/json');
+            try {
+                const payload = JSON.parse(body);
+                const { fileBase64, driverId } = payload;
+                if (typeof fileBase64 !== 'string') {
+                    res.statusCode = 400;
+                    res.end(JSON.stringify({ success: false, error: 'Missing fileBase64 parameter' }));
+                    return;
+                }
+
+                const driver = getDriver(driverId || 'sqlite');
+                if (!driver) {
+                    res.statusCode = 400;
+                    res.end(JSON.stringify({ success: false, error: `Unsupported driver: ${driverId}` }));
+                    return;
+                }
+
+                const buffer = Buffer.from(fileBase64, 'base64');
+                const graph = await driver.importSchema(buffer);
+
+                res.end(JSON.stringify({ success: true, graph }));
+            } catch (err) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
+    if (req.method === 'POST' && req.url === '/api/export-sqlite') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+            res.setHeader('Content-Type', 'application/json');
+            try {
+                const payload = JSON.parse(body);
+                const { graph, driverId } = payload;
+                if (!graph || typeof graph !== 'object') {
+                    res.statusCode = 400;
+                    res.end(JSON.stringify({ success: false, error: 'Missing graph parameter' }));
+                    return;
+                }
+
+                const driver = getDriver(driverId || 'sqlite');
+                if (!driver) {
+                    res.statusCode = 400;
+                    res.end(JSON.stringify({ success: false, error: `Unsupported driver: ${driverId}` }));
+                    return;
+                }
+
+                const buffer = await driver.exportSchema(graph);
+                const fileBase64 = buffer.toString('base64');
+
+                res.end(JSON.stringify({ success: true, fileBase64 }));
+            } catch (err) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+        });
+        return;
+    }
+
     if (req.method === 'POST' && req.url === '/api/execute-python') {
         let body = '';
         req.on('data', chunk => { body += chunk; });

@@ -1,13 +1,14 @@
-import { GraphState, NodeState, Edge, NodeMode } from '../core/ast.js';
+import { GraphState, NodeState, Edge, NodeMode, PinType } from '../core/ast.js';
 import { createNodeState } from '../core/factory.js';
 import { appState, screenToWorld, syncContextState, updateCursor, getNodeHeight, getInputPinCoords, getOutputPinCoords, GRID_SIZE, findNodeStateById } from './state.js';
 import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons, undo, redo } from './history.js';
 import { updateInspector } from './inspector.js';
 import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution.js';
 import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT, getInputPinPos, getOutputPinPos } from './canvas.js';
-import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
+import { StandardNodes, getNodeInputs, getNodeOutputs, CustomRegistry } from '../registry/index.js';
 import { isCompatible } from '../engine/validation.js';
 import { updateSetting, loadSettings } from './settings.js';
+import { sortTopologically } from '../engine/topology.js';
 
 // ============================================================================
 // INTERACTION CONSTANTS
@@ -433,7 +434,7 @@ export function duplicateNode(nodeId: string) {
     const newId = `${baseId}_${Date.now().toString().slice(-4)}_${Math.floor(Math.random() * 100)}`;
 
     const snapEnabled = loadSettings().canvas.snapToGrid;
-    const offset = 40; 
+    const offset = 36; 
     let px = (node.ui?.x ?? 0) + offset;
     let py = (node.ui?.y ?? 0) + offset;
     if (snapEnabled) {
@@ -1381,8 +1382,6 @@ export function setupInteractions() {
                         
 
                         if (isCompatible(sourceType, targetType)) {
-                            pushToHistory();
-
                             const cleanedEdges = appState.currentGraph.edges.filter(
                                 edge => !(edge.targetNodeId === targetNodeId && edge.targetPinId === targetPinId)
                             );
@@ -1395,13 +1394,21 @@ export function setupInteractions() {
                                 targetPinId
                             };
 
-                            appState.currentGraph = {
+                            const prospectiveGraph = {
                                 ...appState.currentGraph,
                                 edges: [...cleanedEdges, newEdge]
                             };
-                            
-                            logToTerminal(`Connected [Node ${sourceNodeId}].${sourcePinId} ➡️ [Node ${targetNodeId}].${targetPinId}`, 'system-msg');
-                            triggerAutoRun();
+
+                            try {
+                                sortTopologically(prospectiveGraph, StandardNodes);
+                                
+                                pushToHistory();
+                                appState.currentGraph = prospectiveGraph;
+                                logToTerminal(`Connected [Node ${sourceNodeId}].${sourcePinId} ➡️ [Node ${targetNodeId}].${targetPinId}`, 'system-msg');
+                                triggerAutoRun();
+                            } catch (cycleError: any) {
+                                logToTerminal(`Link rejected: Circular dependency loop detected.`, 'terminal-line effect-msg');
+                            }
                         } else {
                             logToTerminal(`Link rejected: Incompatible types. Cannot connect '${sourceType}' to '${targetType}'`, 'terminal-line effect-msg');
                         }
@@ -1888,6 +1895,17 @@ export function filterNodeAdderList(query: string) {
         modes.push({ mode: 'composite/output', label: 'Output Pin (Boundary)', category: 'composite' });
     }
 
+    appState.workspaces.forEach(ws => {
+        if (ws.id === appState.activeWorkspaceId) return;
+        if (appState.activeWorkspaceId === `block_editor_${ws.id}` || ws.id === `block_editor_${appState.activeWorkspaceId}`) return;
+        
+        modes.push({
+            mode: `workspace/${ws.id}`,
+            label: `Workspace: ${ws.name}`,
+            category: 'workspace'
+        });
+    });
+
     modes.forEach(({ mode, label, category }) => {
         if (query && !label.toLowerCase().includes(lowerQuery) && !mode.toLowerCase().includes(lowerQuery)) {
             return;
@@ -1923,7 +1941,14 @@ export function addNewNodeWithMode(mode: NodeMode) {
     pushToHistory();
 
     const isBoundary = mode === 'composite/input' || mode === 'composite/output';
-    const cleanMode = isBoundary ? mode.replace('composite/', '') : mode;
+    const isWorkspace = mode.startsWith('workspace/');
+    
+    let cleanMode: string = mode;
+    if (isBoundary) {
+        cleanMode = mode.replace('composite/', '');
+    } else if (isWorkspace) {
+        cleanMode = mode.replace('workspace/', '');
+    }
     const uniqueId = `${cleanMode}_${Date.now().toString().slice(-4)}`;
     
     const initialParams: Record<string, any> = {};
@@ -1976,15 +2001,35 @@ export function addNewNodeWithMode(mode: NodeMode) {
         const parentNode = findNodeStateById(appState.workspaces, parentNodeId);
         const numOutputs = parentNode && parentNode.outputs ? Object.keys(parentNode.outputs).length : 0;
         initialTitle = `out${numOutputs}`;
+    } else if (isWorkspace) {
+        const wsId = mode.replace('workspace/', '');
+        const ws = appState.workspaces.find(w => w.id === wsId);
+        initialTitle = ws ? ws.name : 'Workspace Node';
+    }
+
+    let nodeType = 'node/generic';
+    let nodeMode: NodeMode = mode;
+    let initialInputs: Record<string, PinType> | undefined = undefined;
+    let initialOutputs: Record<string, PinType> | undefined = undefined;
+
+    if (isBoundary) {
+        nodeType = mode;
+        nodeMode = undefined as any;
+    } else if (isWorkspace) {
+        nodeType = mode;
+        nodeMode = 'formula';
+        const regDef = CustomRegistry[mode];
+        initialInputs = regDef ? { ...regDef.requires } : {};
+        initialOutputs = regDef ? { ...regDef.provides } : {};
     }
 
     const newNode = createNodeState({
         id: uniqueId,
-        type: isBoundary ? mode : 'node/generic',
-        mode: isBoundary ? undefined : mode,
+        type: nodeType,
+        mode: nodeMode,
         params: initialParams,
-        inputs: (isMorphing && unconfiguredNode) ? (unconfiguredNode.inputs as any) : undefined,
-        outputs: (isMorphing && unconfiguredNode) ? (unconfiguredNode.outputs as any) : undefined,
+        inputs: initialInputs ?? ((isMorphing && unconfiguredNode) ? (unconfiguredNode.inputs as any) : undefined),
+        outputs: initialOutputs ?? ((isMorphing && unconfiguredNode) ? (unconfiguredNode.outputs as any) : undefined),
         ui: {
             x: spawnX,
             y: spawnY,

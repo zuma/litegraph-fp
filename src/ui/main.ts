@@ -405,6 +405,84 @@ window.addEventListener('DOMContentLoaded', () => {
         runExecutionPipeline().catch(console.error);
     });
 
+    const importBtn = document.getElementById('btn-import-sqlite');
+    const exportBtn = document.getElementById('btn-export-sqlite');
+    const filePicker = document.getElementById('sqlite-file-picker') as HTMLInputElement | null;
+
+    importBtn?.addEventListener('click', () => {
+        filePicker?.click();
+    });
+
+    filePicker?.addEventListener('change', async () => {
+        const file = filePicker.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const dataUrl = reader.result as string;
+            const fileBase64 = dataUrl.split(',')[1];
+
+            logToTerminal(`Importing SQLite file '${file.name}'...`, 'system-msg');
+
+            try {
+                const response = await fetch('/api/import-sqlite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileBase64 })
+                });
+                const res = await response.json();
+                if (res.success && res.graph) {
+                    pushToHistory();
+                    appState.currentGraph = autoLayoutGraph(res.graph);
+                    resetSelectionState();
+                    syncContextState();
+                    logToTerminal(`Successfully imported SQLite database schema with ${Object.keys(res.graph.nodes).length} tables!`, 'system-msg');
+                } else {
+                    logToTerminal(`SQLite import failed: ${res.error}`, 'terminal-line effect-msg');
+                }
+            } catch (err: any) {
+                logToTerminal(`SQLite import request error: ${err.message}`, 'terminal-line effect-msg');
+            }
+        };
+        reader.readAsDataURL(file);
+        filePicker.value = '';
+    });
+
+    exportBtn?.addEventListener('click', async () => {
+        logToTerminal('Exporting current schema as SQLite database...', 'system-msg');
+        try {
+            const response = await fetch('/api/export-sqlite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ graph: appState.currentGraph })
+            });
+            const res = await response.json();
+            if (res.success && res.fileBase64) {
+                const binaryString = atob(res.fileBase64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: 'application/x-sqlite3' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'schema.db';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                logToTerminal('Successfully compiled and exported schema.db!', 'system-msg');
+            } else {
+                logToTerminal(`SQLite export failed: ${res.error}`, 'terminal-line effect-msg');
+            }
+        } catch (err: any) {
+            logToTerminal(`SQLite export request error: ${err.message}`, 'terminal-line effect-msg');
+        }
+    });
+
     /** Persists the current viewport camera position to settings. */
     function saveCamera() {
         updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
@@ -1105,6 +1183,12 @@ window.addEventListener('DOMContentLoaded', () => {
     function openBlockEditor(nodeId: string) {
         const node = findNodeStateById(appState.workspaces, nodeId);
         if (!node) return;
+
+        if (node.type && node.type.startsWith('workspace/')) {
+            const wsId = node.type.replace('workspace/', '');
+            switchWorkspace(wsId);
+            return;
+        }
 
         const tabId = `block_editor_${nodeId}`;
         let existing = appState.workspaces.find(w => w.id === tabId);
