@@ -12,7 +12,7 @@ const WORKSPACE_ROOT = path.resolve(__dirname, '..') + path.sep;
 // TODO(security): Binding to 0.0.0.0 is required for Docker/Orbstack dev container port-forwarding to macOS.
 // In a non-containerized testing environment, this should bind strictly to '127.0.0.1'.
 const HOST = '0.0.0.0'; 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.PORT || '8080', 10);
 
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',

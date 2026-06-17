@@ -39,3 +39,7 @@ src/
 ## Development Environment
 * **Runtime/Tooling:** Node.js for development only (via a Docker container). The final output will be environment-agnostic ECMAScript.
 * **Language:** Strict TypeScript (`"strict": true`, `"target": "ES2022"`).
+* **Setup & Running:**
+  1. **Prerequisites:** Run `npm install` and `npm run build` to compile the TypeScript files into the `./dist` directory. The browser UI relies on `/dist/src/ui/main.js` to function.
+  2. **Running locally:** Start the dev server using `npm run dev`.
+  3. **Default Port:** The dev server defaults to port `8080` (configured in `scripts/dev_server.js`), which matches the dev container's port forwarding.
