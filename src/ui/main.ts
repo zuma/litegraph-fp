@@ -36,15 +36,30 @@ window.addEventListener('DOMContentLoaded', () => {
         if (btnSidebarToggle) btnSidebarToggle.setAttribute('data-tooltip', 'Toggle Panel (⌘B) - Manually show or hide the sidebar panel');
     }
 
+    const wrapper = document.getElementById('canvas-wrapper') as HTMLElement;
+
     // Handle resize with DPR support (Fixes #17)
     const resizeCanvas = () => {
-        const rect = canvas.getBoundingClientRect();
+        if (!wrapper) return;
+        const rect = wrapper.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
         ctx.scale(dpr, dpr);
+        if (appState.renderingContext) {
+            appState.renderingContext.needsRedraw = true;
+        }
+        if (typeof renderer !== 'undefined' && renderer) {
+            renderer.triggerSingleFrame();
+        }
     };
-    window.addEventListener('resize', resizeCanvas);
+
+    if (wrapper) {
+        const resizeObserver = new ResizeObserver(() => {
+            resizeCanvas();
+        });
+        resizeObserver.observe(wrapper);
+    }
 
     // Initialize rendering context object
     const renderingContext: RenderingContext = {
