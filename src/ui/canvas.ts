@@ -13,6 +13,9 @@ export const HEADER_HEIGHT = 30;    // Changed to align input/output pins on 60p
 export const PIN_RADIUS = 6;
 export const BOTTOM_PADDING = 45;   // Extra padding below last pin row (snaps total height to multiple of 15)
 
+const scratchCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+const scratchCtx = scratchCanvas ? scratchCanvas.getContext('2d') : null;
+
 /** Returns the pin dot color for a given PinType, reading from the active CSS theme variables. */
 export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration): string {
     const style = computedStyle || (typeof document !== 'undefined' ? getComputedStyle(document.body) : null);
@@ -181,27 +184,39 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     }
 
     // 1.5 Draw Rounded Backdrop Blur (simulates CSS backdrop-filter on Canvas)
-    context.save();
-    context.beginPath();
-    context.roundRect(x, y, w, h, 10);
-    context.clip();
-
-    // Grab corresponding area from the raw canvas element and paint it back with blur filter
-    context.filter = 'blur(12px) saturate(140%)';
     const dpr = window.devicePixelRatio || 1;
     const zoom = ctx.viewport.zoom;
-    const screenX = (x * zoom + ctx.viewport.x) * dpr;
-    const screenY = (y * zoom + ctx.viewport.y) * dpr;
-    const screenW = (w * zoom) * dpr;
-    const screenH = (h * zoom) * dpr;
-    try {
-        if (screenW > 0 && screenH > 0) {
-            context.drawImage(ctx.canvas, screenX, screenY, screenW, screenH, x, y, w, h);
+    const screenX = Math.round((x * zoom + ctx.viewport.x) * dpr);
+    const screenY = Math.round((y * zoom + ctx.viewport.y) * dpr);
+    const screenW = Math.round((w * zoom) * dpr);
+    const screenH = Math.round((h * zoom) * dpr);
+
+    if (scratchCanvas && scratchCtx && screenW > 0 && screenH > 0) {
+        try {
+            scratchCanvas.width = screenW;
+            scratchCanvas.height = screenH;
+            
+            // 1. Copy from main canvas to intermediate scratch canvas to avoid in-place overlap conflicts
+            scratchCtx.drawImage(ctx.canvas, screenX, screenY, screenW, screenH, 0, 0, screenW, screenH);
+            
+            // 2. Draw blurred scratch canvas back onto main canvas inside clipping path
+            context.save();
+            context.shadowBlur = 0;
+            context.shadowOffsetX = 0;
+            context.shadowOffsetY = 0;
+            context.shadowColor = 'transparent';
+            
+            context.beginPath();
+            context.roundRect(x, y, w, h, 10);
+            context.clip();
+            
+            context.filter = 'blur(12px) saturate(140%)';
+            context.drawImage(scratchCanvas, 0, 0, screenW, screenH, x, y, w, h);
+            context.restore();
+        } catch (e) {
+            // Fallback gracefully if canvas copying is temporarily out of bounds
         }
-    } catch (e) {
-        // Fallback gracefully if canvas copying is temporarily out of bounds
     }
-    context.restore();
 
     // 2. Draw Card Body (Glassmorphism card - Full size)
     context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
@@ -211,6 +226,9 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
 
     // Reset shadow for subsequent drawings
     context.shadowBlur = 0;
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = 0;
+    context.shadowColor = 'transparent';
 
     // 4. Draw Header Bar (Suspended chip / Nested titlebar layout)
     const INFILL_PADDING = 4;
