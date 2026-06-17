@@ -3,7 +3,7 @@ import { createRenderer } from './renderer.js';
 import { StandardNodes } from '../registry/index.js';
 import { appState, syncContextState, updateCursor, defaultGraph } from './state.js';
 import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution.js';
-import { setupInteractions, deleteSelectedNodes, zoomExtents, closeNodeAdder } from './interactions.js';
+import { setupInteractions, deleteSelectedNodes, zoomExtents, closeNodeAdder, MIN_ZOOM, MAX_ZOOM } from './interactions.js';
 import { undo, redo, pushToHistory, undoStack, redoStack, updateUndoRedoButtons } from './history.js';
 import { loadSettings, updateSetting } from './settings.js';
 import { autoLayoutGraph } from './layout.js';
@@ -388,22 +388,40 @@ window.addEventListener('DOMContentLoaded', () => {
         runExecutionPipeline().catch(console.error);
     });
 
+    /** Persists the current viewport camera position to settings. */
+    function saveCamera() {
+        updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
+    }
+
+    /** Resets all transient selection, hover, and error state to defaults. */
+    function resetSelectionState() {
+        appState.selectedNodeId = null;
+        appState.selectedNodeIds.clear();
+        appState.selectedEdgeId = null;
+        appState.selectedEdgeIds.clear();
+        appState.hoveredNodeId = null;
+        appState.hoveredPin = null;
+        appState.hoveredEdgeId = null;
+        appState.nodeErrors = {};
+        appState.latestExecutionState = {};
+    }
+
     document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
-        appState.viewport.zoom = Math.min(3.0, appState.viewport.zoom * 1.2);
+        appState.viewport.zoom = Math.min(MAX_ZOOM, appState.viewport.zoom * 1.2);
         if (appState.renderingContext) {
             appState.renderingContext.viewport = { ...appState.viewport };
             appState.renderingContext.needsRedraw = true;
         }
-        updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
+        saveCamera();
     });
 
     document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
-        appState.viewport.zoom = Math.max(0.05, appState.viewport.zoom / 1.2);
+        appState.viewport.zoom = Math.max(MIN_ZOOM, appState.viewport.zoom / 1.2);
         if (appState.renderingContext) {
             appState.renderingContext.viewport = { ...appState.viewport };
             appState.renderingContext.needsRedraw = true;
         }
-        updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
+        saveCamera();
     });
 
     document.getElementById('btn-zoom-reset')?.addEventListener('click', () => {
@@ -414,7 +432,7 @@ window.addEventListener('DOMContentLoaded', () => {
             appState.renderingContext.viewport = { ...appState.viewport };
             appState.renderingContext.needsRedraw = true;
         }
-        updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
+        saveCamera();
     });
 
     // Fit Graph to Screen (Fixes #15)
@@ -872,15 +890,7 @@ window.addEventListener('DOMContentLoaded', () => {
         updateUndoRedoButtons();
 
         // Clear selection/hover states
-        appState.selectedNodeId = null;
-        appState.selectedNodeIds.clear();
-        appState.selectedEdgeId = null;
-        appState.selectedEdgeIds.clear();
-        appState.hoveredNodeId = null;
-        appState.hoveredPin = null;
-        appState.hoveredEdgeId = null;
-        appState.nodeErrors = {};
-        appState.latestExecutionState = {};
+        resetSelectionState();
 
         syncContextState();
         renderWorkspaceTabs();
@@ -922,15 +932,7 @@ window.addEventListener('DOMContentLoaded', () => {
         updateUndoRedoButtons();
 
         // Clear selection/hover states
-        appState.selectedNodeId = null;
-        appState.selectedNodeIds.clear();
-        appState.selectedEdgeId = null;
-        appState.selectedEdgeIds.clear();
-        appState.hoveredNodeId = null;
-        appState.hoveredPin = null;
-        appState.hoveredEdgeId = null;
-        appState.nodeErrors = {};
-        appState.latestExecutionState = {};
+        resetSelectionState();
 
         syncContextState();
         renderWorkspaceTabs();
@@ -975,15 +977,7 @@ window.addEventListener('DOMContentLoaded', () => {
         updateUndoRedoButtons();
 
         // Clear selection/hover states
-        appState.selectedNodeId = null;
-        appState.selectedNodeIds.clear();
-        appState.selectedEdgeId = null;
-        appState.selectedEdgeIds.clear();
-        appState.hoveredNodeId = null;
-        appState.hoveredPin = null;
-        appState.hoveredEdgeId = null;
-        appState.nodeErrors = {};
-        appState.latestExecutionState = {};
+        resetSelectionState();
 
         syncContextState();
         renderWorkspaceTabs();

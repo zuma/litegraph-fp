@@ -11,8 +11,9 @@ export const NODE_WIDTH = 180;
 export const ROW_HEIGHT = 15;      // Spaced by 15px (divisor of 30 and 60) for compact connection points
 export const HEADER_HEIGHT = 30;    // Changed to align input/output pins on 60px grid
 export const PIN_RADIUS = 6;
+export const BOTTOM_PADDING = 45;   // Extra padding below last pin row (snaps total height to multiple of 15)
 
-// Color maps based on PinType (reads dynamically from active theme CSS variables)
+/** Returns the pin dot color for a given PinType, reading from the active CSS theme variables. */
 export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration): string {
     const style = computedStyle || (typeof document !== 'undefined' ? getComputedStyle(document.body) : null);
     
@@ -32,7 +33,7 @@ export function getPinColor(type: PinType, computedStyle?: CSSStyleDeclaration):
     return getVar('--text-muted', 'hsl(220, 10%, 60%)');
 }
 
-// Calculate the dimensions of a node based on its registry definition
+/** Calculates the total rendered height of a node based on its pin count. */
 export function getNodeHeight(
     node: NodeState, 
     resolvedInputs?: Record<string, Record<string, PinType>>, 
@@ -41,10 +42,10 @@ export function getNodeHeight(
     const numInputs = Object.keys(getNodeInputs(node, resolvedInputs)).length;
     const numOutputs = Object.keys(getNodeOutputs(node, resolvedOutputs)).length;
     const maxRows = Math.max(numInputs, numOutputs, 1);
-    return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + 45; // 45px bottom padding to snap total height to multiple of 15
+    return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + BOTTOM_PADDING;
 }
 
-// Get the coordinates for an input pin relative to the node
+/** Returns screen coordinates for an input pin at the given index on a node. */
 export function getInputPinPos(node: NodeState, pinIndex: number): { x: number, y: number } {
     const nx = node.ui?.x ?? 0;
     const ny = node.ui?.y ?? 0;
@@ -54,7 +55,7 @@ export function getInputPinPos(node: NodeState, pinIndex: number): { x: number, 
     };
 }
 
-// Get the coordinates for an output pin relative to the node
+/** Returns screen coordinates for an output pin at the given index on a node. */
 export function getOutputPinPos(node: NodeState, nodeDef: NodeDefinition | undefined, pinIndex: number): { x: number, y: number } {
     const nx = node.ui?.x ?? 0;
     const ny = node.ui?.y ?? 0;
@@ -69,6 +70,10 @@ export function getOutputPinPos(node: NodeState, nodeDef: NodeDefinition | undef
 // CORE DRAWING ROUTINES
 // ============================================================================
 
+/**
+ * Draws the background grid (dots or lines) in screen space.
+ * Grid spacing is 60px, aligned with the viewport pan offset.
+ */
 export function drawGrid(renderingCtx: RenderingContext, computedStyle: CSSStyleDeclaration) {
     const { ctx, canvas, viewport } = renderingCtx;
     const { x, y, zoom } = viewport;
@@ -125,6 +130,11 @@ export function drawGrid(renderingCtx: RenderingContext, computedStyle: CSSStyle
     ctx.restore();
 }
 
+/**
+ * Draws a complete node card: backdrop blur, glassmorphism body, header gradient,
+ * title text, error badge, input/output pins, parameter preview, ID drawer,
+ * selection border, and specular highlight.
+ */
 export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDefinition | undefined, computedStyle: CSSStyleDeclaration) {
     if (node.ui?.isMorphing) return;
     const context = ctx.ctx;
@@ -320,10 +330,9 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     }
 
     // 7. Draw Mini Parameters Preview at bottom of node body (if any)
-    if (true) {
-        const paramKeys = Object.keys(node.params);
-        const hasParams = paramKeys.length > 0;
-        if (hasParams) {
+    const paramKeys = Object.keys(node.params);
+    const hasParams = paramKeys.length > 0;
+    if (hasParams) {
             context.fillStyle = computedStyle.getPropertyValue('--text-muted').trim() || 'hsl(220, 10%, 46%)';
             context.font = '8px "Fira Code", monospace';
             context.textAlign = 'center';
@@ -449,7 +458,6 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
             
             context.restore();
         }
-    }
     // 9. Draw Card Border Outline last (only on selection or error state to declutter the canvas)
     if (isSelected || hasError || node.type === 'node/unconfigured') {
         context.beginPath();
@@ -499,6 +507,11 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     context.restore();
 }
 
+/**
+ * Draws a connection edge between two pin positions.
+ * Supports 'spline' (cubic Bézier) and 'orthogonal' (3-segment rectilinear) styles.
+ * Renders a glow layer underneath and a sharp core line on top.
+ */
 export function drawEdge(
     ctx: RenderingContext,
     edge: Edge,

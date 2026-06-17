@@ -1,7 +1,7 @@
 import { GraphState, NodeState, PinType } from '../core/ast.js';
 import { createNodeState } from '../core/factory.js';
 import { RenderingContext, Viewport } from './types.js';
-import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT } from './canvas.js';
+import { NODE_WIDTH, ROW_HEIGHT, HEADER_HEIGHT, BOTTOM_PADDING } from './canvas.js';
 import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
 import { loadSettings } from './settings.js';
 import { resolveGraphTypes } from '../engine/validation.js';
@@ -341,10 +341,15 @@ export function updateCursor() {
 // CANVAS PIN POSITION LOOKUPS
 // ============================================================================
 
+/**
+ * Calculates node height using appState's resolved inputs/outputs.
+ * This is a convenience wrapper around the canonical formula in canvas.ts,
+ * using the global appState for resolved pin lookups.
+ */
 export function getNodeHeight(node: NodeState): number {
     const numInputs = Object.keys(getNodeInputs(node, appState.resolvedInputs)).length;
     const numOutputs = Object.keys(getNodeOutputs(node, appState.resolvedOutputs)).length;
-    return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + 45; // 45px bottom padding
+    return HEADER_HEIGHT + (Math.max(numInputs, numOutputs, 1) * ROW_HEIGHT) + BOTTOM_PADDING;
 }
 
 export function getInputPinCoords(node: NodeState, pinId: string): { x: number, y: number } {
