@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 // Artifact directory path passed from environment / user context
-const ARTIFACT_DIR = '/usr/local/google/home/lebrian/.gemini/jetski/brain/550f6694-8672-4c44-a535-57d3d972c9cf';
+const ARTIFACT_DIR = process.env.ARTIFACT_DIR || path.join(process.cwd(), 'tests/artifacts');
 const SCREENSHOT_PATH = path.join(ARTIFACT_DIR, 'screenshot_e2e.png');
 
 async function runE2ETests() {
@@ -56,7 +56,8 @@ async function runE2ETests() {
         }
     });
 
-    const url = 'http://localhost:3000/';
+    const port = process.env.PORT || '8080';
+    const url = `http://localhost:${port}/`;
     console.log(`📡 Navigating to ${url}...`);
     await page.goto(url, { waitUntil: 'networkidle' });
 

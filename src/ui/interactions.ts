@@ -1602,7 +1602,7 @@ export function setupInteractions() {
         });
     }, { passive: false });
 
-    // Double-click to zoom extents
+    // Double-click to zoom extents or enter nested node editor
     canvas.addEventListener('dblclick', (e) => {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
@@ -1614,6 +1614,10 @@ export function setupInteractions() {
 
         if (!clickedNode) {
             zoomExtents();
+        } else {
+            document.dispatchEvent(new CustomEvent('litegraph-fp-open-block-editor', {
+                detail: { nodeId: clickedNode.id }
+            }));
         }
     });
 
