@@ -138,6 +138,30 @@ export const StandardNodes: NodeRegistry = Object.freeze({
                 }]
             };
         }
+    },
+    'composite/input': {
+        namespace: 'composite',
+        category: 'composite',
+        name: 'input',
+        requires: {},
+        provides: { out: 'any' },
+        dynamicInputs: true,
+        dynamicOutputs: true,
+        execute: async (inputs, params) => {
+            return { out: inputs.value ?? params.value ?? null };
+        }
+    },
+    'composite/output': {
+        namespace: 'composite',
+        category: 'composite',
+        name: 'output',
+        requires: { in: 'any' },
+        provides: {},
+        dynamicInputs: true,
+        dynamicOutputs: true,
+        execute: async (inputs) => {
+            return { value: inputs.in };
+        }
     }
 });
 

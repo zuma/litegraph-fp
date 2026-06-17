@@ -1,7 +1,7 @@
 import { RenderingContext } from './types.js';
 import { createRenderer } from './renderer.js';
 import { StandardNodes } from '../registry/index.js';
-import { appState, syncContextState, updateCursor, defaultGraph } from './state.js';
+import { appState, syncContextState, updateCursor, defaultGraph, findNodeStateById, getInputPinCoords, getOutputPinCoords } from './state.js';
 import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution.js';
 import { setupInteractions, deleteSelectedNodes, zoomExtents, closeNodeAdder, MIN_ZOOM, MAX_ZOOM } from './interactions.js';
 import { undo, redo, pushToHistory, undoStack, redoStack, updateUndoRedoButtons } from './history.js';
@@ -21,6 +21,8 @@ window.addEventListener('DOMContentLoaded', () => {
     (window as any).syncContextState = syncContextState;
     (window as any).updateInspector = updateInspector;
     (window as any).triggerAutoRun = triggerAutoRun;
+    (window as any).getInputPinCoords = getInputPinCoords;
+    (window as any).getOutputPinCoords = getOutputPinCoords;
 
     const settings = loadSettings();
 
@@ -527,7 +529,7 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             bottomDrawer.classList.remove('collapsed');
-            const savedHeight = localStorage.getItem('litegraph-fp-custom-logs-height') || '220';
+            const savedHeight = localStorage.getItem('litegraph-fp-custom-logs-height') || '140';
             bottomDrawer.style.height = `${savedHeight}px`;
             if (btnToggleBottomDrawer) {
                 btnToggleBottomDrawer.textContent = '▼ Collapse';
@@ -854,10 +856,77 @@ window.addEventListener('DOMContentLoaded', () => {
     function renderWorkspaceTabs() {
         if (!tabsContainer) return;
         tabsContainer.innerHTML = '';
-        appState.workspaces.forEach(ws => {
+        appState.workspaces.forEach((ws, idx) => {
             const tab = document.createElement('div');
             tab.className = `workspace-tab${ws.id === appState.activeWorkspaceId ? ' active' : ''}`;
             tab.dataset.id = ws.id;
+            tab.draggable = true;
+
+            const isLast = idx === appState.workspaces.length - 1;
+
+            tab.addEventListener('dragstart', (e) => {
+                if (e.dataTransfer) {
+                    e.dataTransfer.setData('text/plain', ws.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                }
+                tab.classList.add('dragging');
+            });
+
+            tab.addEventListener('dragend', () => {
+                tab.classList.remove('dragging');
+            });
+
+            tab.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                if (e.dataTransfer) {
+                    e.dataTransfer.dropEffect = 'move';
+                }
+                if (isLast) {
+                    const rect = tab.getBoundingClientRect();
+                    const relativeX = e.clientX - rect.left;
+                    if (relativeX >= rect.width / 2) {
+                        tab.classList.add('drag-over-right');
+                        tab.classList.remove('drag-over-left');
+                    } else {
+                        tab.classList.add('drag-over-left');
+                        tab.classList.remove('drag-over-right');
+                    }
+                } else {
+                    tab.classList.add('drag-over-left');
+                    tab.classList.remove('drag-over-right');
+                }
+            });
+
+            tab.addEventListener('dragleave', () => {
+                tab.classList.remove('drag-over-left', 'drag-over-right');
+            });
+
+            tab.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const isDroppedRight = tab.classList.contains('drag-over-right');
+                tab.classList.remove('drag-over-left', 'drag-over-right');
+                if (!e.dataTransfer) return;
+                const sourceId = e.dataTransfer.getData('text/plain');
+                const targetId = ws.id;
+                if (sourceId !== targetId) {
+                    const sourceIdx = appState.workspaces.findIndex(w => w.id === sourceId);
+                    const targetIdx = appState.workspaces.findIndex(w => w.id === targetId);
+                    if (sourceIdx !== -1 && targetIdx !== -1) {
+                        const [moved] = appState.workspaces.splice(sourceIdx, 1);
+                        
+                        let insertIdx = targetIdx;
+                        if (isDroppedRight) {
+                            insertIdx = appState.workspaces.length;
+                        } else {
+                            insertIdx = sourceIdx < targetIdx ? targetIdx - 1 : targetIdx;
+                        }
+
+                        appState.workspaces.splice(insertIdx, 0, moved);
+                        syncContextState();
+                        renderWorkspaceTabs();
+                    }
+                }
+            });
 
             const nameSpan = document.createElement('span');
             nameSpan.className = 'workspace-tab-name';
@@ -976,8 +1045,12 @@ window.addEventListener('DOMContentLoaded', () => {
         const index = appState.workspaces.findIndex(w => w.id === id);
         if (index === -1) return;
 
-        const confirmed = confirm(`Are you sure you want to close workspace "${appState.workspaces[index].name}"? All unsaved data in this tab will be lost.`);
-        if (!confirmed) return;
+        const ws = appState.workspaces[index];
+        const isBlockEditor = ws.id.startsWith('block_editor_');
+        if (!isBlockEditor) {
+            const confirmed = confirm(`Are you sure you want to close workspace "${ws.name}"? All unsaved data in this tab will be lost.`);
+            if (!confirmed) return;
+        }
 
         appState.workspaces.splice(index, 1);
 
@@ -1027,5 +1100,82 @@ window.addEventListener('DOMContentLoaded', () => {
         setInterval(() => {
             mod.updateSavedTimeLabel();
         }, 10000);
+    });
+
+    function openBlockEditor(nodeId: string) {
+        const node = findNodeStateById(appState.workspaces, nodeId);
+        if (!node) return;
+
+        const tabId = `block_editor_${nodeId}`;
+        let existing = appState.workspaces.find(w => w.id === tabId);
+        if (!existing) {
+            if (!node.nodes) {
+                (node as any).nodes = {};
+            }
+            if (!node.edges) {
+                (node as any).edges = [];
+            }
+
+            // Spawn initial boundary nodes if graph nodes are empty
+            const subNodes = node.nodes!;
+            const subNodesList = Object.values(subNodes);
+            if (subNodesList.length === 0) {
+                // Spawn inputs
+                if (node.inputs) {
+                    Object.keys(node.inputs).forEach((name, idx) => {
+                        const newSubId = `input_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                        (subNodes as any)[newSubId] = {
+                            id: newSubId,
+                            type: 'composite/input',
+                            params: {},
+                            ui: { x: 50, y: 100 + idx * 120, title: name }
+                        };
+                    });
+                }
+                // Spawn outputs
+                if (node.outputs) {
+                    Object.keys(node.outputs).forEach((name, idx) => {
+                        const newSubId = `output_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                        (subNodes as any)[newSubId] = {
+                            id: newSubId,
+                            type: 'composite/output',
+                            params: {},
+                            ui: { x: 800, y: 100 + idx * 120, title: name }
+                        };
+                    });
+                }
+            }
+
+            const newTab = {
+                id: tabId,
+                name: `Node: ${node.ui?.title || nodeId}`,
+                get graph() {
+                    if (!node.nodes) {
+                        (node as any).nodes = {};
+                    }
+                    if (!node.edges) {
+                        (node as any).edges = [];
+                    }
+                    return {
+                        nodes: node.nodes,
+                        edges: node.edges
+                    };
+                },
+                set graph(g) {
+                    (node as any).nodes = g.nodes;
+                    (node as any).edges = g.edges;
+                },
+                camera: { x: 0, y: 0, zoom: 1.0 }
+            } as any;
+            appState.workspaces.push(newTab);
+        }
+        switchWorkspace(tabId);
+    }
+
+    document.addEventListener('litegraph-fp-open-block-editor', (e: Event) => {
+        const detail = (e as CustomEvent).detail;
+        if (detail && detail.nodeId) {
+            openBlockEditor(detail.nodeId);
+        }
     });
 });

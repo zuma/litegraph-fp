@@ -58,7 +58,7 @@
     --header-height: 72px;
     --footer-height: 30px;
     --tabs-height: 40px;
-    --sidebar-width: 384px;
+    --sidebar-width: 300px;
     
     /* Effects */
     --glass-shadow: inset 0 1px 0 0 hsla(0, 0%, 100%, 0.16), 0 12px 40px 0 rgba(0, 0, 0, 0.45);
@@ -1289,7 +1289,7 @@ body.light-theme .context-menu-item:hover {
 /* 1. Large tablets & laptops */
 @media (max-width: 1024px) {
     :root {
-        --sidebar-width: 318px;
+        --sidebar-width: 260px;
     }
     
     .logo-area .badge {
@@ -1978,7 +1978,7 @@ body.light-theme .context-menu-item:hover {
    BOTTOM DRAWER (CONSOLE) PANEL
    ============================================================================ */
 .bottom-drawer {
-    height: 220px;
+    height: 140px;
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -2140,4 +2140,40 @@ body.light-theme .workspace-tab:hover {
 .workspace-tab-close:hover {
     background: var(--accent-red-glow);
     color: var(--accent-red);
+}
+
+/* Drag and Drop Tab Reordering Styling */
+.workspace-tab {
+    position: relative;
+}
+
+.workspace-tab.dragging {
+    opacity: 0.4;
+    border-style: dashed;
+}
+
+.workspace-tab.drag-over-left::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    left: -4px;
+    width: 3px;
+    background: var(--accent-cyan);
+    box-shadow: 0 0 6px var(--accent-cyan-glow);
+    border-radius: 1.5px;
+    z-index: 10;
+}
+
+.workspace-tab.drag-over-right::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    right: -4px;
+    width: 3px;
+    background: var(--accent-cyan);
+    box-shadow: 0 0 6px var(--accent-cyan-glow);
+    border-radius: 1.5px;
+    z-index: 10;
 }

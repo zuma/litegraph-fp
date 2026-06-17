@@ -1,6 +1,6 @@
 import { GraphState, NodeState, Edge, NodeMode } from '../core/ast.js';
 import { createNodeState } from '../core/factory.js';
-import { appState, screenToWorld, syncContextState, updateCursor, getNodeHeight, getInputPinCoords, getOutputPinCoords, GRID_SIZE } from './state.js';
+import { appState, screenToWorld, syncContextState, updateCursor, getNodeHeight, getInputPinCoords, getOutputPinCoords, GRID_SIZE, findNodeStateById } from './state.js';
 import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons, undo, redo } from './history.js';
 import { updateInspector } from './inspector.js';
 import { runExecutionPipeline, triggerAutoRun, logToTerminal } from './execution.js';
@@ -489,6 +489,7 @@ function setContextMenuVisibility(visibility: Record<string, boolean>) {
 /** Configures the context menu to show node-related actions (delete, duplicate, disconnect, z-order). */
 function configureContextMenuForNode() {
     setContextMenuVisibility({
+        'ctx-edit-nested': true,
         'ctx-delete-node': true,
         'ctx-duplicate-node': true,
         'ctx-disconnect-node': true,
@@ -502,6 +503,7 @@ function configureContextMenuForNode() {
 /** Configures the context menu to show edge-related actions (delete connection only). */
 function configureContextMenuForEdge() {
     setContextMenuVisibility({
+        'ctx-edit-nested': false,
         'ctx-delete-node': false,
         'ctx-duplicate-node': false,
         'ctx-disconnect-node': false,
@@ -807,17 +809,45 @@ export function setupInteractions() {
                     if (loadSettings().canvas.autoBringToFront) {
                         bringNodeToFront(node.id);
                     }
-                    // Start dragging from an input pin (reversing connection or link dragging)
+                    
                     if (appState.renderingContext) {
-                        appState.renderingContext.draggingConnection = {
-                            sourceNodeId: node.id,
-                            sourcePinId: inputs[i],
-                            isInput: true,
-                            x: pos.x,
-                            y: pos.y,
-                            cursorX: worldPos.x,
-                            cursorY: worldPos.y
-                        };
+                        const pinId = inputs[i];
+                        const existingEdge = appState.currentGraph.edges.find(
+                            edge => edge.targetNodeId === node.id && edge.targetPinId === pinId
+                        );
+
+                        if (existingEdge) {
+                            pushToHistory();
+                            const cleanedEdges = appState.currentGraph.edges.filter(edge => edge.id !== existingEdge.id);
+                            appState.currentGraph = {
+                                ...appState.currentGraph,
+                                edges: cleanedEdges
+                            };
+
+                            const outNode = appState.currentGraph.nodes[existingEdge.sourceNodeId];
+                            if (outNode) {
+                                const outPos = getOutputPinCoords(outNode, existingEdge.sourcePinId);
+                                appState.renderingContext.draggingConnection = {
+                                    sourceNodeId: existingEdge.sourceNodeId,
+                                    sourcePinId: existingEdge.sourcePinId,
+                                    isInput: false,
+                                    x: outPos.x,
+                                    y: outPos.y,
+                                    cursorX: worldPos.x,
+                                    cursorY: worldPos.y
+                                };
+                            }
+                        } else {
+                            appState.renderingContext.draggingConnection = {
+                                sourceNodeId: node.id,
+                                sourcePinId: pinId,
+                                isInput: true,
+                                x: pos.x,
+                                y: pos.y,
+                                cursorX: worldPos.x,
+                                cursorY: worldPos.y
+                            };
+                        }
                     }
                     break;
                 }
@@ -1377,99 +1407,8 @@ export function setupInteractions() {
                         }
                     }
                 }
-            } 
-            // 2. Released over a node body (supporting dynamic pin addition on drop)
-            else if (!appState.hoveredPin) {
-                let hitNode: NodeState | null = null;
-                for (const nodeId in appState.currentGraph.nodes) {
-                    const node = appState.currentGraph.nodes[nodeId];
-                    const x = node.ui?.x ?? 0;
-                    const y = node.ui?.y ?? 0;
-                    const w = node.ui?.width ?? NODE_WIDTH;
-                    const nodeDef = StandardNodes[node.type];
-                    const h = getNodeHeight(node);
-
-                    if (worldPos.x >= x && worldPos.x <= x + w && worldPos.y >= y && worldPos.y <= y + h) {
-                        hitNode = node;
-                        break;
-                    }
-                }
-
-                if (hitNode && hitNode.id !== drag.sourceNodeId) {
-                    const hitDef = StandardNodes[hitNode.type];
-                    
-                    if (drag.isInput === false && hitDef?.dynamicInputs) {
-                        // Dragged from output -> drop on hitNode body -> Add Input Pin!
-                        pushToHistory();
-
-                        const currentInputs = getNodeInputs(hitNode);
-                        const newPinId = nextPinName('in', currentInputs);
-
-                        const updatedInputs = { ...currentInputs, [newPinId]: 'any' as const };
-                        
-                        const newEdge: Edge = {
-                            id: `edge_${Date.now()}`,
-                            sourceNodeId: drag.sourceNodeId,
-                            sourcePinId: drag.sourcePinId,
-                            targetNodeId: hitNode.id,
-                            targetPinId: newPinId
-                        };
-
-                        appState.currentGraph = {
-                            ...appState.currentGraph,
-                            nodes: {
-                                ...appState.currentGraph.nodes,
-                                [hitNode.id]: {
-                                    ...hitNode,
-                                    inputs: updatedInputs
-                                }
-                            },
-                            edges: [...appState.currentGraph.edges, newEdge]
-                        };
-
-                        logToTerminal(`Added input pin '${newPinId}' and connected to [Node ${drag.sourceNodeId}].${drag.sourcePinId}`, 'system-msg');
-                        updateInspector();
-                        triggerAutoRun();
-                    }
-                    else if (drag.isInput === true && hitDef?.dynamicOutputs) {
-                        // Dragged from input -> drop on hitNode body -> Add Output Pin!
-                        pushToHistory();
-
-                        const currentOutputs = getNodeOutputs(hitNode);
-                        const newPinId = nextPinName('output', currentOutputs);
-
-                        const updatedOutputs = { ...currentOutputs, [newPinId]: 'any' as const };
-
-                        const newEdge: Edge = {
-                            id: `edge_${Date.now()}`,
-                            sourceNodeId: hitNode.id,
-                            sourcePinId: newPinId,
-                            targetNodeId: drag.sourceNodeId,
-                            targetPinId: drag.sourcePinId
-                        };
-
-                        const cleanedEdges = appState.currentGraph.edges.filter(
-                            edge => !(edge.targetNodeId === drag.sourceNodeId && edge.targetPinId === drag.sourcePinId)
-                        );
-
-                        appState.currentGraph = {
-                            ...appState.currentGraph,
-                            nodes: {
-                                ...appState.currentGraph.nodes,
-                                [hitNode.id]: {
-                                    ...hitNode,
-                                    outputs: updatedOutputs
-                                }
-                            },
-                            edges: [...cleanedEdges, newEdge]
-                        };
-
-                        logToTerminal(`Added output pin '${newPinId}' and connected to [Node ${drag.sourceNodeId}].${drag.sourcePinId}`, 'system-msg');
-                        updateInspector();
-                        triggerAutoRun();
-                    }
-                }
             }
+            
             
             appState.renderingContext.draggingConnection = null;
         }
@@ -1753,6 +1692,15 @@ export function setupInteractions() {
     });
 
     // Context Menu action listeners
+    document.getElementById('ctx-edit-nested')?.addEventListener('click', () => {
+        if (appState.selectedNodeId) {
+            document.dispatchEvent(new CustomEvent('litegraph-fp-open-block-editor', {
+                detail: { nodeId: appState.selectedNodeId }
+            }));
+        }
+        document.getElementById('context-menu')?.classList.add('hidden');
+    });
+
     document.getElementById('ctx-delete-node')?.addEventListener('click', () => {
         deleteSelectedNodes();
         document.getElementById('context-menu')?.classList.add('hidden');
@@ -1933,7 +1881,14 @@ export function filterNodeAdderList(query: string) {
 
     const lowerQuery = query.toLowerCase();
     
-    AVAILABLE_MODES.forEach(({ mode, label, category }) => {
+    const isBlockEditor = appState.activeWorkspaceId.startsWith('block_editor_');
+    const modes: { mode: string; label: string; category: string }[] = [...AVAILABLE_MODES];
+    if (isBlockEditor) {
+        modes.push({ mode: 'composite/input', label: 'Input Pin (Boundary)', category: 'composite' });
+        modes.push({ mode: 'composite/output', label: 'Output Pin (Boundary)', category: 'composite' });
+    }
+
+    modes.forEach(({ mode, label, category }) => {
         if (query && !label.toLowerCase().includes(lowerQuery) && !mode.toLowerCase().includes(lowerQuery)) {
             return;
         }
@@ -1967,7 +1922,9 @@ export function filterNodeAdderList(query: string) {
 export function addNewNodeWithMode(mode: NodeMode) {
     pushToHistory();
 
-    const uniqueId = `${mode}_${Date.now().toString().slice(-4)}`;
+    const isBoundary = mode === 'composite/input' || mode === 'composite/output';
+    const cleanMode = isBoundary ? mode.replace('composite/', '') : mode;
+    const uniqueId = `${cleanMode}_${Date.now().toString().slice(-4)}`;
     
     const initialParams: Record<string, any> = {};
     if (mode === 'formula') {
@@ -2008,17 +1965,30 @@ export function addNewNodeWithMode(mode: NodeMode) {
         }
     }
 
+    let initialTitle = mode.toUpperCase();
+    if (mode === 'composite/input') {
+        const parentNodeId = appState.activeWorkspaceId.replace('block_editor_', '');
+        const parentNode = findNodeStateById(appState.workspaces, parentNodeId);
+        const numInputs = parentNode && parentNode.inputs ? Object.keys(parentNode.inputs).length : 0;
+        initialTitle = `in${numInputs}`;
+    } else if (mode === 'composite/output') {
+        const parentNodeId = appState.activeWorkspaceId.replace('block_editor_', '');
+        const parentNode = findNodeStateById(appState.workspaces, parentNodeId);
+        const numOutputs = parentNode && parentNode.outputs ? Object.keys(parentNode.outputs).length : 0;
+        initialTitle = `out${numOutputs}`;
+    }
+
     const newNode = createNodeState({
         id: uniqueId,
-        type: 'node/generic',
-        mode,
+        type: isBoundary ? mode : 'node/generic',
+        mode: isBoundary ? undefined : mode,
         params: initialParams,
         inputs: (isMorphing && unconfiguredNode) ? (unconfiguredNode.inputs as any) : undefined,
         outputs: (isMorphing && unconfiguredNode) ? (unconfiguredNode.outputs as any) : undefined,
         ui: {
             x: spawnX,
             y: spawnY,
-            title: mode.toUpperCase(),
+            title: initialTitle,
             isMorphing: true
         }
     });

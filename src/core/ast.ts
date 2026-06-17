@@ -29,7 +29,7 @@ export interface Edge {
     readonly targetPinId: string;
 }
 
-export type NodeMode = 'python' | 'formula' | 'blocks' | 'state' | 'delay' | 'input' | 'log';
+export type NodeMode = 'python' | 'formula' | 'blocks' | 'state' | 'delay' | 'input' | 'log' | 'composite/input' | 'composite/output';
 
 export interface BlockStatement {
     readonly id: string;
@@ -62,6 +62,14 @@ export interface NodeState {
     readonly inputs?: Readonly<Record<string, PinType>>;
     readonly outputs?: Readonly<Record<string, PinType>>;
     
+    // Recursive Nesting: A node can act as a breadboard containing sub-nodes and sub-edges
+    readonly nodes?: Readonly<Record<NodeID, NodeState>>;
+    readonly edges?: ReadonlyArray<Edge>;
+    
+    // Boundary mappings (maps outer exposed pins to the inner components)
+    readonly interfaceInputs?: ReadonlyArray<{ externalPinId: string; targetNodeId: NodeID; targetPinId: string }>;
+    readonly interfaceOutputs?: ReadonlyArray<{ externalPinId: string; sourceNodeId: NodeID; sourcePinId: string }>;
+
     // Purely for the rendering layer. The execution engine must ignore this.
     readonly ui?: Readonly<{
         x: number;

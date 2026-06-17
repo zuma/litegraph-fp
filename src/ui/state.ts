@@ -79,6 +79,32 @@ export interface Workspace {
     camera: Viewport;
 }
 
+export function findNodeStateById(workspaces: Workspace[], nodeId: string): NodeState | null {
+    for (const ws of workspaces) {
+        // Safe access as ws.graph could be a getter
+        const graph = ws.graph;
+        if (graph && graph.nodes) {
+            const node = graph.nodes[nodeId];
+            if (node) return node;
+            const found = findNodeInNodes(graph.nodes, nodeId);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+function findNodeInNodes(nodes: Record<string, NodeState>, nodeId: string): NodeState | null {
+    for (const node of Object.values(nodes)) {
+        if (node.nodes) {
+            const found = node.nodes[nodeId];
+            if (found) return found;
+            const nested = findNodeInNodes(node.nodes, nodeId);
+            if (nested) return nested;
+        }
+    }
+    return null;
+}
+
 const initialSettings = loadSettings();
 
 /**
@@ -92,6 +118,31 @@ function loadWorkspaces(): { workspaces: Workspace[], activeId: string } {
         if (rawList && rawActive) {
             const list = JSON.parse(rawList);
             if (Array.isArray(list) && list.length > 0) {
+                // Restore getter/setter bindings by reference for all nested block editor workspaces
+                list.forEach(ws => {
+                    if (ws.id.startsWith('block_editor_')) {
+                        const nodeId = ws.id.replace('block_editor_', '');
+                        const parentNode = findNodeStateById(list, nodeId);
+                        if (parentNode) {
+                            Object.defineProperty(ws, 'graph', {
+                                get() {
+                                    if (!parentNode.nodes) (parentNode as any).nodes = {};
+                                    if (!parentNode.edges) (parentNode as any).edges = [];
+                                    return {
+                                        nodes: parentNode.nodes,
+                                        edges: parentNode.edges
+                                    };
+                                },
+                                set(g) {
+                                    (parentNode as any).nodes = g.nodes;
+                                    (parentNode as any).edges = g.edges;
+                                },
+                                configurable: true,
+                                enumerable: true
+                            });
+                        }
+                    }
+                });
                 return { workspaces: list, activeId: rawActive };
             }
         }
@@ -251,7 +302,191 @@ export function updateOnlineStatus() {
     updateSavedTimeLabel();
 }
 
+export function reconcileBoundaryPinsAndNodes(workspaces: Workspace[]) {
+    workspaces.forEach(ws => {
+        if (ws.id.startsWith('block_editor_')) {
+            const nodeId = ws.id.replace('block_editor_', '');
+            const parentNode = findNodeStateById(workspaces, nodeId);
+            if (!parentNode) return;
+
+            // 1. Collect all boundary nodes from the sub-graph
+            const subNodes = Object.values(ws.graph.nodes);
+            
+            // If the sub-graph nodes dictionary is completely empty, we pre-populate boundary nodes first
+            if (subNodes.length === 0) {
+                const subNodesMap = { ...ws.graph.nodes };
+                let initialized = false;
+                if (parentNode.inputs) {
+                    Object.keys(parentNode.inputs).forEach((name, idx) => {
+                        const newSubId = `input_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                        subNodesMap[newSubId] = {
+                            id: newSubId,
+                            type: 'composite/input',
+                            params: {},
+                            ui: { x: 50, y: 100 + idx * 120, title: name }
+                        };
+                        initialized = true;
+                    });
+                }
+                if (parentNode.outputs) {
+                    Object.keys(parentNode.outputs).forEach((name, idx) => {
+                        const newSubId = `output_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                        subNodesMap[newSubId] = {
+                            id: newSubId,
+                            type: 'composite/output',
+                            params: {},
+                            ui: { x: 800, y: 100 + idx * 120, title: name }
+                        };
+                        initialized = true;
+                    });
+                }
+                if (initialized) {
+                    ws.graph = {
+                        nodes: subNodesMap,
+                        edges: ws.graph.edges
+                    };
+                    return;
+                }
+            }
+
+            const inputNodes = subNodes.filter(n => n.type === 'composite/input');
+            const outputNodes = subNodes.filter(n => n.type === 'composite/output');
+
+            const subInputPinNames = new Set(inputNodes.map(n => n.ui?.title || n.id));
+            const subOutputPinNames = new Set(outputNodes.map(n => n.ui?.title || n.id));
+
+            // Get current parent pins
+            const parentInputs = parentNode.inputs ? { ...parentNode.inputs } : {};
+            const parentOutputs = parentNode.outputs ? { ...parentNode.outputs } : {};
+
+            const isActiveEditor = appState.activeWorkspaceId === ws.id;
+
+            if (isActiveEditor) {
+                // If the user is actively editing this nested sub-graph,
+                // the sub-graph is the source of truth!
+                // We sync: Sub-graph boundary nodes -> Parent pins
+                let parentChanged = false;
+
+                // Add any pins that exist in sub-graph but not in parent
+                subInputPinNames.forEach(name => {
+                    if (!(name in parentInputs)) {
+                        parentInputs[name] = 'any';
+                        parentChanged = true;
+                    }
+                });
+                subOutputPinNames.forEach(name => {
+                    if (!(name in parentOutputs)) {
+                        parentOutputs[name] = 'any';
+                        parentChanged = true;
+                    }
+                });
+
+                // Remove any pins that exist in parent but not in sub-graph (meaning boundary node was deleted!)
+                Object.keys(parentInputs).forEach(name => {
+                    if (!subInputPinNames.has(name)) {
+                        delete parentInputs[name];
+                        parentChanged = true;
+                        deleteExternalEdges(workspaces, nodeId, name, true);
+                    }
+                });
+                Object.keys(parentOutputs).forEach(name => {
+                    if (!subOutputPinNames.has(name)) {
+                        delete parentOutputs[name];
+                        parentChanged = true;
+                        deleteExternalEdges(workspaces, nodeId, name, false);
+                    }
+                });
+
+                if (parentChanged) {
+                    (parentNode as any).inputs = parentInputs;
+                    (parentNode as any).outputs = parentOutputs;
+                }
+            } else {
+                // If the user is NOT actively editing this nested sub-graph,
+                // the parent pins are the source of truth!
+                // We sync: Parent pins -> Sub-graph boundary nodes
+                const subNodesMap = { ...ws.graph.nodes };
+                const subEdgesList = [ ...ws.graph.edges ];
+                let subChanged = false;
+
+                // Sync inputs
+                Object.keys(parentInputs).forEach((name, idx) => {
+                    const hasNode = inputNodes.some(n => (n.ui?.title || n.id) === name);
+                    if (!hasNode) {
+                        const newSubId = `input_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                        subNodesMap[newSubId] = {
+                            id: newSubId,
+                            type: 'composite/input',
+                            params: {},
+                            ui: { x: 50, y: 100 + idx * 120, title: name }
+                        };
+                        subChanged = true;
+                    }
+                });
+
+                // Sync outputs
+                Object.keys(parentOutputs).forEach((name, idx) => {
+                    const hasNode = outputNodes.some(n => (n.ui?.title || n.id) === name);
+                    if (!hasNode) {
+                        const newSubId = `output_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                        subNodesMap[newSubId] = {
+                            id: newSubId,
+                            type: 'composite/output',
+                            params: {},
+                            ui: { x: 800, y: 100 + idx * 120, title: name }
+                        };
+                        subChanged = true;
+                    }
+                });
+
+                // Remove boundary nodes for any pins that do not exist in parent anymore (deleted externally)
+                inputNodes.forEach(n => {
+                    const name = n.ui?.title || n.id;
+                    if (!(name in parentInputs)) {
+                        delete subNodesMap[n.id];
+                        subChanged = true;
+                    }
+                });
+                outputNodes.forEach(n => {
+                    const name = n.ui?.title || n.id;
+                    if (!(name in parentOutputs)) {
+                        delete subNodesMap[n.id];
+                        subChanged = true;
+                    }
+                });
+
+                if (subChanged) {
+                    ws.graph = {
+                        nodes: subNodesMap,
+                        edges: subEdgesList
+                    };
+                }
+            }
+        }
+    });
+}
+
+function deleteExternalEdges(workspaces: Workspace[], nodeId: string, pinId: string, isInput: boolean) {
+    workspaces.forEach(ws => {
+        if (ws.id.startsWith('block_editor_')) return;
+        
+        const edges = ws.graph.edges;
+        const filtered = edges.filter(e => {
+            if (isInput) {
+                return !(e.targetNodeId === nodeId && e.targetPinId === pinId);
+            } else {
+                return !(e.sourceNodeId === nodeId && e.sourcePinId === pinId);
+            }
+        });
+        if (filtered.length !== edges.length) {
+            (ws.graph as any).edges = filtered;
+        }
+    });
+}
+
 export function syncContextState() {
+    reconcileBoundaryPinsAndNodes(appState.workspaces);
+
     const { inputs, outputs } = resolveGraphTypes(appState.currentGraph);
     appState.resolvedInputs = inputs;
     appState.resolvedOutputs = outputs;

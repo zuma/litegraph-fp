@@ -205,6 +205,116 @@ async function runE2ETests() {
     }
     console.log("✅ Step 8: Workspace closing verified.");
 
+    // Step 8.5: Open and verify Node Editor tab
+    console.log("⚙️ Step 8.5: Click node 'Input Adder' to select it and show Inspector...");
+    await canvas.click({ position: { x: 180, y: 110 } });
+    await page.waitForTimeout(300);
+
+    console.log("➕ Adding input pin via inspector...");
+    const addInputBtn = page.locator('#btn-add-input');
+    if (!await addInputBtn.isVisible()) {
+        throw new Error("Add Input Pin button not visible in Inspector!");
+    }
+    await addInputBtn.click();
+    await page.waitForTimeout(400);
+
+    console.log("⚙️ Right-clicking 'Input Adder' node to open Node Editor...");
+    await canvas.click({ button: 'right', position: { x: 180, y: 110 } });
+    await page.waitForTimeout(300);
+
+    const editNodeBtn = page.locator('#ctx-edit-nested');
+    if (!await editNodeBtn.isVisible()) {
+        throw new Error("Edit Node context menu item is not visible!");
+    }
+    await editNodeBtn.click();
+    await page.waitForTimeout(500);
+
+    const tabsWithNode = await page.$$eval('.workspace-tab', tabs => tabs.map(t => t.textContent.trim()));
+    console.log("📂 Tabs after opening Node Editor:", tabsWithNode);
+    if (tabsWithNode.length !== 2 || !tabsWithNode[1].startsWith('Node: Input Adder')) {
+        throw new Error(`Expected Node Editor tab to open, got: ${JSON.stringify(tabsWithNode)}`);
+    }
+
+    const subNodesCount = await page.evaluate(() => {
+        const blockEditor = appState.workspaces.find(w => w.id === 'block_editor_add_4012');
+        if (!blockEditor) return 0;
+        return Object.values(blockEditor.graph.nodes).length;
+    });
+    console.log(`🔍 Number of boundary nodes created (expect 4 since we added a pin): ${subNodesCount}`);
+    if (subNodesCount !== 4) {
+        throw new Error(`Expected exactly 4 boundary nodes in block editor, found ${subNodesCount}`);
+    }
+
+    console.log("🗑️ Closing Node Editor tab (expect no confirm dialog)...");
+    const closeNodeBtn = page.locator('.workspace-tab').nth(1).locator('.workspace-tab-close');
+    await closeNodeBtn.click();
+    await page.waitForTimeout(500);
+
+    const finalTabsPostNode = await page.$$eval('.workspace-tab', tabs => tabs.map(t => t.textContent.trim()));
+    console.log("📂 Tabs after closing Node Editor:", finalTabsPostNode);
+    if (finalTabsPostNode.length !== 1 || !finalTabsPostNode[0].startsWith('Lego Base')) {
+        throw new Error("Node Editor tab failed to close or revert back to Lego Base.");
+    }
+    console.log("✅ Step 8.5: Node Editor E2E flow verified successfully.");
+
+    // Step 8.6: Test Tab Drag Reordering
+    console.log("↔️ Step 8.6: Testing workspace tab drag-and-drop reordering...");
+    await newTabBtn.click();
+    await page.waitForTimeout(500);
+
+    const tabsBeforeDrag = await page.$$eval('.workspace-tab', tabs => tabs.map(t => t.textContent.trim()));
+    console.log("📂 Tabs before drag reordering:", tabsBeforeDrag);
+
+    const tabSource = page.locator('.workspace-tab').first();
+    const tabTarget = page.locator('.workspace-tab').nth(1);
+
+    await tabSource.dragTo(tabTarget);
+    await page.waitForTimeout(500);
+
+    const tabsAfterDrag = await page.$$eval('.workspace-tab', tabs => tabs.map(t => t.textContent.trim()));
+    console.log("📂 Tabs after drag reordering:", tabsAfterDrag);
+    if (tabsAfterDrag[0] === tabsBeforeDrag[0]) {
+        throw new Error("Tabs failed to swap positions after drag-and-drop!");
+    }
+    console.log("✅ Step 8.6: Tab drag-and-drop reordering verified.");
+
+    const closeWsBtn = page.locator('.workspace-tab').first().locator('.workspace-tab-close');
+    await closeWsBtn.click();
+    await page.waitForTimeout(500);
+
+    // Step 8.7: Test edge detaching behavior on dragging from a connected input pin
+    console.log("🔌 Step 8.7: Testing edge detaching from connected input pin...");
+    const pinCoords = await page.evaluate(() => {
+        const node = appState.currentGraph.nodes['multiply_8930'];
+        const worldPos = getInputPinCoords(node, 'in0');
+        const canvasEl = document.getElementById('graph-canvas');
+        const rect = canvasEl.getBoundingClientRect();
+        return {
+            x: rect.left + (worldPos.x * appState.viewport.zoom + appState.viewport.x),
+            y: rect.top + (worldPos.y * appState.viewport.zoom + appState.viewport.y)
+        };
+    });
+
+    console.log(`🔌 Dragging from pin coords: x=${pinCoords.x}, y=${pinCoords.y}`);
+    await page.mouse.move(pinCoords.x, pinCoords.y);
+    await page.mouse.down();
+    // Drag out slightly to trigger the drag event
+    await page.mouse.move(pinCoords.x - 100, pinCoords.y);
+    await page.waitForTimeout(200);
+
+    const edgeExists = await page.evaluate(() => {
+        return appState.currentGraph.edges.some(e => e.targetNodeId === 'multiply_8930' && e.targetPinId === 'in0');
+    });
+    console.log(`🔌 Is edge present in state? ${edgeExists}`);
+    if (edgeExists) {
+        throw new Error("Edge was NOT detached when dragging off the connected input pin!");
+    }
+
+    // Release mouse
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    console.log("✅ Step 8.7: Edge detaching verified successfully.");
+
     // Step 9: Save screenshot to artifact folder
     console.log(`📸 Step 9: Saving screenshot to: ${SCREENSHOT_PATH}`);
     // Create artifact folder if it doesn't exist (should exist though)

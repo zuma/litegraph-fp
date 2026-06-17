@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
         sidebarCollapsed: true, // Maximize viewport by default
         inspectorExpanded: true,
         astExpanded: false,
-        logsExpanded: true,
+        logsExpanded: false,
     },
     canvas: {
         autoRun: true,

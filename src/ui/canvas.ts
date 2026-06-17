@@ -477,13 +477,17 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
             context.restore();
         }
     // 9. Draw Card Border Outline last (only on selection or error state to declutter the canvas)
-    if (isSelected || hasError || node.type === 'node/unconfigured') {
+    const isBoundaryNode = node.type === 'composite/input' || node.type === 'composite/output';
+    if (isSelected || hasError || node.type === 'node/unconfigured' || isBoundaryNode) {
         context.beginPath();
         context.roundRect(x, y, w, h, 10);
-        context.lineWidth = node.type === 'node/unconfigured' ? 1.5 : 2.5;
+        context.lineWidth = (node.type === 'node/unconfigured' || isBoundaryNode) ? 1.5 : 2.5;
         if (node.type === 'node/unconfigured') {
             context.setLineDash([4, 4]);
             context.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.24)' : 'rgba(255, 255, 255, 0.24)';
+        } else if (isBoundaryNode) {
+            context.setLineDash([4, 3]);
+            context.strokeStyle = node.type === 'composite/input' ? accentCyan : '#ff00aa';
         } else if (hasError) {
             context.setLineDash([]);
             let borderGrad = context.createLinearGradient(x, y, x, y + h);
