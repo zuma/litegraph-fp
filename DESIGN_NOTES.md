@@ -21,18 +21,18 @@ To achieve compact designs and perfect geometric alignment on the canvas, the no
 * **Header Height (`30px`)**: Half-grid offset.
 * **Row Height (`15px`)**: Spacing between connection points.
 * **Pin Radius (`6px`)**: Multiple of 3.
-* **Bottom Padding (`30px`)**: Half-grid offset.
+* **Bottom Padding (`45px`)**: 3 × Row Height. Provides room for the parameter preview and ellipsis button.
 
 ### Total Node Height Formula
 ```text
-Height = Header Height (30px) + (Max Rows × Row Height (15px)) + Bottom Padding (30px)
-       = 60px + (Max Rows × 15px)
+Height = Header Height (30px) + (Max Rows × Row Height (15px)) + Bottom Padding (45px)
+       = 75px + (Max Rows × 15px)
 ```
 This formula ensures the bottom edge of every node aligns exactly on a multiple of 15px:
-* **1-Row Node**: `30 + 15 + 30 = 75px`
-* **2-Row Node**: `30 + 30 + 30 = 90px` (multiple of 30px)
-* **3-Row Node**: `30 + 45 + 30 = 105px`
-* **4-Row Node**: `30 + 60 + 30 = 120px` (exactly 2 grid cells tall)
+* **1-Row Node**: `30 + 15 + 45 = 90px` (multiple of 30px)
+* **2-Row Node**: `30 + 30 + 45 = 105px`
+* **3-Row Node**: `30 + 45 + 45 = 120px` (exactly 2 grid cells tall)
+* **4-Row Node**: `30 + 60 + 45 = 135px`
 
 ### Pin coordinate calculations
 Pins are offset vertically by `HEADER_HEIGHT + 30px` (which equals `60px` from the node top). Snapping coordinates align to `30px` intervals, meaning when a node snaps (so `ny` is a multiple of 30), pin Y coordinates are also guaranteed to align cleanly:

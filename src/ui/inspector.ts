@@ -6,6 +6,38 @@ import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons } from './hi
 import { triggerAutoRun } from './execution.js';
 
 // ============================================================================
+// HELPER UTILITIES
+// ============================================================================
+
+/**
+ * Generate the next available pin name for a given prefix.
+ * E.g., if 'in0' and 'in1' exist, returns 'in2'.
+ */
+function nextPinName(prefix: string, existing: Record<string, any>): string {
+    let idx = 0;
+    let name = `${prefix}${idx}`;
+    while (name in existing) {
+        idx++;
+        name = `${prefix}${idx}`;
+    }
+    return name;
+}
+
+/**
+ * If a pre-edit graph snapshot exists, commits it to the undo stack.
+ * Called on the first keystroke in an input field to capture the "before" state.
+ */
+function commitPreEditToHistory() {
+    if (appState.preEditGraphState) {
+        undoStack.push(appState.preEditGraphState);
+        if (undoStack.length > 50) undoStack.shift();
+        redoStack.length = 0;
+        updateUndoRedoButtons();
+        appState.preEditGraphState = null;
+    }
+}
+
+// ============================================================================
 // DYNAMIC INSPECTOR BUILDER
 // ============================================================================
 
@@ -198,11 +230,7 @@ export function updateInspector() {
         
         newTitleInput.addEventListener('input', () => {
             if (appState.preEditGraphState) {
-                undoStack.push(appState.preEditGraphState);
-                if (undoStack.length > 50) undoStack.shift();
-                redoStack.length = 0;
-                updateUndoRedoButtons();
-                appState.preEditGraphState = null;
+                commitPreEditToHistory();
             }
             updateNodeTitle(node.id, newTitleInput.value);
         });
@@ -249,11 +277,7 @@ export function updateInspector() {
 
             formulaInput.addEventListener('input', () => {
                 if (appState.preEditGraphState) {
-                    undoStack.push(appState.preEditGraphState);
-                    if (undoStack.length > 50) undoStack.shift();
-                    redoStack.length = 0;
-                    updateUndoRedoButtons();
-                    appState.preEditGraphState = null;
+                    commitPreEditToHistory();
                 }
                 updateNodeFormula(node.id, formulaInput.value);
             });
@@ -410,11 +434,7 @@ export function updateInspector() {
 
             textArea.addEventListener('input', () => {
                 if (appState.preEditGraphState) {
-                    undoStack.push(appState.preEditGraphState);
-                    if (undoStack.length > 50) undoStack.shift();
-                    redoStack.length = 0;
-                    updateUndoRedoButtons();
-                    appState.preEditGraphState = null;
+                    commitPreEditToHistory();
                 }
                 updateNodeParam(node.id, 'code', textArea.value);
             });
@@ -665,12 +685,7 @@ export function handleAddInputPin(nodeId: string) {
     if (!node) return;
     
     const requires = getNodeInputs(node);
-    let nextIndex = 0;
-    let pinName = `in${nextIndex}`;
-    while (pinName in requires) {
-        nextIndex++;
-        pinName = `in${nextIndex}`;
-    }
+    const pinName = nextPinName('in', requires);
 
     pushToHistory();
     const updatedInputs = { ...requires, [pinName]: 'any' };
@@ -696,12 +711,7 @@ export function handleAddOutputPin(nodeId: string) {
     if (!node) return;
     
     const provides = getNodeOutputs(node);
-    let nextIndex = 0;
-    let pinName = `out${nextIndex}`;
-    while (pinName in provides) {
-        nextIndex++;
-        pinName = `out${nextIndex}`;
-    }
+    const pinName = nextPinName('out', provides);
 
     pushToHistory();
     const updatedOutputs = { ...provides, [pinName]: 'any' };
@@ -1136,11 +1146,7 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
 
                 textInput.addEventListener('input', () => {
                     if (appState.preEditGraphState) {
-                        undoStack.push(appState.preEditGraphState);
-                        if (undoStack.length > 50) undoStack.shift();
-                        redoStack.length = 0;
-                        updateUndoRedoButtons();
-                        appState.preEditGraphState = null;
+                        commitPreEditToHistory();
                     }
 
                     let parsedVal: any = textInput.value;

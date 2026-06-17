@@ -10,9 +10,92 @@ import { isCompatible } from '../engine/validation.js';
 import { updateSetting, loadSettings } from './settings.js';
 
 // ============================================================================
+// INTERACTION CONSTANTS
+// ============================================================================
+
+/** Radius (in world-space pixels) within which a click registers on a pin dot. */
+const PIN_HIT_RADIUS = 6;
+
+/** Distance threshold (in world-space pixels) for detecting edge hover/click. */
+const EDGE_HIT_DISTANCE = 12;
+
+/** Distance threshold for detecting clicks on node border zones (dynamic pin creation). */
+const BORDER_HIT_DISTANCE = 12;
+
+/** Dimensions of the ellipsis "..." button at the bottom-right corner of each node. */
+const ELLIPSIS_BTN_W = 20;
+const ELLIPSIS_BTN_H = 12;
+const ELLIPSIS_BTN_MARGIN = 6;
+
+/** Dimensions of the expandable node ID drawer that appears below a node. */
+const DRAWER_W = 144;
+const DRAWER_H = 24;
+const DRAWER_GAP = 6;
+
+/** Horizontal offset from node center to the thumbtack/pin toggle button. */
+const THUMBTACK_OFFSET_X = 54;
+/** Vertical offset from node bottom to the thumbtack/pin toggle button. */
+const THUMBTACK_OFFSET_Y = 18;
+/** Radius for thumbtack hit detection. */
+const THUMBTACK_HIT_RADIUS = 10;
+
+/** Zoom level clamps — shared with main.ts zoom controls. */
+export const MIN_ZOOM = 0.05;
+export const MAX_ZOOM = 3.0;
+
+/** Minimum drag distance (in screen pixels) before a click is treated as a drag. */
+const DRAG_THRESHOLD = 6;
+
+/** Context menu estimated dimensions for clamping to viewport. */
+const CTX_MENU_W = 180;
+const CTX_MENU_H_NODE = 160;
+const CTX_MENU_H_EDGE = 50;
+
+// ============================================================================
+// HELPER UTILITIES
+// ============================================================================
+
+/**
+ * Find the topmost (last-rendered) node at a given world coordinate.
+ * Returns null if no node body contains the point.
+ */
+function findNodeAtPosition(worldPos: { x: number; y: number }): NodeState | null {
+    const nodesReversed = Object.values(appState.currentGraph.nodes).reverse();
+    for (const node of nodesReversed) {
+        const w = node.ui?.width ?? NODE_WIDTH;
+        const h = getNodeHeight(node);
+        const nx = node.ui?.x ?? 0;
+        const ny = node.ui?.y ?? 0;
+
+        if (worldPos.x >= nx && worldPos.x <= nx + w && worldPos.y >= ny && worldPos.y <= ny + h) {
+            return node;
+        }
+    }
+    return null;
+}
+
+/**
+ * Generate the next available pin name for a given prefix.
+ * E.g., if 'in0' and 'in1' exist, returns 'in2'.
+ */
+function nextPinName(prefix: string, existing: Record<string, any>): string {
+    let idx = 0;
+    let name = `${prefix}${idx}`;
+    while (name in existing) {
+        idx++;
+        name = `${prefix}${idx}`;
+    }
+    return name;
+}
+
+// ============================================================================
 // DELETE SELECTED NODES
 // ============================================================================
 
+/**
+ * Deletes all currently selected nodes and their connected edges.
+ * If the "warn before delete" setting is enabled, shows a confirmation dialog first.
+ */
 export function deleteSelectedNodes() {
     const idsToDelete = new Set<string>(appState.selectedNodeIds);
     if (appState.selectedNodeId) {
@@ -102,6 +185,7 @@ function showConfirmDeleteDialog(onConfirm: () => void) {
     });
 }
 
+/** Returns true if the user is currently focused on a text input, textarea, or contenteditable element. */
 function isEditingText(): boolean {
     const activeEl = document.activeElement;
     return !!(activeEl && (
@@ -111,6 +195,10 @@ function isEditingText(): boolean {
     ));
 }
 
+/**
+ * Copies all selected nodes (and internal edges between them) to the system clipboard
+ * as a JSON payload with type 'litegraph-fp-subgraph'.
+ */
 export async function copySelectedNodes() {
     const selectedIds = appState.selectedNodeIds;
     if (selectedIds.size === 0) return;
@@ -141,6 +229,11 @@ export async function copySelectedNodes() {
     }
 }
 
+/**
+ * Pastes nodes from the system clipboard. Expects a JSON payload with type
+ * 'litegraph-fp-subgraph' containing nodes and edges. Creates new unique IDs
+ * for all pasted nodes and re-maps internal edge references.
+ */
 export async function pasteNodes() {
     try {
         const text = await navigator.clipboard.readText();
@@ -219,6 +312,10 @@ export async function pasteNodes() {
 }
 
 
+/**
+ * Adjusts the viewport to fit all nodes in the current graph within the visible
+ * canvas area, with padding. If no nodes exist, resets to the origin at zoom 1.0.
+ */
 export function zoomExtents() {
     const canvas = appState.canvas;
     if (!canvas) return;
@@ -266,7 +363,7 @@ export function zoomExtents() {
     const availableHeight = canvasHeight - padding * 2;
 
     let targetZoom = Math.min(availableWidth / graphWidth, availableHeight / graphHeight);
-    targetZoom = Math.max(0.05, Math.min(3.0, targetZoom));
+    targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoom));
 
     const centerX = minX + graphWidth / 2;
     const centerY = minY + graphHeight / 2;
@@ -282,6 +379,10 @@ export function zoomExtents() {
     updateSetting('canvas', 'camera', { x: appState.viewport.x, y: appState.viewport.y, zoom: appState.viewport.zoom });
 }
 
+/**
+ * Moves a node to the end of the nodes record so it renders on top of all others.
+ * Z-order is determined by insertion order in the nodes object.
+ */
 export function bringNodeToFront(nodeId: string) {
     const nodes = appState.currentGraph.nodes;
     if (nodes[nodeId]) {
@@ -297,6 +398,10 @@ export function bringNodeToFront(nodeId: string) {
     }
 }
 
+/**
+ * Moves a node to the beginning of the nodes record so it renders behind all others.
+ * Z-order is determined by insertion order in the nodes object.
+ */
 export function sendNodeToBack(nodeId: string) {
     const nodes = appState.currentGraph.nodes;
     if (nodes[nodeId]) {
@@ -314,6 +419,10 @@ export function sendNodeToBack(nodeId: string) {
     }
 }
 
+/**
+ * Creates a deep copy of a node with a new unique ID, offset by 40px diagonally.
+ * Copies all parameters and UI state but does not duplicate connected edges.
+ */
 export function duplicateNode(nodeId: string) {
     const node = appState.currentGraph.nodes[nodeId];
     if (!node) return;
@@ -360,46 +469,47 @@ export function duplicateNode(nodeId: string) {
     logToTerminal(`Duplicated node [${nodeId}] to [${newId}]`, 'system-msg');
 }
 
+/** Checks if a world position is within PIN_HIT_RADIUS of a pin's center. */
 function isPinHit(worldPos: { x: number; y: number }, pos: { x: number; y: number }, isInput: boolean): boolean {
     const dx = worldPos.x - pos.x;
     const dy = worldPos.y - pos.y;
-    return Math.hypot(dx, dy) <= 6;
+    return Math.hypot(dx, dy) <= PIN_HIT_RADIUS;
 }
 
+/** Sets the visibility of each context menu item by ID. */
+function setContextMenuVisibility(visibility: Record<string, boolean>) {
+    for (const [id, visible] of Object.entries(visibility)) {
+        const el = id.startsWith('.') 
+            ? document.querySelector(id) as HTMLElement
+            : document.getElementById(id);
+        if (el) el.style.display = visible ? 'block' : 'none';
+    }
+}
+
+/** Configures the context menu to show node-related actions (delete, duplicate, disconnect, z-order). */
 function configureContextMenuForNode() {
-    const deleteNode = document.getElementById('ctx-delete-node');
-    const duplicateNodeBtn = document.getElementById('ctx-duplicate-node');
-    const disconnect = document.getElementById('ctx-disconnect-node');
-    const divider = document.querySelector('.context-menu-divider') as HTMLElement;
-    const bringFront = document.getElementById('ctx-bring-to-front');
-    const sendBack = document.getElementById('ctx-send-to-back');
-    const deleteConn = document.getElementById('ctx-delete-connection');
-
-    if (deleteNode) deleteNode.style.display = 'block';
-    if (duplicateNodeBtn) duplicateNodeBtn.style.display = 'block';
-    if (disconnect) disconnect.style.display = 'block';
-    if (divider) divider.style.display = 'block';
-    if (bringFront) bringFront.style.display = 'block';
-    if (sendBack) sendBack.style.display = 'block';
-    if (deleteConn) deleteConn.style.display = 'none';
+    setContextMenuVisibility({
+        'ctx-delete-node': true,
+        'ctx-duplicate-node': true,
+        'ctx-disconnect-node': true,
+        '.context-menu-divider': true,
+        'ctx-bring-to-front': true,
+        'ctx-send-to-back': true,
+        'ctx-delete-connection': false,
+    });
 }
 
+/** Configures the context menu to show edge-related actions (delete connection only). */
 function configureContextMenuForEdge() {
-    const deleteNode = document.getElementById('ctx-delete-node');
-    const duplicateNodeBtn = document.getElementById('ctx-duplicate-node');
-    const disconnect = document.getElementById('ctx-disconnect-node');
-    const divider = document.querySelector('.context-menu-divider') as HTMLElement;
-    const bringFront = document.getElementById('ctx-bring-to-front');
-    const sendBack = document.getElementById('ctx-send-to-back');
-    const deleteConn = document.getElementById('ctx-delete-connection');
-
-    if (deleteNode) deleteNode.style.display = 'none';
-    if (duplicateNodeBtn) duplicateNodeBtn.style.display = 'none';
-    if (disconnect) disconnect.style.display = 'none';
-    if (divider) divider.style.display = 'none';
-    if (bringFront) bringFront.style.display = 'none';
-    if (sendBack) sendBack.style.display = 'none';
-    if (deleteConn) deleteConn.style.display = 'block';
+    setContextMenuVisibility({
+        'ctx-delete-node': false,
+        'ctx-duplicate-node': false,
+        'ctx-disconnect-node': false,
+        '.context-menu-divider': false,
+        'ctx-bring-to-front': false,
+        'ctx-send-to-back': false,
+        'ctx-delete-connection': true,
+    });
 }
 
 let rightClickedEdgeId: string | null = null;
@@ -436,6 +546,16 @@ function isLineIntersectingBox(
 // INTERACTIONS INITIALIZATION
 // ============================================================================
 
+/**
+ * Binds all mouse and keyboard event listeners for canvas interactions:
+ * - Keyboard shortcuts (undo/redo, delete, copy/paste, sidebar toggle)
+ * - Mouse click/drag for node selection, movement, and multi-select
+ * - Pin connection dragging and release (with type compatibility checks)
+ * - Canvas panning and zooming (scroll wheel)
+ * - CAD-style selection box (Shift+drag with enclosing/crossing modes)
+ * - Right-click context menus for nodes, edges, and empty canvas
+ * - Node adder panel search and filtering
+ */
 export function setupInteractions() {
     const canvas = appState.canvas;
     if (!canvas) return;
@@ -628,9 +748,9 @@ export function setupInteractions() {
 
             if (isDrawerOpen) {
                 // Check click on thumbtack button
-                const pinCX = nx + w / 2 + 54;
-                const pinCY = ny + h + 18;
-                if (Math.hypot(worldPos.x - pinCX, worldPos.y - pinCY) <= 10) {
+                const pinCX = nx + w / 2 + THUMBTACK_OFFSET_X;
+                const pinCY = ny + h + THUMBTACK_OFFSET_Y;
+                if (Math.hypot(worldPos.x - pinCX, worldPos.y - pinCY) <= THUMBTACK_HIT_RADIUS) {
                     if (isPinned) {
                         appState.pinnedDrawerNodeIds.delete(node.id);
                     } else {
@@ -645,21 +765,17 @@ export function setupInteractions() {
                 }
 
                 // Check click inside the drawer body (to prevent node dragging or background panning)
-                const drawerW = 144;
-                const drawerH = 24;
-                const drawerX = nx + w / 2 - drawerW / 2;
-                const drawerY = ny + h + 6;
-                if (worldPos.x >= drawerX && worldPos.x <= drawerX + drawerW && worldPos.y >= drawerY && worldPos.y <= drawerY + drawerH) {
+                const drawerX = nx + w / 2 - DRAWER_W / 2;
+                const drawerY = ny + h + DRAWER_GAP;
+                if (worldPos.x >= drawerX && worldPos.x <= drawerX + DRAWER_W && worldPos.y >= drawerY && worldPos.y <= drawerY + DRAWER_H) {
                     return;
                 }
             }
 
             // Check click on ellipsis button
-            const btnW = 20;
-            const btnH = 12;
-            const btnX = nx + w - btnW - 6;
-            const btnY = ny + h - btnH - 6;
-            if (worldPos.x >= btnX && worldPos.x <= btnX + btnW && worldPos.y >= btnY && worldPos.y <= btnY + btnH) {
+            const btnX = nx + w - ELLIPSIS_BTN_W - ELLIPSIS_BTN_MARGIN;
+            const btnY = ny + h - ELLIPSIS_BTN_H - ELLIPSIS_BTN_MARGIN;
+            if (worldPos.x >= btnX && worldPos.x <= btnX + ELLIPSIS_BTN_W && worldPos.y >= btnY && worldPos.y <= btnY + ELLIPSIS_BTN_H) {
                 if (isPinned) {
                     appState.pinnedDrawerNodeIds.delete(node.id);
                 } else {
@@ -749,17 +865,12 @@ export function setupInteractions() {
                 const rightDistX = Math.abs(worldPos.x - rightX);
                 const rightDistY = worldPos.y - (ny + HEADER_HEIGHT);
                 
-                if (rightDistX <= 12 && rightDistY >= 0 && rightDistY <= nh - HEADER_HEIGHT) {
+                if (rightDistX <= BORDER_HIT_DISTANCE && rightDistY >= 0 && rightDistY <= nh - HEADER_HEIGHT) {
                     if (nodeDef.dynamicOutputs) {
                         pushToHistory();
                         
                         const currentOutputs = getNodeOutputs(node);
-                        let nextIdx = 0;
-                        let pinName = `output${nextIdx}`;
-                        while (pinName in currentOutputs) {
-                            nextIdx++;
-                            pinName = `output${nextIdx}`;
-                        }
+                        const pinName = nextPinName('output', currentOutputs);
 
                         const updatedOutputs = { ...currentOutputs, [pinName]: 'any' as const };
                         
@@ -801,17 +912,12 @@ export function setupInteractions() {
                 const leftDistX = Math.abs(worldPos.x - leftX);
                 const leftDistY = worldPos.y - (ny + HEADER_HEIGHT);
                 
-                if (leftDistX <= 12 && leftDistY >= 0 && leftDistY <= nh - HEADER_HEIGHT) {
+                if (leftDistX <= BORDER_HIT_DISTANCE && leftDistY >= 0 && leftDistY <= nh - HEADER_HEIGHT) {
                     if (nodeDef.dynamicInputs) {
                         pushToHistory();
                         
                         const currentInputs = getNodeInputs(node);
-                        let nextIdx = 0;
-                        let pinName = `in${nextIdx}`;
-                        while (pinName in currentInputs) {
-                            nextIdx++;
-                            pinName = `in${nextIdx}`;
-                        }
+                        const pinName = nextPinName('in', currentInputs);
 
                         const updatedInputs = { ...currentInputs, [pinName]: 'any' as const };
                         
@@ -1096,31 +1202,27 @@ export function setupInteractions() {
 
             if (isDrawerOpen) {
                 // Check if hovering thumbtack button
-                const pinCX = nx + w / 2 + 54;
-                const pinCY = ny + h + 18;
-                if (Math.hypot(worldPos.x - pinCX, worldPos.y - pinCY) <= 10) {
+                const pinCX = nx + w / 2 + THUMBTACK_OFFSET_X;
+                const pinCY = ny + h + THUMBTACK_OFFSET_Y;
+                if (Math.hypot(worldPos.x - pinCX, worldPos.y - pinCY) <= THUMBTACK_HIT_RADIUS) {
                     hPinNodeId = node.id;
                     hDrawerNodeId = node.id;
                     break;
                 }
 
                 // Check if hovering drawer body
-                const drawerW = 144;
-                const drawerH = 24;
-                const drawerX = nx + w / 2 - drawerW / 2;
-                const drawerY = ny + h + 6;
-                if (worldPos.x >= drawerX && worldPos.x <= drawerX + drawerW && worldPos.y >= drawerY && worldPos.y <= drawerY + drawerH) {
+                const drawerX = nx + w / 2 - DRAWER_W / 2;
+                const drawerY = ny + h + DRAWER_GAP;
+                if (worldPos.x >= drawerX && worldPos.x <= drawerX + DRAWER_W && worldPos.y >= drawerY && worldPos.y <= drawerY + DRAWER_H) {
                     hDrawerNodeId = node.id;
                     break;
                 }
             }
 
             // Check if hovering ellipsis button
-            const btnW = 20;
-            const btnH = 12;
-            const btnX = nx + w - btnW - 6;
-            const btnY = ny + h - btnH - 6;
-            if (worldPos.x >= btnX && worldPos.x <= btnX + btnW && worldPos.y >= btnY && worldPos.y <= btnY + btnH) {
+            const btnX = nx + w - ELLIPSIS_BTN_W - ELLIPSIS_BTN_MARGIN;
+            const btnY = ny + h - ELLIPSIS_BTN_H - ELLIPSIS_BTN_MARGIN;
+            if (worldPos.x >= btnX && worldPos.x <= btnX + ELLIPSIS_BTN_W && worldPos.y >= btnY && worldPos.y <= btnY + ELLIPSIS_BTN_H) {
                 hEllipsisNodeId = node.id;
                 hDrawerNodeId = node.id;
                 break;
@@ -1187,7 +1289,7 @@ export function setupInteractions() {
                 const targetPos = getInputPinCoords(targetNode, edge.targetPinId);
 
                 const { distance, midpoint } = getDistanceToEdge(worldPos.x, worldPos.y, sourcePos, targetPos, edgeStyle);
-                if (distance <= 12 && distance < minDistance) {
+                if (distance <= EDGE_HIT_DISTANCE && distance < minDistance) {
                     minDistance = distance;
                     hEdgeId = edge.id;
                     hEdgePos = midpoint;
@@ -1238,20 +1340,15 @@ export function setupInteractions() {
                 const sourceNode = appState.currentGraph.nodes[sourceNodeId];
                 const targetNode = appState.currentGraph.nodes[targetNodeId];
                 
-                logToTerminal(`mouseup: hoveredPin={nodeId: ${appState.hoveredPin.nodeId}, pinId: ${appState.hoveredPin.pinId}, isInput: ${appState.hoveredPin.isInput}}`, 'system-msg');
-                logToTerminal(`mouseup: sourceNode=${sourceNode?.id} (${sourceNode?.type}), targetNode=${targetNode?.id} (${targetNode?.type})`, 'system-msg');
 
                 if (sourceNode && targetNode) {
                     const sourceDef = StandardNodes[sourceNode.type];
                     const targetDef = StandardNodes[targetNode.type];
                     
-                    logToTerminal(`mouseup: sourceDef=${!!sourceDef}, targetDef=${!!targetDef}`, 'system-msg');
-
                     if (sourceDef && targetDef) {
                         const sourceType = getNodeOutputs(sourceNode, appState.resolvedOutputs)[sourcePinId];
                         const targetType = getNodeInputs(targetNode, appState.resolvedInputs)[targetPinId];
                         
-                        logToTerminal(`mouseup: sourcePin=${sourcePinId} (${sourceType}), targetPin=${targetPinId} (${targetType})`, 'system-msg');
 
                         if (isCompatible(sourceType, targetType)) {
                             pushToHistory();
@@ -1306,12 +1403,7 @@ export function setupInteractions() {
                         pushToHistory();
 
                         const currentInputs = getNodeInputs(hitNode);
-                        let nextIdx = 0;
-                        let newPinId = `in${nextIdx}`;
-                        while (newPinId in currentInputs) {
-                            nextIdx++;
-                            newPinId = `in${nextIdx}`;
-                        }
+                        const newPinId = nextPinName('in', currentInputs);
 
                         const updatedInputs = { ...currentInputs, [newPinId]: 'any' as const };
                         
@@ -1344,12 +1436,7 @@ export function setupInteractions() {
                         pushToHistory();
 
                         const currentOutputs = getNodeOutputs(hitNode);
-                        let nextIdx = 0;
-                        let newPinId = `output${nextIdx}`;
-                        while (newPinId in currentOutputs) {
-                            nextIdx++;
-                            newPinId = `output${nextIdx}`;
-                        }
+                        const newPinId = nextPinName('output', currentOutputs);
 
                         const updatedOutputs = { ...currentOutputs, [newPinId]: 'any' as const };
 
@@ -1559,7 +1646,7 @@ export function setupInteractions() {
         
         const clampedDelta = Math.max(-120, Math.min(120, e.deltaY));
         const zoomFactor = Math.exp(-clampedDelta * 0.0007);
-        appState.viewport.zoom = Math.max(0.05, Math.min(3.0, appState.viewport.zoom * zoomFactor));
+        appState.viewport.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, appState.viewport.zoom * zoomFactor));
 
         // Shift Pan offset dynamically to preserve pointer center focal point
         appState.viewport.x = mouseX - worldPos.x * appState.viewport.zoom;
@@ -1583,22 +1670,10 @@ export function setupInteractions() {
         const mouseY = e.clientY - rect.top;
         const worldPos = screenToWorld(mouseX, mouseY);
 
-        // Check if clicked on a node
-        let clickedNodeId: string | null = null;
-        const nodesReversed = Object.values(appState.currentGraph.nodes).reverse();
-        for (const node of nodesReversed) {
-            const w = node.ui?.width ?? NODE_WIDTH;
-            const h = getNodeHeight(node);
-            const nx = node.ui?.x ?? 0;
-            const ny = node.ui?.y ?? 0;
+        // Check if double-clicked on a node
+        const clickedNode = findNodeAtPosition(worldPos);
 
-            if (worldPos.x >= nx && worldPos.x <= nx + w && worldPos.y >= ny && worldPos.y <= ny + h) {
-                clickedNodeId = node.id;
-                break;
-            }
-        }
-
-        if (!clickedNodeId) {
+        if (!clickedNode) {
             zoomExtents();
         }
     });
@@ -1611,20 +1686,9 @@ export function setupInteractions() {
         const mouseY = e.clientY - rect.top;
         const worldPos = screenToWorld(mouseX, mouseY);
 
-        // Check if clicked on a node
-        let clickedNodeId: string | null = null;
-        const nodesReversed = Object.values(appState.currentGraph.nodes).reverse();
-        for (const node of nodesReversed) {
-            const w = node.ui?.width ?? NODE_WIDTH;
-            const h = getNodeHeight(node);
-            const nx = node.ui?.x ?? 0;
-            const ny = node.ui?.y ?? 0;
-
-            if (worldPos.x >= nx && worldPos.x <= nx + w && worldPos.y >= ny && worldPos.y <= ny + h) {
-                clickedNodeId = node.id;
-                break;
-            }
-        }
+        // Check if right-clicked on a node
+        const clickedNode = findNodeAtPosition(worldPos);
+        const clickedNodeId = clickedNode?.id ?? null;
 
         const ctxMenu = document.getElementById('context-menu');
         const nodeAdder = document.getElementById('node-adder');
@@ -1645,10 +1709,8 @@ export function setupInteractions() {
             
             if (ctxMenu) {
                 const rect = canvas.getBoundingClientRect();
-                const menuWidth = 180;
-                const menuHeight = 160;
-                const posX = Math.max(10, Math.min(mouseX, rect.width - menuWidth - 10));
-                const posY = Math.max(10, Math.min(mouseY, rect.height - menuHeight - 10));
+                const posX = Math.max(10, Math.min(mouseX, rect.width - CTX_MENU_W - 10));
+                const posY = Math.max(10, Math.min(mouseY, rect.height - CTX_MENU_H_NODE - 10));
                 ctxMenu.style.left = `${posX}px`;
                 ctxMenu.style.top = `${posY}px`;
                 ctxMenu.classList.remove('hidden');
@@ -1661,10 +1723,8 @@ export function setupInteractions() {
             
             if (ctxMenu) {
                 const rect = canvas.getBoundingClientRect();
-                const menuWidth = 180;
-                const menuHeight = 50;
-                const posX = Math.max(10, Math.min(mouseX, rect.width - menuWidth - 10));
-                const posY = Math.max(10, Math.min(mouseY, rect.height - menuHeight - 10));
+                const posX = Math.max(10, Math.min(mouseX, rect.width - CTX_MENU_W - 10));
+                const posY = Math.max(10, Math.min(mouseY, rect.height - CTX_MENU_H_EDGE - 10));
                 ctxMenu.style.left = `${posX}px`;
                 ctxMenu.style.top = `${posY}px`;
                 ctxMenu.classList.remove('hidden');
@@ -1774,6 +1834,11 @@ export function setupInteractions() {
 // NODE ADDER PANEL & SEARCH FILTER
 // ========================================================================
 
+/**
+ * Hides the node adder panel. If shouldDelete is true (default) and the
+ * currently selected node is an unconfigured placeholder, removes it from
+ * the graph — cleaning up cancelled node creation.
+ */
 export function closeNodeAdder(shouldDelete: boolean = true) {
     const adder = document.getElementById('node-adder');
     if (adder && !adder.classList.contains('hidden')) {
@@ -1797,6 +1862,11 @@ export function closeNodeAdder(shouldDelete: boolean = true) {
     }
 }
 
+/**
+ * Shows the node adder panel at the given screen coordinates.
+ * Immediately creates an "unconfigured" placeholder node at the spawn position,
+ * which will be morphed into the real node type once the user selects one.
+ */
 export function showNodeAdder(screenX: number, screenY: number) {
     const adder = document.getElementById('node-adder');
     const searchInput = document.getElementById('node-search-input') as HTMLInputElement;
@@ -1854,6 +1924,7 @@ const AVAILABLE_MODES = [
     { mode: 'log', label: 'Console Log', category: 'system' },
 ] as const;
 
+/** Filters the node adder list to show only modes matching the search query. */
 export function filterNodeAdderList(query: string) {
     const listContainer = document.getElementById('node-type-list');
     if (!listContainer) return;
@@ -1887,6 +1958,12 @@ export function filterNodeAdderList(query: string) {
     });
 }
 
+/**
+ * Creates a new node with the specified mode.
+ * If a placeholder "unconfigured" node is currently selected, morphs it
+ * into the new type with a smooth CSS transition animation. Otherwise,
+ * spawns a fresh node at the current spawn position.
+ */
 export function addNewNodeWithMode(mode: NodeMode) {
     pushToHistory();
 
@@ -2047,6 +2124,7 @@ export function addNewNodeWithMode(mode: NodeMode) {
     }
 }
 
+/** Convenience wrapper that maps legacy type strings to NodeMode and delegates to addNewNodeWithMode. */
 export function addNewNode(type: string) {
     let mode: NodeMode = 'formula';
     if (type === 'system/input') mode = 'input';
@@ -2071,6 +2149,11 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
+/**
+ * Calculates the shortest distance from a point to an edge path.
+ * Supports both 'spline' (cubic Bézier) and 'orthogonal' (3-segment rectilinear) edge styles.
+ * Returns both the distance and the midpoint of the edge for tooltip positioning.
+ */
 export function getDistanceToEdge(
     px: number,
     py: number,
