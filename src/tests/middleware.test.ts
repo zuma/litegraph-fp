@@ -19,7 +19,7 @@ describe('Engine Middleware Pipeline', () => {
 
         const graph: GraphState = {
             nodes: {
-                'add1': { id: 'add1', type: 'node/generic', params: {} }
+                'add1': { id: 'add1', type: 'node', params: {} }
             },
             edges: []
         };
@@ -84,7 +84,7 @@ describe('Engine Middleware Pipeline', () => {
     it('should bypass cache for generic node in state mode', async () => {
         const graph: GraphState = {
             nodes: {
-                's1': { id: 's1', type: 'node/generic', mode: 'state', params: { defaultValue: 42 } }
+                's1': { id: 's1', type: 'system/state', params: { defaultValue: 42 } }
             },
             edges: []
         };
@@ -113,7 +113,7 @@ describe('Engine Middleware Pipeline', () => {
 
         const graph: GraphState = {
             nodes: {
-                's1': { id: 's1', type: 'node/generic', mode: 'state', params: {} }
+                's1': { id: 's1', type: 'system/state', params: {} }
             },
             edges: []
         };
@@ -125,6 +125,6 @@ describe('Engine Middleware Pipeline', () => {
         };
 
         await evaluateGraph(graph, {}, StandardNodes, config);
-        expect(passedMode).toBe('state');
+        expect(passedMode).toBe('system/state');
     });
 });

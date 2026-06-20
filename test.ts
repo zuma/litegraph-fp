@@ -8,24 +8,55 @@ import { Command } from './src/events/types.js';
 // ============================================================================
 // 1. MOCK DATA & FIXTURES
 // ============================================================================
-// Node A / B / C / D run the standard math sequence.
-// Node E is a rogue node designed to HANG FOREVER.
-// Our engine must evaluate A B C D perfectly, isolate E, kill it, and log the error!
-
 const mockGraph: GraphState = {
     nodes: {
-        'nodeA': { id: 'nodeA', type: 'math/add', params: {} },
-        'nodeB': { id: 'nodeB', type: 'math/add', params: {} },
-        'nodeC': { id: 'nodeC', type: 'math/multiply', params: {} },
-        'nodeD': { id: 'nodeD', type: 'math/round', params: {} },
-        'nodeRogue': { id: 'nodeRogue', type: 'system/delay', params: { ms: 999999 } }, // Infinite hang!
-        'nodeLog': { id: 'nodeLog', type: 'system/log', params: {} },
+        'nodeA': {
+            id: 'nodeA',
+            type: 'formula',
+            inputs: { a: 'any', b: 'any' },
+            outputs: { out0: 'any' },
+            params: { formula: 'a + b' }
+        },
+        'nodeB': {
+            id: 'nodeB',
+            type: 'formula',
+            inputs: { a: 'any', b: 'any' },
+            outputs: { out0: 'any' },
+            params: { formula: 'a + b' }
+        },
+        'nodeC': {
+            id: 'nodeC',
+            type: 'formula',
+            inputs: { a: 'any', b: 'any' },
+            outputs: { out0: 'any' },
+            params: { formula: 'a * b' }
+        },
+        'nodeD': {
+            id: 'nodeD',
+            type: 'formula',
+            inputs: { a: 'any' },
+            outputs: { out0: 'any' },
+            params: { formula: 'round(a)' }
+        },
+        'nodeRogue': {
+            id: 'nodeRogue',
+            type: 'system/delay',
+            inputs: { in0: 'any' },
+            outputs: { out: 'any' },
+            params: { delayMs: 999999 }
+        },
+        'nodeLog': {
+            id: 'nodeLog',
+            type: 'system/log',
+            inputs: { msg: 'any' },
+            params: {}
+        }
     },
     edges: [
-        { id: 'edge1', sourceNodeId: 'nodeA', sourcePinId: 'out', targetNodeId: 'nodeC', targetPinId: 'a' },
-        { id: 'edge2', sourceNodeId: 'nodeB', sourcePinId: 'out', targetNodeId: 'nodeC', targetPinId: 'b' },
-        { id: 'edge3', sourceNodeId: 'nodeC', sourcePinId: 'out', targetNodeId: 'nodeD', targetPinId: 'a' },
-        { id: 'edge4', sourceNodeId: 'nodeC', sourcePinId: 'out', targetNodeId: 'nodeLog', targetPinId: 'msg' }
+        { id: 'edge1', sourceNodeId: 'nodeA', sourcePinId: 'out0', targetNodeId: 'nodeC', targetPinId: 'a' },
+        { id: 'edge2', sourceNodeId: 'nodeB', sourcePinId: 'out0', targetNodeId: 'nodeC', targetPinId: 'b' },
+        { id: 'edge3', sourceNodeId: 'nodeC', sourcePinId: 'out0', targetNodeId: 'nodeD', targetPinId: 'a' },
+        { id: 'edge4', sourceNodeId: 'nodeC', sourcePinId: 'out0', targetNodeId: 'nodeLog', targetPinId: 'msg' }
     ]
 };
 
@@ -41,7 +72,7 @@ async function executeBulletproofTest() {
         'nodeA.b': 10,
         'nodeB.a': 20,
         'nodeB.b': 20,
-        'nodeRogue.a': "I will crash"
+        'nodeRogue.in0': "I will crash"
     };
 
     console.time("⏱️  Watchdog Execution Time");
@@ -75,17 +106,14 @@ async function executeBulletproofTest() {
 
     // Bulletproof Assertions
     console.log("\n🔍 AUTOMATED VERIFICATION RESULTS:");
-    if (finalResult.state['nodeA.out'] === 15) console.log("✅ Math Pipeline survived rogue node explosion.");
-    if (finalResult.state['nodeC.out'] === 600) console.log("✅ Tier 2 execution completed safely.");
+    if (finalResult.state['nodeA.out0'] === 15) console.log("✅ Math Pipeline survived rogue node explosion.");
+    if (finalResult.state['nodeC.out0'] === 600) console.log("✅ Tier 2 execution completed safely.");
     if (finalResult.errors['nodeRogue']?.includes("Timeout")) console.log("🚨 Watchdog successfully terminated nodeRogue before it could freeze the system!");
     if (!finalResult.state['nodeLog.$commands']) console.log("✅ $commands no longer pollute the execution state.");
     if (finalResult.commands['nodeLog']?.length > 0) console.log("✅ Commands extracted into first-class result field.");
-
-    // No more process.exit(0) hack needed — clearTimeout cleans up orphaned timers!
 }
 
 executeBulletproofTest().catch(e => {
     console.error("❌ ENGINE FATAL CRASH:", e);
     process.exit(1);
 });
-

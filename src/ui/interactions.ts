@@ -1,4 +1,4 @@
-import { GraphState, NodeState, Edge, NodeMode, PinType } from '../core/ast.js';
+import { GraphState, NodeState, Edge, PinType } from '../core/ast.js';
 import { createNodeState } from '../core/factory.js';
 import { appState, screenToWorld, syncContextState, updateCursor, getNodeHeight, getInputPinCoords, getOutputPinCoords, GRID_SIZE, findNodeStateById } from './state.js';
 import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons, undo, redo } from './history.js';
@@ -48,9 +48,9 @@ export const MAX_ZOOM = 3.0;
 const DRAG_THRESHOLD = 6;
 
 /** Context menu estimated dimensions for clamping to viewport. */
-const CTX_MENU_W = 180;
-const CTX_MENU_H_NODE = 160;
-const CTX_MENU_H_EDGE = 50;
+const CTX_MENU_W = 140;
+const CTX_MENU_H_NODE = 130;
+const CTX_MENU_H_EDGE = 40;
 
 // ============================================================================
 // HELPER UTILITIES
@@ -488,9 +488,65 @@ function setContextMenuVisibility(visibility: Record<string, boolean>) {
 }
 
 /** Configures the context menu to show node-related actions (delete, duplicate, disconnect, z-order). */
-function configureContextMenuForNode() {
+function configureContextMenuForNode(node?: NodeState) {
+    if (!node) return;
+
+    const isAction = [
+        'formula', 'blocks', 'python', 
+        'system/delay', 'system/state', 'system/log', 
+        'database/table', 'database/filter'
+    ].includes(node.type);
+
+    const isBoundary = node.type === 'composite/input' || node.type === 'composite/output';
+
+    const deleteBtn = document.getElementById('ctx-delete-node');
+    const duplicateBtn = document.getElementById('ctx-duplicate-node');
+    const disconnectBtn = document.getElementById('ctx-disconnect-node');
+    
+    if (deleteBtn) {
+        if (isAction) {
+            deleteBtn.textContent = '🗑️ Delete Action';
+        } else if (isBoundary) {
+            deleteBtn.textContent = '🗑️ Delete Pin';
+        } else {
+            deleteBtn.textContent = '🗑️ Delete Node';
+        }
+    }
+    
+    if (duplicateBtn) {
+        if (isAction) {
+            duplicateBtn.textContent = '👯 Duplicate Action';
+        } else if (isBoundary) {
+            duplicateBtn.textContent = '👯 Duplicate Pin';
+        } else {
+            duplicateBtn.textContent = '👯 Duplicate Node';
+        }
+    }
+
+    if (disconnectBtn) {
+        if (isAction) {
+            disconnectBtn.textContent = '🔌 Disconnect Action';
+        } else if (isBoundary) {
+            disconnectBtn.textContent = '🔌 Disconnect Pin';
+        } else {
+            disconnectBtn.textContent = '🔌 Disconnect Node';
+        }
+    }
+
+    const ctxMenu = document.getElementById('context-menu');
+    if (ctxMenu) {
+        ctxMenu.classList.remove('node-context', 'action-context', 'pin-context');
+        if (isAction) {
+            ctxMenu.classList.add('action-context');
+        } else if (isBoundary) {
+            ctxMenu.classList.add('pin-context');
+        } else {
+            ctxMenu.classList.add('node-context');
+        }
+    }
+
     setContextMenuVisibility({
-        'ctx-edit-nested': true,
+        'ctx-edit-nested': (isAction || isBoundary) ? false : true,
         'ctx-delete-node': true,
         'ctx-duplicate-node': true,
         'ctx-disconnect-node': true,
@@ -503,6 +559,10 @@ function configureContextMenuForNode() {
 
 /** Configures the context menu to show edge-related actions (delete connection only). */
 function configureContextMenuForEdge() {
+    const ctxMenu = document.getElementById('context-menu');
+    if (ctxMenu) {
+        ctxMenu.classList.remove('node-context', 'action-context', 'pin-context');
+    }
     setContextMenuVisibility({
         'ctx-edit-nested': false,
         'ctx-delete-node': false,
@@ -880,112 +940,7 @@ export function setupInteractions() {
             }
         }
 
-        if (!pinClicked) {
-            for (const nodeId in appState.currentGraph.nodes) {
-                const node = appState.currentGraph.nodes[nodeId];
-                const nodeDef = StandardNodes[node.type];
-                if (!nodeDef) continue;
 
-                const nx = node.ui?.x ?? 0;
-                const ny = node.ui?.y ?? 0;
-                const nw = node.ui?.width ?? NODE_WIDTH;
-                const nh = getNodeHeight(node);
-
-                // Right edge zone (for outputs)
-                const rightX = nx + nw;
-                const rightDistX = Math.abs(worldPos.x - rightX);
-                const rightDistY = worldPos.y - (ny + HEADER_HEIGHT);
-                
-                if (rightDistX <= BORDER_HIT_DISTANCE && rightDistY >= 0 && rightDistY <= nh - HEADER_HEIGHT) {
-                    if (nodeDef.dynamicOutputs) {
-                        pushToHistory();
-                        
-                        const currentOutputs = getNodeOutputs(node);
-                        const pinName = nextPinName('output', currentOutputs);
-
-                        const updatedOutputs = { ...currentOutputs, [pinName]: 'any' as const };
-                        
-                        appState.currentGraph = {
-                            ...appState.currentGraph,
-                            nodes: {
-                                ...appState.currentGraph.nodes,
-                                [node.id]: {
-                                    ...node,
-                                    outputs: updatedOutputs
-                                }
-                            }
-                        };
-                        
-                        const pinIndex = Object.keys(updatedOutputs).length - 1;
-                        const pinY = ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT;
-
-                        if (appState.renderingContext) {
-                            appState.renderingContext.draggingConnection = {
-                                sourceNodeId: node.id,
-                                sourcePinId: pinName,
-                                isInput: false,
-                                x: rightX,
-                                y: pinY,
-                                cursorX: worldPos.x,
-                                cursorY: worldPos.y
-                            };
-                        }
-                        
-                        pinClicked = true;
-                        logToTerminal(`Created output pin '${pinName}' on Node ${node.id} via border drag`, 'system-msg');
-                        updateInspector();
-                        break;
-                    }
-                }
-
-                // Left edge zone (for inputs)
-                const leftX = nx;
-                const leftDistX = Math.abs(worldPos.x - leftX);
-                const leftDistY = worldPos.y - (ny + HEADER_HEIGHT);
-                
-                if (leftDistX <= BORDER_HIT_DISTANCE && leftDistY >= 0 && leftDistY <= nh - HEADER_HEIGHT) {
-                    if (nodeDef.dynamicInputs) {
-                        pushToHistory();
-                        
-                        const currentInputs = getNodeInputs(node);
-                        const pinName = nextPinName('in', currentInputs);
-
-                        const updatedInputs = { ...currentInputs, [pinName]: 'any' as const };
-                        
-                        appState.currentGraph = {
-                            ...appState.currentGraph,
-                            nodes: {
-                                ...appState.currentGraph.nodes,
-                                [node.id]: {
-                                    ...node,
-                                    inputs: updatedInputs
-                                }
-                            }
-                        };
-                        
-                        const pinIndex = Object.keys(updatedInputs).length - 1;
-                        const pinY = ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT;
-
-                        if (appState.renderingContext) {
-                            appState.renderingContext.draggingConnection = {
-                                sourceNodeId: node.id,
-                                sourcePinId: pinName,
-                                isInput: true,
-                                x: leftX,
-                                y: pinY,
-                                cursorX: worldPos.x,
-                                cursorY: worldPos.y
-                            };
-                        }
-                        
-                        pinClicked = true;
-                        logToTerminal(`Created input pin '${pinName}' on Node ${node.id} via border drag`, 'system-msg');
-                        updateInspector();
-                        break;
-                    }
-                }
-            }
-        }
 
         if (pinClicked) {
             updateCursor();
@@ -1639,9 +1594,9 @@ export function setupInteractions() {
         const ctxMenu = document.getElementById('context-menu');
         const nodeAdder = document.getElementById('node-adder');
 
-        if (clickedNodeId) {
+        if (clickedNodeId && clickedNode) {
             // Right-clicked a node: select it, hide node adder, show context menu
-            configureContextMenuForNode();
+            configureContextMenuForNode(clickedNode);
             if (loadSettings().canvas.autoBringToFront) {
                 bringNodeToFront(clickedNodeId);
             }
@@ -1783,6 +1738,21 @@ export function setupInteractions() {
         const target = e.target as HTMLInputElement;
         filterNodeAdderList(target.value);
     });
+
+    const nodeTypeList = document.getElementById('node-type-list');
+    let scrollTimeoutId: number | null = null;
+    if (nodeTypeList) {
+        nodeTypeList.addEventListener('scroll', () => {
+            nodeTypeList.classList.add('scrolling');
+            if (scrollTimeoutId !== null) {
+                clearTimeout(scrollTimeoutId);
+            }
+            scrollTimeoutId = window.setTimeout(() => {
+                nodeTypeList.classList.remove('scrolling');
+                scrollTimeoutId = null;
+            }, 800);
+        });
+    }
 }
 
 // ========================================================================
@@ -1798,29 +1768,12 @@ export function closeNodeAdder(shouldDelete: boolean = true) {
     const adder = document.getElementById('node-adder');
     if (adder && !adder.classList.contains('hidden')) {
         adder.classList.add('hidden');
-        
-        // Clean up unconfigured node if creation was cancelled
-        if (shouldDelete && appState.selectedNodeId) {
-            const selectedNode = appState.currentGraph.nodes[appState.selectedNodeId];
-            if (selectedNode && selectedNode.type === 'node/unconfigured') {
-                const nodesCopy = { ...appState.currentGraph.nodes };
-                delete nodesCopy[appState.selectedNodeId];
-                appState.currentGraph = {
-                    ...appState.currentGraph,
-                    nodes: nodesCopy
-                };
-                appState.selectedNodeId = null;
-                syncContextState();
-                updateInspector();
-            }
-        }
+        adder.classList.remove('morphing');
     }
 }
 
 /**
  * Shows the node adder panel at the given screen coordinates.
- * Immediately creates an "unconfigured" placeholder node at the spawn position,
- * which will be morphed into the real node type once the user selects one.
  */
 export function showNodeAdder(screenX: number, screenY: number) {
     const adder = document.getElementById('node-adder');
@@ -1828,40 +1781,29 @@ export function showNodeAdder(screenX: number, screenY: number) {
     
     if (!adder || !searchInput) return;
 
-    // 1. Immediately instantiate unconfigured node in graph
-    const uniqueId = `unconfigured_${Date.now().toString().slice(-4)}`;
-    const newNode = createNodeState({
-        id: uniqueId,
-        type: 'node/unconfigured',
-        params: {},
-        ui: {
-            x: appState.spawnX,
-            y: appState.spawnY,
-            title: 'NEW NODE'
-        }
-    });
+    // Reset layout transition styling to avoid animating into view awkwardly
+    adder.style.transition = 'opacity 0.12s ease';
+    adder.style.width = '220px';
+    adder.style.height = 'auto';
+    adder.style.borderColor = 'var(--border-panel)';
+    adder.style.boxShadow = 'none';
+    adder.classList.remove('morphing');
+    
+    const adderContent = document.getElementById('node-adder-content');
+    if (adderContent) {
+        adderContent.style.opacity = '1';
+    }
 
-    appState.currentGraph = {
-        ...appState.currentGraph,
-        nodes: {
-            ...appState.currentGraph.nodes,
-            [uniqueId]: newNode
-        }
-    };
+    const canvas = document.getElementById('graph-canvas') as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    const ADDER_W = 220;
+    const ADDER_H = 260; // Estimated height of adder panel
 
-    appState.selectedNodeId = uniqueId;
-    appState.selectedNodeIds.clear();
-    appState.selectedNodeIds.add(uniqueId);
-    syncContextState();
-    updateInspector();
+    const posX = Math.max(10, Math.min(screenX, rect.width - ADDER_W - 10));
+    const posY = Math.max(10, Math.min(screenY, rect.height - ADDER_H - 10));
 
-    // 2. Position HTML search adder below the newly created node so it doesn't cover it
-    const nodeH = getNodeHeight(newNode);
-    const sx = newNode.ui!.x * appState.viewport.zoom + appState.viewport.x;
-    const sy = (newNode.ui!.y + nodeH + 8) * appState.viewport.zoom + appState.viewport.y;
-
-    adder.style.left = `${sx}px`;
-    adder.style.top = `${sy}px`;
+    adder.style.left = `${posX}px`;
+    adder.style.top = `${posY}px`;
     adder.classList.remove('hidden');
     
     searchInput.value = '';
@@ -1869,17 +1811,19 @@ export function showNodeAdder(screenX: number, screenY: number) {
     searchInput.focus();
 }
 
-const AVAILABLE_MODES = [
-    { mode: 'formula', label: 'Math Formula', category: 'node' },
-    { mode: 'blocks', label: 'Blocks Expression', category: 'node' },
-    { mode: 'python', label: 'Python Script', category: 'node' },
-    { mode: 'delay', label: 'Time Delay', category: 'system' },
-    { mode: 'state', label: 'State Loop', category: 'system' },
-    { mode: 'input', label: 'Input Value', category: 'system' },
-    { mode: 'log', label: 'Console Log', category: 'system' },
+const AVAILABLE_TYPES = [
+    { type: 'node', label: 'Empty Node', category: 'node' },
+    { type: 'formula', label: 'Math Formula', category: 'action' },
+    { type: 'blocks', label: 'Scratch Blocks', category: 'action' },
+    { type: 'python', label: 'Python Script', category: 'action' },
+    { type: 'system/delay', label: 'Time Delay', category: 'action' },
+    { type: 'system/state', label: 'State Loop', category: 'action' },
+    { type: 'system/log', label: 'Console Log', category: 'action' },
+    { type: 'database/table', label: 'Database Table', category: 'action' },
+    { type: 'database/filter', label: 'Database Filter', category: 'action' }
 ] as const;
 
-/** Filters the node adder list to show only modes matching the search query. */
+/** Filters the node adder list to show only types matching the search query. */
 export function filterNodeAdderList(query: string) {
     const listContainer = document.getElementById('node-type-list');
     if (!listContainer) return;
@@ -1889,147 +1833,158 @@ export function filterNodeAdderList(query: string) {
     const lowerQuery = query.toLowerCase();
     
     const isBlockEditor = appState.activeWorkspaceId.startsWith('block_editor_');
-    const modes: { mode: string; label: string; category: string }[] = [...AVAILABLE_MODES];
+    const items: { type: string; label: string; category: string }[] = [...AVAILABLE_TYPES];
     if (isBlockEditor) {
-        modes.push({ mode: 'composite/input', label: 'Input Pin (Boundary)', category: 'composite' });
-        modes.push({ mode: 'composite/output', label: 'Output Pin (Boundary)', category: 'composite' });
+        items.push({ type: 'composite/input', label: 'Input Pin (Boundary)', category: 'composite' });
+        items.push({ type: 'composite/output', label: 'Output Pin (Boundary)', category: 'composite' });
     }
 
-    appState.workspaces.forEach(ws => {
-        if (ws.id === appState.activeWorkspaceId) return;
-        if (appState.activeWorkspaceId === `block_editor_${ws.id}` || ws.id === `block_editor_${appState.activeWorkspaceId}`) return;
-        
-        modes.push({
-            mode: `workspace/${ws.id}`,
-            label: `Workspace: ${ws.name}`,
-            category: 'workspace'
-        });
-    });
+    const nodesList = items.filter(item => item.category === 'node' || item.category === 'composite');
+    const actionsList = items.filter(item => item.category === 'action');
 
-    modes.forEach(({ mode, label, category }) => {
-        if (query && !label.toLowerCase().includes(lowerQuery) && !mode.toLowerCase().includes(lowerQuery)) {
-            return;
-        }
-
-        const btn = document.createElement('button');
-        btn.className = 'node-item-btn';
-        
-        const nameLabel = document.createElement('span');
-        nameLabel.textContent = label;
-        btn.appendChild(nameLabel);
-
-        const catBadge = document.createElement('span');
-        catBadge.className = `node-item-category ${category}`;
-        catBadge.textContent = category;
-        btn.appendChild(catBadge);
-
-        btn.addEventListener('click', () => {
-            addNewNodeWithMode(mode as NodeMode);
+    const renderGroup = (title: string, list: typeof items) => {
+        const filteredList = list.filter(item => {
+            if (query && !item.label.toLowerCase().includes(lowerQuery) && !item.type.toLowerCase().includes(lowerQuery)) {
+                return false;
+            }
+            return true;
         });
 
-        listContainer.appendChild(btn);
-    });
+        if (filteredList.length === 0) return;
+
+        const heading = document.createElement('div');
+        heading.style.fontWeight = '700';
+        heading.style.fontSize = '9px';
+        heading.style.textTransform = 'uppercase';
+        heading.style.letterSpacing = '0.7px';
+        heading.style.color = 'var(--accent-cyan)';
+        heading.style.margin = '10px 4px 6px 4px';
+        heading.style.opacity = '0.85';
+        heading.textContent = title;
+        listContainer.appendChild(heading);
+
+        filteredList.forEach(({ type, label, category }) => {
+            const btn = document.createElement('button');
+            btn.className = 'node-item-btn';
+            
+            const nameLabel = document.createElement('span');
+            nameLabel.textContent = label;
+            btn.appendChild(nameLabel);
+
+            const catBadge = document.createElement('span');
+            catBadge.className = `node-item-category ${category}`;
+            catBadge.textContent = category;
+            btn.appendChild(catBadge);
+
+            btn.addEventListener('click', () => {
+                addNewNode(type);
+            });
+
+            listContainer.appendChild(btn);
+        });
+    };
+
+    renderGroup('New Node', nodesList);
+    renderGroup('New Action', actionsList);
 }
 
 /**
- * Creates a new node with the specified mode.
+ * Creates a new node with the specified type.
  * If a placeholder "unconfigured" node is currently selected, morphs it
  * into the new type with a smooth CSS transition animation. Otherwise,
  * spawns a fresh node at the current spawn position.
  */
-export function addNewNodeWithMode(mode: NodeMode) {
+export function addNewNode(type: string) {
     pushToHistory();
 
-    const isBoundary = mode === 'composite/input' || mode === 'composite/output';
-    const isWorkspace = mode.startsWith('workspace/');
+    const isBoundary = type === 'composite/input' || type === 'composite/output';
+    const isWorkspace = type.startsWith('workspace/');
+    const isAction = [
+        'formula', 'blocks', 'python', 
+        'system/delay', 'system/state', 'system/log', 
+        'database/table', 'database/filter'
+    ].includes(type);
     
-    let cleanMode: string = mode;
+    let cleanMode: string = type;
     if (isBoundary) {
-        cleanMode = mode.replace('composite/', '');
+        cleanMode = type.replace('composite/', '');
     } else if (isWorkspace) {
-        cleanMode = mode.replace('workspace/', '');
+        cleanMode = type.replace('workspace/', '');
+    } else {
+        cleanMode = type.split('/')[1] || type;
     }
-    const uniqueId = `${cleanMode}_${Date.now().toString().slice(-4)}`;
+    let prefix = 'node';
+    if (type === 'composite/input' || type === 'composite/output') {
+        prefix = 'pin';
+    } else if (type !== 'node') {
+        prefix = 'action';
+    }
+    const uniqueId = `${prefix}_${Date.now().toString().slice(-4)}_${Math.floor(Math.random() * 100)}`;
     
     const initialParams: Record<string, any> = {};
-    if (mode === 'formula') {
+    if (type === 'formula') {
         initialParams.formula = 'a + b';
-    } else if (mode === 'blocks') {
+    } else if (type === 'blocks') {
         initialParams.blocks = [
             { id: `b_${Math.random().toString(36).substr(2, 4)}`, targetVar: 'out', operand1: 'a', operator: '+', operand2: 'b' }
         ];
-    } else if (mode === 'python') {
+    } else if (type === 'python') {
         initialParams.code = 'def execute(inputs):\n    # inputs: dict\n    # return dict\n    return { "out": inputs.get("a", 0) + inputs.get("b", 0) }';
-    } else if (mode === 'delay') {
+    } else if (type === 'system/delay') {
         initialParams.ms = 1000;
-    } else if (mode === 'state') {
+    } else if (type === 'system/state') {
         initialParams.defaultValue = 0;
-    } else if (mode === 'input') {
+    } else if (type === 'system/input') {
         initialParams.value = '';
     }
 
-    const unconfiguredNode = appState.selectedNodeId ? appState.currentGraph.nodes[appState.selectedNodeId] : null;
-    const isMorphing = unconfiguredNode && unconfiguredNode.type === 'node/unconfigured';
-
-    let spawnX = 0;
-    let spawnY = 0;
+    const snapEnabled = loadSettings().canvas.snapToGrid;
+    let spawnX = Math.round(appState.spawnX - NODE_WIDTH / 2);
+    let spawnY = Math.round(appState.spawnY - 20);
+    if (snapEnabled) {
+        spawnX = Math.round(spawnX / GRID_SIZE) * GRID_SIZE;
+        spawnY = Math.round(spawnY / GRID_SIZE) * GRID_SIZE;
+    }
 
     const nodesCopy = { ...appState.currentGraph.nodes };
 
-    if (isMorphing && unconfiguredNode) {
-        spawnX = unconfiguredNode.ui!.x;
-        spawnY = unconfiguredNode.ui!.y;
-        delete nodesCopy[unconfiguredNode.id];
-    } else {
-        const snapEnabled = loadSettings().canvas.snapToGrid;
-        spawnX = Math.round(appState.spawnX - NODE_WIDTH / 2);
-        spawnY = Math.round(appState.spawnY - 20);
-        if (snapEnabled) {
-            spawnX = Math.round(spawnX / GRID_SIZE) * GRID_SIZE;
-            spawnY = Math.round(spawnY / GRID_SIZE) * GRID_SIZE;
-        }
-    }
-
-    let initialTitle = mode.toUpperCase();
-    if (mode === 'composite/input') {
+    let initialTitle = cleanMode.toUpperCase();
+    if (type === 'composite/input') {
         const parentNodeId = appState.activeWorkspaceId.replace('block_editor_', '');
         const parentNode = findNodeStateById(appState.workspaces, parentNodeId);
         const numInputs = parentNode && parentNode.inputs ? Object.keys(parentNode.inputs).length : 0;
         initialTitle = `in${numInputs}`;
-    } else if (mode === 'composite/output') {
+    } else if (type === 'composite/output') {
         const parentNodeId = appState.activeWorkspaceId.replace('block_editor_', '');
         const parentNode = findNodeStateById(appState.workspaces, parentNodeId);
         const numOutputs = parentNode && parentNode.outputs ? Object.keys(parentNode.outputs).length : 0;
         initialTitle = `out${numOutputs}`;
     } else if (isWorkspace) {
-        const wsId = mode.replace('workspace/', '');
+        const wsId = type.replace('workspace/', '');
         const ws = appState.workspaces.find(w => w.id === wsId);
         initialTitle = ws ? ws.name : 'Workspace Node';
     }
 
-    let nodeType = 'node/generic';
-    let nodeMode: NodeMode = mode;
     let initialInputs: Record<string, PinType> | undefined = undefined;
     let initialOutputs: Record<string, PinType> | undefined = undefined;
 
-    if (isBoundary) {
-        nodeType = mode;
-        nodeMode = undefined as any;
-    } else if (isWorkspace) {
-        nodeType = mode;
-        nodeMode = 'formula';
-        const regDef = CustomRegistry[mode];
+    if (isWorkspace) {
+        const regDef = CustomRegistry[type];
+        initialInputs = regDef ? { ...regDef.requires } : {};
+        initialOutputs = regDef ? { ...regDef.provides } : {};
+    } else if (isAction) {
+        const regDef = StandardNodes[type];
         initialInputs = regDef ? { ...regDef.requires } : {};
         initialOutputs = regDef ? { ...regDef.provides } : {};
     }
 
     const newNode = createNodeState({
         id: uniqueId,
-        type: nodeType,
-        mode: nodeMode,
+        type: type,
+        actions: [],
         params: initialParams,
-        inputs: initialInputs ?? ((isMorphing && unconfiguredNode) ? (unconfiguredNode.inputs as any) : undefined),
-        outputs: initialOutputs ?? ((isMorphing && unconfiguredNode) ? (unconfiguredNode.outputs as any) : undefined),
+        inputs: initialInputs ?? {},
+        outputs: initialOutputs ?? {},
         ui: {
             x: spawnX,
             y: spawnY,
@@ -2046,7 +2001,7 @@ export function addNewNodeWithMode(mode: NodeMode) {
         }
     };
 
-    logToTerminal(`Spawned node ${uniqueId} of type 'node/generic' [mode: ${mode}]`, 'system-msg');
+    logToTerminal(`Spawned node ${uniqueId} of type '${type}'`, 'system-msg');
     
     appState.selectedNodeId = uniqueId;
     appState.selectedNodeIds.clear();
@@ -2065,7 +2020,7 @@ export function addNewNodeWithMode(mode: NodeMode) {
         const sx = newNode.ui!.x * appState.viewport.zoom + appState.viewport.x;
         const sy = newNode.ui!.y * appState.viewport.zoom + appState.viewport.y;
 
-        const category = mode === 'delay' || mode === 'state' || mode === 'input' || mode === 'log' ? 'system' : 'node';
+        const category = type.startsWith('system/') ? 'system' : 'node';
         let accentColor = 'var(--accent-cyan)';
         let glowColor = 'var(--accent-cyan-glow)';
         if (category === 'system') {
@@ -2137,19 +2092,6 @@ export function addNewNodeWithMode(mode: NodeMode) {
         updateInspector();
         triggerAutoRun();
     }
-}
-
-/** Convenience wrapper that maps legacy type strings to NodeMode and delegates to addNewNodeWithMode. */
-export function addNewNode(type: string) {
-    let mode: NodeMode = 'formula';
-    if (type === 'system/input') mode = 'input';
-    else if (type === 'system/delay') mode = 'delay';
-    else if (type === 'system/state') mode = 'state';
-    else if (type === 'system/log') mode = 'log';
-    else if (type === 'node/blocks') mode = 'blocks';
-    else if (type === 'node/python') mode = 'python';
-
-    addNewNodeWithMode(mode);
 }
 
 function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {

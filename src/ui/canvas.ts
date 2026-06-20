@@ -2,6 +2,7 @@ import { RenderingContext } from './types.js';
 import { NodeState, Edge, PinType } from '../core/ast.js';
 import { NodeDefinition } from '../registry/types.js';
 import { getNodeInputs, getNodeOutputs } from '../registry/index.js';
+import { appState } from './state.js';
 
 // ============================================================================
 // CANVAS DRAWING CONSTANTS
@@ -42,30 +43,30 @@ export function getNodeHeight(
     resolvedInputs?: Record<string, Record<string, PinType>>, 
     resolvedOutputs?: Record<string, Record<string, PinType>>
 ): number {
-    const numInputs = Object.keys(getNodeInputs(node, resolvedInputs)).length;
-    const numOutputs = Object.keys(getNodeOutputs(node, resolvedOutputs)).length;
+    const numInputs = Object.keys(getNodeInputs(node, resolvedInputs || appState.resolvedInputs)).length;
+    const numOutputs = Object.keys(getNodeOutputs(node, resolvedOutputs || appState.resolvedOutputs)).length;
     const maxRows = Math.max(numInputs, numOutputs, 1);
     return HEADER_HEIGHT + (maxRows * ROW_HEIGHT) + BOTTOM_PADDING;
 }
 
 /** Returns screen coordinates for an input pin at the given index on a node. */
-export function getInputPinPos(node: NodeState, pinIndex: number): { x: number, y: number } {
+export function getInputPinPos(node: NodeState, pinIndex: number, resolvedInputs?: any): { x: number, y: number } {
     const nx = node.ui?.x ?? 0;
     const ny = node.ui?.y ?? 0;
     return {
         x: nx,
-        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT // Pins placed at ny + 60 + pinIndex * 15
+        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT
     };
 }
 
 /** Returns screen coordinates for an output pin at the given index on a node. */
-export function getOutputPinPos(node: NodeState, nodeDef: NodeDefinition | undefined, pinIndex: number): { x: number, y: number } {
+export function getOutputPinPos(node: NodeState, nodeDef: NodeDefinition | undefined, pinIndex: number, resolvedOutputs?: any): { x: number, y: number } {
     const nx = node.ui?.x ?? 0;
     const ny = node.ui?.y ?? 0;
     const nw = node.ui?.width ?? NODE_WIDTH;
     return {
         x: nx + nw,
-        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT // Pins placed at ny + 60 + pinIndex * 15
+        y: ny + HEADER_HEIGHT + 30 + pinIndex * ROW_HEIGHT
     };
 }
 
@@ -218,8 +219,16 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         }
     }
 
+    const isAction = [
+        'formula', 'blocks', 'python', 
+        'system/delay', 'system/state', 'system/log', 
+        'database/table', 'database/filter'
+    ].includes(node.type);
+
     // 2. Draw Card Body (Glassmorphism card - Full size)
-    context.fillStyle = computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)';
+    context.fillStyle = isAction 
+        ? (isLight ? 'rgba(254, 243, 199, 0.95)' : 'rgba(28, 25, 12, 0.92)') // Cream yellow in light theme, warm dark amber in dark theme
+        : (computedStyle.getPropertyValue('--bg-card').trim() || 'rgba(20, 24, 33, 0.85)');
     context.beginPath();
     context.roundRect(x, y, w, h, 10);
     context.fill();
@@ -244,27 +253,34 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
     // Resolve header color gradient based on category and theme
     let headerGrad = context.createLinearGradient(insetX, insetY, insetX + insetW, insetY);
     
-    let startVar = '--node-default-header-start';
-    let endVar = '--node-default-header-end';
-    if (nodeDef?.category === 'math') {
-        startVar = '--node-math-header-start';
-        endVar = '--node-math-header-end';
-    } else if (nodeDef?.category === 'logic') {
-        startVar = '--node-logic-header-start';
-        endVar = '--node-logic-header-end';
-    } else if (nodeDef?.category === 'state') {
-        startVar = '--node-state-header-start';
-        endVar = '--node-state-header-end';
-    } else if (nodeDef?.category === 'database') {
-        startVar = '--node-database-header-start';
-        endVar = '--node-database-header-end';
+    if (isAction) {
+        const headerStart = computedStyle.getPropertyValue('--action-header-start').trim() || 'hsla(45, 100%, 55%, 0.6)';
+        const headerEnd = computedStyle.getPropertyValue('--action-header-end').trim() || 'hsla(45, 100%, 30%, 0.15)';
+        headerGrad.addColorStop(0, headerStart);
+        headerGrad.addColorStop(1, headerEnd);
+    } else {
+        let startVar = '--node-default-header-start';
+        let endVar = '--node-default-header-end';
+        if (nodeDef?.category === 'math') {
+            startVar = '--node-math-header-start';
+            endVar = '--node-math-header-end';
+        } else if (nodeDef?.category === 'logic') {
+            startVar = '--node-logic-header-start';
+            endVar = '--node-logic-header-end';
+        } else if (nodeDef?.category === 'state') {
+            startVar = '--node-state-header-start';
+            endVar = '--node-state-header-end';
+        } else if (nodeDef?.category === 'database') {
+            startVar = '--node-database-header-start';
+            endVar = '--node-database-header-end';
+        }
+        
+        const headerStart = computedStyle.getPropertyValue(startVar).trim() || 'hsla(190, 80%, 30%, 0.4)';
+        const headerEnd = computedStyle.getPropertyValue(endVar).trim() || 'hsla(190, 80%, 15%, 0.1)';
+        
+        headerGrad.addColorStop(0, headerStart);
+        headerGrad.addColorStop(1, headerEnd);
     }
-    
-    const headerStart = computedStyle.getPropertyValue(startVar).trim() || 'hsla(190, 80%, 30%, 0.4)';
-    const headerEnd = computedStyle.getPropertyValue(endVar).trim() || 'hsla(190, 80%, 15%, 0.1)';
-    
-    headerGrad.addColorStop(0, headerStart);
-    headerGrad.addColorStop(1, headerEnd);
     
     context.fillStyle = headerGrad;
     context.fill();
@@ -302,12 +318,10 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         // Draw Inputs (Left side)
         const inputs = Object.entries(getNodeInputs(node, ctx.resolvedInputs));
         inputs.forEach(([pinId, pinType], idx) => {
-            const pos = getInputPinPos(node, idx);
+            const pos = getInputPinPos(node, idx, ctx.resolvedInputs);
             
-            // Check if pin is hovered
             const isPinHovered = ctx.hoveredPin?.nodeId === node.id && ctx.hoveredPin?.pinId === pinId && ctx.hoveredPin?.isInput;
             
-            // Draw pin dot
             context.beginPath();
             context.arc(pos.x, pos.y, isPinHovered ? PIN_RADIUS + 1.5 : PIN_RADIUS, 0, Math.PI * 2);
             context.fillStyle = getPinColor(pinType, computedStyle);
@@ -316,7 +330,6 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
             context.lineWidth = 1.5;
             context.stroke();
 
-            // Label text
             context.fillStyle = isPinHovered ? (isLight ? '#000000' : '#ffffff') : textSecondary;
             context.font = '500 10px "Fira Code", monospace';
             context.textAlign = 'left';
@@ -327,12 +340,10 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         // Draw Outputs (Right side)
         const outputs = Object.entries(getNodeOutputs(node, ctx.resolvedOutputs));
         outputs.forEach(([pinId, pinType], idx) => {
-            const pos = getOutputPinPos(node, nodeDef, idx);
+            const pos = getOutputPinPos(node, nodeDef, idx, ctx.resolvedOutputs);
             
-            // Check if pin is hovered
             const isPinHovered = ctx.hoveredPin?.nodeId === node.id && ctx.hoveredPin?.pinId === pinId && !ctx.hoveredPin?.isInput;
 
-            // Draw pin dot
             context.beginPath();
             context.arc(pos.x, pos.y, isPinHovered ? PIN_RADIUS + 1.5 : PIN_RADIUS, 0, Math.PI * 2);
             context.fillStyle = getPinColor(pinType, computedStyle);
@@ -341,7 +352,6 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
             context.lineWidth = 1.5;
             context.stroke();
 
-            // Label text
             context.fillStyle = isPinHovered ? (isLight ? '#000000' : '#ffffff') : textSecondary;
             context.font = '500 10px "Fira Code", monospace';
             context.textAlign = 'right';
@@ -481,7 +491,7 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
         }
     // 9. Draw Card Border Outline last (only on selection or error state to declutter the canvas)
     const isBoundaryNode = node.type === 'composite/input' || node.type === 'composite/output';
-    if (isSelected || hasError || node.type === 'node/unconfigured' || isBoundaryNode) {
+    if (isSelected || hasError || node.type === 'node/unconfigured' || isBoundaryNode || isAction) {
         context.beginPath();
         context.roundRect(x, y, w, h, 10);
         context.lineWidth = (node.type === 'node/unconfigured' || isBoundaryNode) ? 1.5 : 2.5;
@@ -499,10 +509,17 @@ export function drawNode(ctx: RenderingContext, node: NodeState, nodeDef: NodeDe
             context.strokeStyle = borderGrad;
         } else if (isSelected) {
             context.setLineDash([]);
-            let borderGrad = context.createLinearGradient(x, y, x, y + h);
-            borderGrad.addColorStop(0, isLight ? 'rgba(0, 100, 255, 1.0)' : 'rgba(0, 145, 255, 1.0)');
-            borderGrad.addColorStop(1, isLight ? 'rgba(0, 60, 255, 0.7)' : 'rgba(0, 100, 255, 0.7)');
-            context.strokeStyle = borderGrad;
+            if (isAction) {
+                context.strokeStyle = '#fbbf24'; // Bright selection yellow
+            } else {
+                let borderGrad = context.createLinearGradient(x, y, x, y + h);
+                borderGrad.addColorStop(0, isLight ? 'rgba(0, 100, 255, 1.0)' : 'rgba(0, 145, 255, 1.0)');
+                borderGrad.addColorStop(1, isLight ? 'rgba(0, 60, 255, 0.7)' : 'rgba(0, 100, 255, 0.7)');
+                context.strokeStyle = borderGrad;
+            }
+        } else if (isAction) {
+            context.setLineDash([]);
+            context.strokeStyle = 'rgba(245, 158, 11, 0.35)'; // Amber outline
         }
         context.stroke();
         context.setLineDash([]);

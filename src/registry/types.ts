@@ -14,10 +14,27 @@
 export type NodeFunction = (
     inputs: Record<string, unknown>, 
     params: Record<string, unknown>,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    context?: { actions?: ReadonlyArray<any> }
 ) => Promise<Record<string, unknown>> | Record<string, unknown>;
 
 import { PinType } from '../core/ast.js';
+
+export interface NodeActionContext {
+    readonly pushToHistory: () => void;
+    readonly commitPreEditToHistory: () => void;
+    readonly triggerAutoRun: () => void;
+    readonly updateInspector: () => void;
+    readonly logToTerminal: (msg: string, type?: 'system-msg' | 'error' | 'user-input') => void;
+    readonly updateNodeParam: (nodeId: string, paramKey: string, val: any) => void;
+    readonly appState: any;
+}
+
+export interface NodeAction {
+    readonly id: string;
+    readonly label: string;
+    readonly handler: (node: { id: string; params: Record<string, any>; type: string }, context: NodeActionContext) => void | Promise<void>;
+}
 
 /**
  * Metadata surrounding a node executor, placing it within the strict ecosystem taxonomy.
@@ -41,6 +58,9 @@ export interface NodeDefinition {
     dynamicInputs?: boolean;
     /** Indicates if the node type supports custom output slots added by the user */
     dynamicOutputs?: boolean;
+
+    /** Interactive buttons or callbacks that can be run on the node */
+    readonly actions?: ReadonlyArray<NodeAction>;
 
     /** The pure execution block */
     execute: NodeFunction;

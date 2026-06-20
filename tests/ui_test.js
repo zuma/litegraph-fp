@@ -60,6 +60,8 @@ async function runE2ETests() {
     const url = `http://localhost:${port}/`;
     console.log(`📡 Navigating to ${url}...`);
     await page.goto(url, { waitUntil: 'networkidle' });
+    await page.evaluate(() => localStorage.clear());
+    await page.reload({ waitUntil: 'networkidle' });
 
     // Step 1: Verify title
     const title = await page.title();
@@ -237,7 +239,7 @@ async function runE2ETests() {
     }
 
     const subNodesCount = await page.evaluate(() => {
-        const blockEditor = appState.workspaces.find(w => w.id === 'block_editor_add_4012');
+        const blockEditor = appState.workspaces.find(w => w.id === 'block_editor_node_4012');
         if (!blockEditor) return 0;
         return Object.values(blockEditor.graph.nodes).length;
     });
@@ -268,8 +270,14 @@ async function runE2ETests() {
 
     const tabSource = page.locator('.workspace-tab').first();
     const tabTarget = page.locator('.workspace-tab').nth(1);
-
-    await tabSource.dragTo(tabTarget);
+    const srcBox = await tabSource.boundingBox();
+    const tgtBox = await tabTarget.boundingBox();
+    if (srcBox && tgtBox) {
+        await page.mouse.move(srcBox.x + srcBox.width / 2, srcBox.y + srcBox.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(tgtBox.x + tgtBox.width * 0.75, tgtBox.y + tgtBox.height / 2, { steps: 10 });
+        await page.mouse.up();
+    }
     await page.waitForTimeout(500);
 
     const tabsAfterDrag = await page.$$eval('.workspace-tab', tabs => tabs.map(t => t.textContent.trim()));
@@ -286,7 +294,7 @@ async function runE2ETests() {
     // Step 8.7: Test edge detaching behavior on dragging from a connected input pin
     console.log("🔌 Step 8.7: Testing edge detaching from connected input pin...");
     const pinCoords = await page.evaluate(() => {
-        const node = appState.currentGraph.nodes['multiply_8930'];
+        const node = appState.currentGraph.nodes['action_8930'];
         const worldPos = getInputPinCoords(node, 'in0');
         const canvasEl = document.getElementById('graph-canvas');
         const rect = canvasEl.getBoundingClientRect();
@@ -304,7 +312,7 @@ async function runE2ETests() {
     await page.waitForTimeout(200);
 
     const edgeExists = await page.evaluate(() => {
-        return appState.currentGraph.edges.some(e => e.targetNodeId === 'multiply_8930' && e.targetPinId === 'in0');
+        return appState.currentGraph.edges.some(e => e.targetNodeId === 'action_8930' && e.targetPinId === 'in0');
     });
     console.log(`🔌 Is edge present in state? ${edgeExists}`);
     if (edgeExists) {

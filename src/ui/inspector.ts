@@ -1,9 +1,10 @@
-import { StandardNodes, getNodeInputs, getNodeOutputs, getNodeMode, getDefaultFormulaForType, getModeBaseInputs, getModeBaseOutputs } from '../registry/index.js';
-import { NodeMode, NodeState, PinType } from '../core/ast.js';
+import { StandardNodes, getNodeInputs, getNodeOutputs } from '../registry/index.js';
+import { getDefaultFormulaForType } from '../engine/expressions.js';
+import { NodeState, PinType } from '../core/ast.js';
 import { NodeDefinition } from '../registry/types.js';
-import { appState } from './state.js';
+import { appState, syncContextState } from './state.js';
 import { pushToHistory, undoStack, redoStack, updateUndoRedoButtons } from './history.js';
-import { triggerAutoRun } from './execution.js';
+import { triggerAutoRun, logToTerminal } from './execution.js';
 
 // ============================================================================
 // HELPER UTILITIES
@@ -80,7 +81,7 @@ export function updateInspector() {
     if (totalSelected === 0) {
         content.classList.add('hidden');
         placeholder.classList.remove('hidden');
-        placeholder.textContent = 'Select a node to view properties & edit inputs';
+        placeholder.textContent = 'Select an item to view properties';
         document.getElementById('btn-add-input')?.classList.add('hidden');
         document.getElementById('btn-add-output')?.classList.add('hidden');
         if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
@@ -129,7 +130,7 @@ export function updateInspector() {
     if (!appState.selectedNodeId || !appState.currentGraph.nodes[appState.selectedNodeId]) {
         content.classList.add('hidden');
         placeholder.classList.remove('hidden');
-        placeholder.textContent = 'Select a node to view properties & edit inputs';
+        placeholder.textContent = 'Select an item to view properties';
         document.getElementById('btn-add-input')?.classList.add('hidden');
         document.getElementById('btn-add-output')?.classList.add('hidden');
         if (shouldAutoCollapse && typeof (window as any).setSidebarCollapsed === 'function') {
@@ -173,37 +174,10 @@ export function updateInspector() {
             handleAddOutputPin(node.id);
         });
     }
-    // Node mode selector configuration
+    // Hide node mode selector row completely
     const modeRow = document.getElementById('inspect-node-mode-row');
-    const modeSelect = document.getElementById('inspect-node-mode') as HTMLSelectElement | null;
-    if (modeRow && modeSelect) {
-        modeRow.classList.remove('hidden');
-        modeSelect.replaceChildren();
-        const modes: { value: NodeMode; label: string }[] = [
-            { value: 'formula', label: 'Math Formula' },
-            { value: 'blocks', label: 'Blocks Expression' },
-            { value: 'python', label: 'Python Script' },
-            { value: 'delay', label: 'Time Delay' },
-            { value: 'state', label: 'State Loop' },
-            { value: 'input', label: 'Input Value' },
-            { value: 'log', label: 'Console Log' }
-        ];
-        modes.forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m.value;
-            opt.textContent = m.label;
-            modeSelect.appendChild(opt);
-        });
-        
-        const activeMode = getNodeMode(node);
-        modeSelect.value = activeMode;
-        
-        const newSelect = modeSelect.cloneNode(true) as HTMLSelectElement;
-        modeSelect.parentNode?.replaceChild(newSelect, modeSelect);
-        newSelect.value = activeMode;
-        newSelect.addEventListener('change', () => {
-            handleSwitchNodeMode(node.id, newSelect.value as NodeMode);
-        });
+    if (modeRow) {
+        modeRow.classList.add('hidden');
     }
     // Node details textContent insertion
     const nodeIdText = document.getElementById('inspect-node-id');
@@ -236,209 +210,21 @@ export function updateInspector() {
         });
     }
 
-    // 0.5 Rebuild Logic Editor Container
+    // 0.5 Logic Container builds parameter editors directly if the selected node is an Action Node
     const logicContainer = document.getElementById('inspect-node-logic-container');
     if (logicContainer) {
         logicContainer.replaceChildren();
-        logicContainer.classList.add('hidden');
+        const isActionType = [
+            'formula', 'blocks', 'python', 
+            'system/delay', 'system/state', 'system/log', 
+            'database/table', 'database/filter'
+        ].includes(node.type);
 
-        const mode = getNodeMode(node);
-        if (mode === 'formula') {
+        if (isActionType) {
             logicContainer.classList.remove('hidden');
-
-            const row = document.createElement('div');
-            row.className = 'inspector-field-group';
-            row.style.flexDirection = 'column';
-            row.style.alignItems = 'stretch';
-            row.style.gap = '6px';
-
-            const label = document.createElement('span');
-            label.className = 'inspector-label';
-            label.textContent = 'Formula';
-            row.appendChild(label);
-
-            const formulaInput = document.createElement('input');
-            formulaInput.type = 'text';
-            formulaInput.className = 'input-field';
-            formulaInput.style.width = '100%';
-            formulaInput.value = node.params.formula ?? getDefaultFormulaForType(node.type);
-            formulaInput.autocomplete = 'off';
-            formulaInput.dataset.formulaInput = 'true';
-            setupAutocomplete(formulaInput, () => {
-                const inputPins = Object.keys(getNodeInputs(node, appState.resolvedInputs));
-                const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
-                const mathHelpers = ['sin', 'cos', 'abs', 'round', 'min', 'max', 'pi', 'e', 'value'];
-                return Array.from(new Set([...inputPins, ...outputPins, ...mathHelpers]));
-            });
-
-            formulaInput.addEventListener('focus', () => {
-                appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
-            });
-
-            formulaInput.addEventListener('input', () => {
-                if (appState.preEditGraphState) {
-                    commitPreEditToHistory();
-                }
-                updateNodeFormula(node.id, formulaInput.value);
-            });
-            row.appendChild(formulaInput);
-            logicContainer.appendChild(row);
-        } else if (mode === 'blocks') {
-            logicContainer.classList.remove('hidden');
-
-            const label = document.createElement('span');
-            label.className = 'inspector-label';
-            label.textContent = 'Blocks Logic';
-            logicContainer.appendChild(label);
-
-            const blocksList = node.params.blocks ?? [];
-            blocksList.forEach((block, idx) => {
-                const blockRow = document.createElement('div');
-                blockRow.style.display = 'flex';
-                blockRow.style.alignItems = 'center';
-                blockRow.style.gap = '6px';
-                blockRow.style.marginBottom = '4px';
-
-                const setLabel = document.createElement('span');
-                setLabel.textContent = 'Set';
-                setLabel.style.fontSize = '11px';
-                setLabel.style.color = 'var(--text-muted)';
-                blockRow.appendChild(setLabel);
-
-                const targetInput = document.createElement('input');
-                targetInput.type = 'text';
-                targetInput.className = 'input-field';
-                targetInput.value = block.targetVar;
-                targetInput.style.width = '50px';
-                targetInput.style.padding = '3px 6px';
-                targetInput.style.fontSize = '11px';
-                targetInput.style.fontFamily = 'var(--font-mono)';
-                targetInput.dataset.blockId = block.id;
-                targetInput.dataset.blockField = 'targetVar';
-                targetInput.addEventListener('change', () => {
-                    updateBlockField(node.id, block.id, 'targetVar', targetInput.value);
-                });
-                setupAutocomplete(targetInput, () => {
-                    const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
-                    return Array.from(new Set([...outputPins, 'out', 'temp', 'result', 'value']));
-                });
-                blockRow.appendChild(targetInput);
-
-                const eqLabel = document.createElement('span');
-                eqLabel.textContent = '=';
-                eqLabel.style.fontSize = '11px';
-                eqLabel.style.color = 'var(--text-muted)';
-                blockRow.appendChild(eqLabel);
-
-                const op1Input = document.createElement('input');
-                op1Input.type = 'text';
-                op1Input.className = 'input-field';
-                op1Input.value = block.operand1;
-                op1Input.style.width = '50px';
-                op1Input.style.padding = '3px 6px';
-                op1Input.style.fontSize = '11px';
-                op1Input.style.fontFamily = 'var(--font-mono)';
-                op1Input.dataset.blockId = block.id;
-                op1Input.dataset.blockField = 'operand1';
-                op1Input.addEventListener('change', () => {
-                    updateBlockField(node.id, block.id, 'operand1', op1Input.value);
-                });
-                
-                const getOperandSuggestions = () => {
-                    const inputPins = Object.keys(getNodeInputs(node, appState.resolvedInputs));
-                    const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
-                    const priorVars = (node.params.blocks || []).slice(0, idx).map(b => b.targetVar.trim()).filter(Boolean);
-                    const mathHelpers = ['sin', 'cos', 'abs', 'round', 'min', 'max', 'pi', 'e', 'value'];
-                    return Array.from(new Set([...inputPins, ...outputPins, ...priorVars, ...mathHelpers]));
-                };
-                setupAutocomplete(op1Input, getOperandSuggestions);
-                blockRow.appendChild(op1Input);
-
-                const opSelect = document.createElement('select');
-                opSelect.className = 'input-field';
-                opSelect.style.width = '45px';
-                opSelect.style.padding = '2px';
-                opSelect.style.fontSize = '11px';
-                const ops = ['+', '-', '*', '/', 'and', 'or', '=='];
-                ops.forEach(op => {
-                    const opt = document.createElement('option');
-                    opt.value = op;
-                    opt.textContent = op;
-                    opSelect.appendChild(opt);
-                });
-                opSelect.value = block.operator;
-                opSelect.addEventListener('change', () => {
-                    updateBlockField(node.id, block.id, 'operator', opSelect.value);
-                });
-                blockRow.appendChild(opSelect);
-
-                const op2Input = document.createElement('input');
-                op2Input.type = 'text';
-                op2Input.className = 'input-field';
-                op2Input.value = block.operand2;
-                op2Input.style.width = '50px';
-                op2Input.style.padding = '3px 6px';
-                op2Input.style.fontSize = '11px';
-                op2Input.style.fontFamily = 'var(--font-mono)';
-                op2Input.dataset.blockId = block.id;
-                op2Input.dataset.blockField = 'operand2';
-                op2Input.addEventListener('change', () => {
-                    updateBlockField(node.id, block.id, 'operand2', op2Input.value);
-                });
-                setupAutocomplete(op2Input, getOperandSuggestions);
-                blockRow.appendChild(op2Input);
-
-                const btnDelBlock = document.createElement('button');
-                btnDelBlock.className = 'btn-delete-pin';
-                btnDelBlock.textContent = '×';
-                btnDelBlock.title = 'Delete Block';
-                btnDelBlock.addEventListener('click', () => {
-                    deleteBlockStatement(node.id, block.id);
-                });
-                blockRow.appendChild(btnDelBlock);
-
-                logicContainer.appendChild(blockRow);
-            });
-
-            const btnAddBlock = document.createElement('button');
-            btnAddBlock.className = 'btn-add-pin';
-            btnAddBlock.textContent = '+ Add Block';
-            btnAddBlock.style.marginTop = '4px';
-            btnAddBlock.addEventListener('click', () => {
-                addBlockStatement(node.id);
-            });
-            logicContainer.appendChild(btnAddBlock);
-        } else if (mode === 'python') {
-            logicContainer.classList.remove('hidden');
-
-            const label = document.createElement('span');
-            label.className = 'inspector-label';
-            label.textContent = 'Python Code';
-            logicContainer.appendChild(label);
-
-            const currentVal = node.params.code ?? 'def execute(inputs):\n    return { "out": 0 }';
-
-            const textArea = document.createElement('textarea');
-            textArea.className = 'input-field';
-            textArea.style.fontFamily = '"Fira Code", monospace';
-            textArea.style.minHeight = '180px';
-            textArea.style.fontSize = '11px';
-            textArea.style.width = '100%';
-            textArea.style.resize = 'vertical';
-            textArea.value = currentVal.toString();
-            textArea.autocomplete = 'off';
-
-            textArea.addEventListener('focus', () => {
-                appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
-            });
-
-            textArea.addEventListener('input', () => {
-                if (appState.preEditGraphState) {
-                    commitPreEditToHistory();
-                }
-                updateNodeParam(node.id, 'code', textArea.value);
-            });
-            logicContainer.appendChild(textArea);
+            renderActionNodeEditor(logicContainer, node);
+        } else {
+            logicContainer.classList.add('hidden');
         }
     }
 
@@ -454,8 +240,6 @@ export function updateInspector() {
     if (outputsContainer && nodeDef) {
         outputsContainer.replaceChildren();
 
-        const mode = getNodeMode(node);
-        const baseOutputs = getModeBaseOutputs(mode, node.type);
         const provides = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
 
         if (provides.length > 0) {
@@ -488,12 +272,7 @@ export function updateInspector() {
         provides.forEach(pinId => {
             const row = document.createElement('div');
             row.className = 'pin-status-row';
-            const isActive = pinId in baseOutputs;
-            if (!isActive) {
-                row.style.opacity = '0.5';
-                row.style.filter = 'grayscale(1)';
-                row.title = `This output is inactive in '${mode}' mode.`;
-            }
+            // All outputs are always active
             row.draggable = true;
 
             row.addEventListener('dragstart', (e) => {
@@ -559,14 +338,9 @@ export function updateInspector() {
             // Column 2: SRC
             const srcSpan = document.createElement('span');
             srcSpan.className = 'pin-col-text';
-            if (!isActive) {
-                srcSpan.className += ' inactive';
-                srcSpan.textContent = '—';
-            } else {
-                srcSpan.className += ' active-src';
-                srcSpan.textContent = flowFlow.src;
-                srcSpan.title = flowFlow.src;
-            }
+            srcSpan.className += ' active-src';
+            srcSpan.textContent = flowFlow.src;
+            srcSpan.title = flowFlow.src;
             row.appendChild(srcSpan);
 
             // Column 3: Value
@@ -581,10 +355,7 @@ export function updateInspector() {
             // Column 4: DEST
             const destSpan = document.createElement('span');
             destSpan.className = 'pin-col-text';
-            if (!isActive) {
-                destSpan.className += ' inactive';
-                destSpan.textContent = '—';
-            } else if (isConnected) {
+            if (isConnected) {
                 destSpan.className += ' active-dest';
                 destSpan.textContent = flowFlow.dest;
                 destSpan.title = flowFlow.dest;
@@ -602,6 +373,91 @@ export function updateInspector() {
             noOutputs.style.color = 'var(--text-muted)';
             noOutputs.textContent = 'None';
             outputsContainer.appendChild(noOutputs);
+        }
+    }
+
+    // 2.5 Rebuild Actions Container
+    const actionsHeader = document.getElementById('inspect-actions-header-row');
+    const actionsContainer = document.getElementById('inspect-actions-container');
+    if (actionsHeader && actionsContainer) {
+        actionsContainer.replaceChildren();
+        const actions = nodeDef?.actions;
+        if (actions && actions.length > 0) {
+            actionsHeader.classList.remove('hidden');
+            actionsContainer.classList.remove('hidden');
+            
+            actions.forEach(action => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.style.width = '100%';
+                btn.style.padding = '8px';
+                btn.style.fontSize = '12px';
+                btn.style.borderRadius = '6px';
+                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                btn.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                btn.style.color = 'var(--text-light)';
+                btn.style.cursor = 'pointer';
+                btn.style.transition = 'background-color 0.2s, border-color 0.2s';
+                btn.textContent = action.label;
+
+                btn.addEventListener('mouseenter', () => {
+                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                    btn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                });
+                btn.addEventListener('mouseleave', () => {
+                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                    btn.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                });
+
+                btn.addEventListener('click', async () => {
+                    btn.disabled = true;
+                    const oldText = btn.textContent;
+                    btn.textContent = 'Executing...';
+                    try {
+                        const ctx = {
+                            pushToHistory,
+                            commitPreEditToHistory,
+                            triggerAutoRun,
+                            updateInspector,
+                            logToTerminal,
+                            updateNodeParam: (nId: string, k: string, val: any) => {
+                                const targetNode = appState.currentGraph.nodes[nId];
+                                if (targetNode) {
+                                    appState.currentGraph = {
+                                        ...appState.currentGraph,
+                                        nodes: {
+                                            ...appState.currentGraph.nodes,
+                                            [nId]: {
+                                                ...targetNode,
+                                                params: {
+                                                    ...targetNode.params,
+                                                    [k]: val
+                                                }
+                                            }
+                                        }
+                                    };
+                                    syncContextState();
+                                }
+                            },
+                            appState
+                        };
+                        await action.handler({
+                            id: node.id,
+                            params: node.params,
+                            type: node.type
+                        }, ctx);
+                    } catch (e: any) {
+                        logToTerminal(`Action error: ${e.message}`, 'error');
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = oldText;
+                    }
+                });
+                actionsContainer.appendChild(btn);
+            });
+        } else {
+            actionsHeader.classList.add('hidden');
+            actionsContainer.classList.add('hidden');
         }
     }
 
@@ -637,13 +493,119 @@ export function updateInspector() {
     }
 }
 
-export function updateNodeParam(nodeId: string, paramKey: string, value: any) {
+function getDefaultParamsForAction(type: string): Record<string, any> {
+    switch (type) {
+        case 'formula': return { formula: 'a + b' };
+        case 'blocks': return { blocks: [{ id: `b_${Math.random().toString(36).substr(2, 4)}`, targetVar: 'out', operand1: 'a', operator: '+', operand2: 'b' }] };
+        case 'python': return { code: 'def execute(inputs):\n    # inputs: dict\n    # return dict\n    return { "out": inputs.get("a", 0) }' };
+        case 'system/delay': return { ms: 1000 };
+        case 'system/state': return { defaultValue: 0 };
+        case 'system/input': return { value: '' };
+        case 'database/table': return { rows: [] };
+        case 'database/filter': return { column: '', operator: '=', value: '' };
+        default: return {};
+    }
+}
+
+export function addActionToNode(nodeId: string, actionType: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+    
+    pushToHistory();
+    
+    const newAction = {
+        id: `act_${Date.now().toString().slice(-4)}_${Math.floor(Math.random() * 1000)}`,
+        type: actionType,
+        params: getDefaultParamsForAction(actionType)
+    };
+    
+    const updatedActions = [...(node.actions || []), newAction];
+    const updatedNode = { ...node, actions: updatedActions };
+    
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: updatedNode
+        }
+    };
+    
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function deleteActionFromNode(nodeId: string, actionId: string) {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+    
+    pushToHistory();
+    
+    const updatedActions = (node.actions || []).filter(a => a.id !== actionId);
+    const updatedNode = { ...node, actions: updatedActions };
+    
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: updatedNode
+        }
+    };
+    
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function moveActionInNode(nodeId: string, actionId: string, direction: 'up' | 'down') {
+    const node = appState.currentGraph.nodes[nodeId];
+    if (!node) return;
+    
+    const actions = [...(node.actions || [])];
+    const idx = actions.findIndex(a => a.id === actionId);
+    if (idx === -1) return;
+    
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= actions.length) return;
+    
+    pushToHistory();
+    
+    const temp = actions[idx];
+    actions[idx] = actions[targetIdx];
+    actions[targetIdx] = temp;
+    
+    const updatedNode = { ...node, actions };
+    
+    appState.currentGraph = {
+        ...appState.currentGraph,
+        nodes: {
+            ...appState.currentGraph.nodes,
+            [nodeId]: updatedNode
+        }
+    };
+    
+    updateInspector();
+    if (appState.renderingContext) {
+        appState.renderingContext.needsRedraw = true;
+    }
+    triggerAutoRun();
+}
+
+export function updateNodeParam(nodeId: string, actionId: string | undefined, paramKey: string, value: any) {
     const node = appState.currentGraph.nodes[nodeId];
     if (!node) return;
 
-    // Immutable update
-    const updatedParams = { ...node.params, [paramKey]: value };
-    const updatedNode = { ...node, params: updatedParams };
+    const updatedNode = {
+        ...node,
+        params: {
+            ...node.params,
+            [paramKey]: value
+        }
+    };
     appState.currentGraph = {
         ...appState.currentGraph,
         nodes: {
@@ -793,65 +755,15 @@ export function handleDeleteOutputPin(nodeId: string, pinId: string) {
 }
 
 
-
-export function handleSwitchNodeMode(nodeId: string, newMode: NodeMode) {
-    const node = appState.currentGraph.nodes[nodeId];
-    if (!node) return;
-
-    pushToHistory();
-
-    const initialParams: Record<string, any> = {};
-    if (newMode === 'formula') {
-        initialParams.formula = 'in0 + in1';
-    } else if (newMode === 'blocks') {
-        initialParams.blocks = [
-            { id: `b_${Math.random().toString(36).substr(2, 4)}`, targetVar: 'out0', operand1: 'in0', operator: '+', operand2: 'in1' }
-        ];
-    } else if (newMode === 'python') {
-        initialParams.code = 'def execute(inputs):\n    # inputs: dict\n    # return dict\n    return { "out0": inputs.get("in0", 0) + inputs.get("in1", 0) }';
-    } else if (newMode === 'delay') {
-        initialParams.delayMs = 1000;
-    } else if (newMode === 'state') {
-        initialParams.defaultValue = 0;
-    } else if (newMode === 'input') {
-        initialParams.value = '';
-    }
-
-    let newType = 'node/generic';
-    const tempNode = { ...node, type: newType, mode: newMode, params: initialParams };
-    const nextInputs = getNodeInputs(tempNode);
-    const nextOutputs = getNodeOutputs(tempNode);
-
-    const updatedEdges = appState.currentGraph.edges.filter(edge => {
-        if (edge.sourceNodeId === nodeId && !(edge.sourcePinId in nextOutputs)) return false;
-        if (edge.targetNodeId === nodeId && !(edge.targetPinId in nextInputs)) return false;
-        return true;
-    });
-
-    appState.currentGraph = {
-        ...appState.currentGraph,
-        nodes: {
-            ...appState.currentGraph.nodes,
-            [nodeId]: tempNode
-        },
-        edges: updatedEdges
-    };
-
-    updateInspector();
-    if (appState.renderingContext) {
-        appState.renderingContext.needsRedraw = true;
-    }
-    triggerAutoRun();
-}
-
 export function updateNodeFormula(nodeId: string, formula: string) {
     const node = appState.currentGraph.nodes[nodeId];
     if (!node) return;
 
     let newType = node.type;
     if (node.type === 'node/unconfigured') {
-        newType = 'node/generic';
+        newType = 'node';
     }
+
     const tempNode = { ...node, type: newType, params: { ...node.params, formula } };
     const nextInputs = getNodeInputs(tempNode);
 
@@ -876,10 +788,10 @@ export function updateNodeFormula(nodeId: string, formula: string) {
 
 export function updateBlockField(nodeId: string, blockId: string, field: string, value: any) {
     const node = appState.currentGraph.nodes[nodeId];
-    if (!node || !node.params.blocks) return;
+    if (!node || !(node.params as any).blocks) return;
 
     pushToHistory();
-    const updatedBlocks = node.params.blocks.map(b => {
+    const updatedBlocks = (node.params as any).blocks.map((b: any) => {
         if (b.id === blockId) {
             return { ...b, [field]: value };
         }
@@ -888,8 +800,9 @@ export function updateBlockField(nodeId: string, blockId: string, field: string,
 
     let newType = node.type;
     if (node.type === 'node/unconfigured') {
-        newType = 'node/generic';
+        newType = 'node';
     }
+
     const tempNode = { ...node, type: newType, params: { ...node.params, blocks: updatedBlocks } };
     const nextInputs = getNodeInputs(tempNode);
 
@@ -925,7 +838,12 @@ export function addBlockStatement(nodeId: string) {
         operator: '+' as const,
         operand2: '0'
     };
-    const updatedBlocks = [...(node.params.blocks || []), newBlock];
+
+    let newType = node.type;
+    if (node.type === 'node/unconfigured') {
+        newType = 'node';
+    }
+    const blocksList = (node.params as any).blocks || [];
 
     appState.currentGraph = {
         ...appState.currentGraph,
@@ -933,7 +851,8 @@ export function addBlockStatement(nodeId: string) {
             ...appState.currentGraph.nodes,
             [nodeId]: {
                 ...node,
-                params: { ...node.params, blocks: updatedBlocks }
+                type: newType,
+                params: { ...node.params, blocks: [...blocksList, newBlock] }
             }
         }
     };
@@ -946,10 +865,10 @@ export function addBlockStatement(nodeId: string) {
 
 export function deleteBlockStatement(nodeId: string, blockId: string) {
     const node = appState.currentGraph.nodes[nodeId];
-    if (!node || !node.params.blocks) return;
+    if (!node || !(node.params as any).blocks) return;
 
     pushToHistory();
-    const updatedBlocks = node.params.blocks.filter(b => b.id !== blockId);
+    const updatedBlocks = (node.params as any).blocks.filter((b: any) => b.id !== blockId);
 
     const tempNode = { ...node, params: { ...node.params, blocks: updatedBlocks } };
     const nextInputs = getNodeInputs(tempNode);
@@ -974,6 +893,18 @@ export function deleteBlockStatement(nodeId: string, blockId: string) {
     triggerAutoRun();
 }
 
+function getActionParamValue(node: NodeState, pinId: string): { actionId: string | undefined; value: any } {
+    for (const action of node.actions || []) {
+        if (action.params && action.params[pinId] !== undefined) {
+            return { actionId: action.id, value: action.params[pinId] };
+        }
+    }
+    if (node.params && node.params[pinId] !== undefined) {
+        return { actionId: undefined, value: node.params[pinId] };
+    }
+    return { actionId: undefined, value: '' };
+}
+
 function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, nodeDef: NodeDefinition | undefined) {
     const requires = Object.entries(getNodeInputs(node, appState.resolvedInputs)).filter(([pinId]) => pinId !== 'code');
     if (requires.length === 0) {
@@ -985,8 +916,6 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
         return;
     }
 
-    const mode = getNodeMode(node);
-    const baseInputs = getModeBaseInputs(mode, node);
     const incomingEdges = appState.currentGraph.edges.filter(e => e.targetNodeId === node.id);
 
     // Render Table Header
@@ -1019,12 +948,7 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
         const isConnected = incomingEdges.some(e => e.targetPinId === pinId);
         const row = document.createElement('div');
         row.className = 'pin-status-row';
-        const isActive = pinId in baseInputs;
-        if (!isActive) {
-            row.style.opacity = '0.5';
-            row.style.filter = 'grayscale(1)';
-            row.title = `This input is inactive in '${mode}' mode.`;
-        }
+        // All inputs are always active
         row.draggable = true;
 
         row.addEventListener('dragstart', (e) => {
@@ -1087,10 +1011,7 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
         // Column 2: SRC
         const srcSpan = document.createElement('span');
         srcSpan.className = 'pin-col-text';
-        if (!isActive) {
-            srcSpan.className += ' inactive';
-            srcSpan.textContent = '—';
-        } else if (isConnected) {
+        if (isConnected) {
             srcSpan.className += ' active-src';
             srcSpan.textContent = flowFlow.src;
             srcSpan.title = flowFlow.src;
@@ -1111,16 +1032,8 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
             dashSpan.textContent = '—';
             valCol.appendChild(dashSpan);
         } else {
-            const currentVal = node.params[pinId] ?? '';
-            if (!isActive) {
-                const textInput = document.createElement('input');
-                textInput.type = 'text';
-                textInput.className = 'input-field';
-                textInput.value = currentVal.toString();
-                textInput.disabled = true;
-                textInput.style.opacity = '0.5';
-                valCol.appendChild(textInput);
-            } else if (pinType === 'boolean') {
+            const { actionId, value: currentVal } = getActionParamValue(node, pinId);
+            if (pinType === 'boolean') {
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.checked = !!currentVal;
@@ -1129,14 +1042,14 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
                 checkbox.style.cursor = 'pointer';
                 checkbox.addEventListener('change', () => {
                     pushToHistory();
-                    updateNodeParam(node.id, pinId, checkbox.checked);
+                    updateNodeParam(node.id, actionId, pinId, checkbox.checked);
                 });
                 valCol.appendChild(checkbox);
             } else {
                 const textInput = document.createElement('input');
                 textInput.type = pinType === 'number' ? 'number' : 'text';
                 textInput.className = 'input-field';
-                textInput.value = currentVal.toString();
+                textInput.value = (currentVal ?? '').toString();
                 textInput.autocomplete = 'off';
                 textInput.dataset.pinId = pinId;
                 
@@ -1154,7 +1067,7 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
                         parsedVal = parseFloat(textInput.value);
                         if (isNaN(parsedVal)) parsedVal = 0;
                     }
-                    updateNodeParam(node.id, pinId, parsedVal);
+                    updateNodeParam(node.id, actionId, pinId, parsedVal);
                 });
                 valCol.appendChild(textInput);
             }
@@ -1164,14 +1077,9 @@ function renderInputPinsList(paramsContainer: HTMLElement, node: NodeState, node
         // Column 4: DEST
         const destSpan = document.createElement('span');
         destSpan.className = 'pin-col-text';
-        if (!isActive) {
-            destSpan.className += ' inactive';
-            destSpan.textContent = '—';
-        } else {
-            destSpan.className += ' active-dest';
-            destSpan.textContent = flowFlow.dest;
-            destSpan.title = flowFlow.dest;
-        }
+        destSpan.className += ' active-dest';
+        destSpan.textContent = flowFlow.dest;
+        destSpan.title = flowFlow.dest;
         row.appendChild(destSpan);
 
         paramsContainer.appendChild(row);
@@ -1367,21 +1275,20 @@ export function setupAutocomplete(input: HTMLInputElement, getSuggestions: () =>
 }
 
 function getInputPinFlow(node: NodeState, pinId: string): { src: string; dest: string } {
-    const mode = getNodeMode(node);
     let dest = '—';
-    if (mode === 'formula') {
+    if (node.type === 'formula') {
         const formula = (node.params.formula ?? '').toString();
         const regex = new RegExp(`\\b${pinId}\\b`);
         if (regex.test(formula)) {
             dest = 'FORMULA';
         }
-    } else if (mode === 'blocks') {
-        const blocks = node.params.blocks ?? [];
+    } else if (node.type === 'blocks') {
+        const blocks = (node.params.blocks ?? []) as any[];
         const isUsed = blocks.some((b: any) => b.operand1 === pinId || b.operand2 === pinId || b.targetVar === pinId);
         if (isUsed) {
             dest = 'BLOCKS';
         }
-    } else if (mode === 'python') {
+    } else if (node.type === 'python') {
         const code = (node.params.code ?? '').toString();
         if (code.includes(pinId)) {
             dest = 'PYTHON';
@@ -1401,13 +1308,226 @@ function getInputPinFlow(node: NodeState, pinId: string): { src: string; dest: s
     return { src, dest };
 }
 
+/** Renders parameter/logic editor for action nodes directly in logicContainer */
+function renderActionNodeEditor(container: HTMLElement, node: NodeState) {
+    const card = document.createElement('div');
+    card.className = 'action-card';
+    card.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+    card.style.borderRadius = '8px';
+    card.style.backgroundColor = 'rgba(255, 255, 255, 0.02)';
+    card.style.marginBottom = '12px';
+    card.style.padding = '10px';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.gap = '8px';
+
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.05)';
+    header.style.paddingBottom = '6px';
+
+    const actionTitle = document.createElement('span');
+    actionTitle.style.fontWeight = '600';
+    actionTitle.style.fontSize = '11px';
+    actionTitle.style.color = 'var(--text-light)';
+    actionTitle.style.textTransform = 'uppercase';
+    actionTitle.textContent = `${node.type.replace('system/', '')} parameters`;
+    header.appendChild(actionTitle);
+    card.appendChild(header);
+
+    const body = document.createElement('div');
+    body.style.display = 'flex';
+    body.style.flexDirection = 'column';
+    body.style.gap = '6px';
+
+    if (node.type === 'formula') {
+        const formulaInput = document.createElement('input');
+        formulaInput.type = 'text';
+        formulaInput.className = 'input-field';
+        formulaInput.style.width = '100%';
+        formulaInput.value = ((node.params as any).formula ?? 'a + b') as string;
+        formulaInput.autocomplete = 'off';
+        formulaInput.dataset.formulaInput = 'true';
+
+        setupAutocomplete(formulaInput, () => {
+            const inputPins = Object.keys(getNodeInputs(node, appState.resolvedInputs));
+            const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
+            const mathHelpers = ['sin', 'cos', 'abs', 'round', 'min', 'max', 'pi', 'e', 'value'];
+            return Array.from(new Set([...inputPins, ...outputPins, ...mathHelpers]));
+        });
+
+        formulaInput.addEventListener('focus', () => {
+            appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
+        });
+        formulaInput.addEventListener('input', () => {
+            if (appState.preEditGraphState) {
+                commitPreEditToHistory();
+            }
+            updateNodeFormula(node.id, formulaInput.value);
+        });
+        body.appendChild(formulaInput);
+    } else if (node.type === 'blocks') {
+        const blocksList = ((node.params as any).blocks || []) as any[];
+        blocksList.forEach((block: any, idx: number) => {
+            const blockRow = document.createElement('div');
+            blockRow.style.display = 'flex';
+            blockRow.style.alignItems = 'center';
+            blockRow.style.gap = '6px';
+            blockRow.style.marginBottom = '4px';
+
+            const setLabel = document.createElement('span');
+            setLabel.textContent = 'Set';
+            setLabel.style.fontSize = '11px';
+            setLabel.style.color = 'var(--text-muted)';
+            blockRow.appendChild(setLabel);
+
+            const targetInput = document.createElement('input');
+            targetInput.type = 'text';
+            targetInput.className = 'input-field';
+            targetInput.value = block.targetVar;
+            targetInput.style.width = '50px';
+            targetInput.style.padding = '3px 6px';
+            targetInput.style.fontSize = '11px';
+            targetInput.style.fontFamily = 'var(--font-mono)';
+            targetInput.dataset.blockId = block.id;
+            targetInput.dataset.blockField = 'targetVar';
+            targetInput.addEventListener('change', () => {
+                updateBlockField(node.id, block.id, 'targetVar', targetInput.value);
+            });
+            setupAutocomplete(targetInput, () => {
+                const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
+                return Array.from(new Set([...outputPins, 'out', 'temp', 'result', 'value']));
+            });
+            blockRow.appendChild(targetInput);
+
+            const eqLabel = document.createElement('span');
+            eqLabel.textContent = '=';
+            eqLabel.style.fontSize = '11px';
+            eqLabel.style.color = 'var(--text-muted)';
+            blockRow.appendChild(eqLabel);
+
+            const op1Input = document.createElement('input');
+            op1Input.type = 'text';
+            op1Input.className = 'input-field';
+            op1Input.value = block.operand1;
+            op1Input.style.width = '50px';
+            op1Input.style.padding = '3px 6px';
+            op1Input.style.fontSize = '11px';
+            op1Input.style.fontFamily = 'var(--font-mono)';
+            op1Input.dataset.blockId = block.id;
+            op1Input.dataset.blockField = 'operand1';
+            op1Input.addEventListener('change', () => {
+                updateBlockField(node.id, block.id, 'operand1', op1Input.value);
+            });
+
+            const getOperandSuggestions = () => {
+                const inputPins = Object.keys(getNodeInputs(node, appState.resolvedInputs));
+                const outputPins = Object.keys(getNodeOutputs(node, appState.resolvedOutputs));
+                const priorVars = (blocksList || []).slice(0, idx).map((b: any) => b.targetVar.trim()).filter(Boolean);
+                const mathHelpers = ['sin', 'cos', 'abs', 'round', 'min', 'max', 'pi', 'e', 'value'];
+                return Array.from(new Set([...inputPins, ...outputPins, ...priorVars, ...mathHelpers]));
+            };
+            setupAutocomplete(op1Input, getOperandSuggestions);
+            blockRow.appendChild(op1Input);
+
+            const opSelect = document.createElement('select');
+            opSelect.className = 'input-field';
+            opSelect.style.width = '45px';
+            opSelect.style.padding = '2px';
+            opSelect.style.fontSize = '11px';
+            const ops = ['+', '-', '*', '/', 'and', 'or', '=='];
+            ops.forEach(op => {
+                const opt = document.createElement('option');
+                opt.value = op;
+                opt.textContent = op;
+                opSelect.appendChild(opt);
+            });
+            opSelect.value = block.operator;
+            opSelect.addEventListener('change', () => {
+                updateBlockField(node.id, block.id, 'operator', opSelect.value);
+            });
+            blockRow.appendChild(opSelect);
+
+            const op2Input = document.createElement('input');
+            op2Input.type = 'text';
+            op2Input.className = 'input-field';
+            op2Input.value = block.operand2;
+            op2Input.style.width = '50px';
+            op2Input.style.padding = '3px 6px';
+            op2Input.style.fontSize = '11px';
+            op2Input.style.fontFamily = 'var(--font-mono)';
+            op2Input.dataset.blockId = block.id;
+            op2Input.dataset.blockField = 'operand2';
+            op2Input.addEventListener('change', () => {
+                updateBlockField(node.id, block.id, 'operand2', op2Input.value);
+            });
+            setupAutocomplete(op2Input, getOperandSuggestions);
+            blockRow.appendChild(op2Input);
+
+            const btnDelBlock = document.createElement('button');
+            btnDelBlock.className = 'btn-delete-pin';
+            btnDelBlock.textContent = '×';
+            btnDelBlock.title = 'Delete Block';
+            btnDelBlock.addEventListener('click', () => {
+                deleteBlockStatement(node.id, block.id);
+            });
+            blockRow.appendChild(btnDelBlock);
+
+            body.appendChild(blockRow);
+        });
+
+        const btnAddBlock = document.createElement('button');
+        btnAddBlock.className = 'btn-add-pin';
+        btnAddBlock.textContent = '+ Add Block';
+        btnAddBlock.style.marginTop = '4px';
+        btnAddBlock.addEventListener('click', () => {
+            addBlockStatement(node.id);
+        });
+        body.appendChild(btnAddBlock);
+    } else if (node.type === 'python') {
+        const currentVal = node.params.code ?? 'def execute(inputs):\n    return { "out": 0 }';
+
+        const textArea = document.createElement('textarea');
+        textArea.className = 'input-field';
+        textArea.style.fontFamily = '"Fira Code", monospace';
+        textArea.style.minHeight = '140px';
+        textArea.style.fontSize = '11px';
+        textArea.style.width = '100%';
+        textArea.style.resize = 'vertical';
+        textArea.value = currentVal.toString();
+        textArea.autocomplete = 'off';
+
+        textArea.addEventListener('focus', () => {
+            appState.preEditGraphState = JSON.parse(JSON.stringify(appState.currentGraph));
+        });
+
+        textArea.addEventListener('input', () => {
+            if (appState.preEditGraphState) {
+                commitPreEditToHistory();
+            }
+            updateNodeParam(node.id, undefined, 'code', textArea.value);
+        });
+        body.appendChild(textArea);
+    } else {
+        const badge = document.createElement('span');
+        badge.style.fontSize = '10px';
+        badge.style.color = 'var(--text-muted)';
+        badge.textContent = `Configured via properties panel below.`;
+        body.appendChild(badge);
+    }
+
+    card.appendChild(body);
+    container.appendChild(card);
+}
+
 function getOutputPinFlow(node: NodeState, pinId: string): { src: string; dest: string } {
-    const mode = getNodeMode(node);
     let src = '—';
-    if (pinId === 'out0') {
-        if (mode === 'formula') src = 'FORMULA';
-        else if (mode === 'blocks') src = 'BLOCKS';
-        else if (mode === 'python') src = 'PYTHON';
+    if (pinId === 'out0' || pinId === 'out') {
+        if (node.type === 'formula') src = 'FORMULA';
+        else if (node.type === 'blocks') src = 'BLOCKS';
+        else if (node.type === 'python') src = 'PYTHON';
     } else if (node.type.startsWith('system/')) {
         src = 'SYSTEM';
     }

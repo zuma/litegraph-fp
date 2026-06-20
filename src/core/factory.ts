@@ -1,12 +1,14 @@
-import { NodeState, PinType } from './ast.js';
+import { NodeState, PinType, ActionState, Edge } from './ast.js';
 
 export interface CreateNodeOptions {
     readonly id: string;
     readonly type: string;
-    readonly mode?: NodeState['mode'];
+    readonly actions?: ReadonlyArray<ActionState>;
     readonly params?: Record<string, unknown>;
     readonly inputs?: Record<string, PinType>;
     readonly outputs?: Record<string, PinType>;
+    readonly nodes?: Record<string, NodeState>;
+    readonly edges?: ReadonlyArray<Edge>;
     readonly ui?: {
         readonly x: number;
         readonly y: number;
@@ -25,10 +27,12 @@ export function createNodeState(options: CreateNodeOptions): NodeState {
     return {
         id: options.id,
         type: options.type,
-        mode: options.mode,
+        actions: Object.freeze(options.actions ? [...options.actions] : []),
         params: Object.freeze({ ...options.params }),
         inputs: Object.freeze({ ...options.inputs }),
         outputs: Object.freeze({ ...options.outputs }),
+        nodes: options.nodes ? Object.freeze({ ...options.nodes }) : undefined,
+        edges: options.edges ? Object.freeze([...options.edges]) : undefined,
         ui: Object.freeze({
             x: options.ui?.x ?? 0,
             y: options.ui?.y ?? 0,

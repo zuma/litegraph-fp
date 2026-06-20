@@ -29,8 +29,6 @@ export interface Edge {
     readonly targetPinId: string;
 }
 
-export type NodeMode = 'python' | 'formula' | 'blocks' | 'state' | 'delay' | 'input' | 'log' | 'composite/input' | 'composite/output';
-
 export interface BlockStatement {
     readonly id: string;
     readonly targetVar: string;
@@ -39,23 +37,23 @@ export interface BlockStatement {
     readonly operand2: string;
 }
 
+export interface ActionState {
+    readonly id: string;
+    readonly type: string; // e.g. 'formula', 'blocks', 'python', 'system/delay', 'system/state', etc.
+    readonly params: Readonly<Record<string, any>>;
+}
+
 /**
  * Represents the pure, visual and declarative state of a single node.
  */
 export interface NodeState {
     readonly id: NodeID;
-    readonly type: string; // The functional identifier string (e.g., 'math/add' or 'generic')
-    readonly mode?: NodeMode; // The execution mode of the stem cell node
+    readonly type: string; // 'node/generic' or composite boundaries 'composite/input', 'composite/output'
+    readonly actions?: ReadonlyArray<ActionState>;
     
-    // Internal constants/parameters for the node logic (e.g. static values, code or formula)
+    // Internal constants/parameters for the node logic
     readonly params: Readonly<{
-        readonly code?: string;
-        readonly formula?: string;
-        readonly blocks?: ReadonlyArray<BlockStatement>;
-        readonly delayMs?: number;
-        readonly defaultValue?: unknown;
-        readonly value?: unknown;
-        readonly [key: string]: unknown;
+        [key: string]: unknown;
     }>;
     
     // Dynamic runtime overrides/additions to the node definition inputs and outputs

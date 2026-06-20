@@ -53,6 +53,8 @@
     --node-default-header-end: hsla(190, 80%, 15%, 0.1);
     --node-default-specular: hsla(190, 90%, 80%, 0.45);
     --node-default-shadow: rgba(12, 25, 38, 0.65);
+    --action-header-start: hsla(45, 100%, 55%, 0.6);
+    --action-header-end: hsla(45, 100%, 30%, 0.15);
     --node-database-header-start: hsla(210, 80%, 35%, 0.45);
     --node-database-header-end: hsla(210, 80%, 15%, 0.1);
     --node-database-specular: hsla(210, 90%, 80%, 0.45);
@@ -133,6 +135,8 @@
     --node-default-header-end: hsla(210, 90%, 95%, 0.3);
     --node-default-specular: hsla(210, 95%, 93%, 0.8);
     --node-default-shadow: rgba(14, 165, 233, 0.08);
+    --action-header-start: hsla(45, 100%, 65%, 0.85);
+    --action-header-end: hsla(45, 100%, 80%, 0.3);
     --node-database-header-start: hsla(210, 85%, 80%, 0.85);
     --node-database-header-end: hsla(210, 85%, 95%, 0.3);
     --node-database-specular: hsla(210, 95%, 93%, 0.8);
@@ -520,9 +524,9 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
 
 .floating-panel {
     position: absolute;
-    width: 320px;
-    border-radius: 16px;
-    padding: 16px;
+    width: 220px;
+    border-radius: 10px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
     z-index: 15;
@@ -544,11 +548,11 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
 }
 
 .panel-header h3 {
-    font-size: 16px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -557,7 +561,7 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
     background: transparent;
     border: none;
     color: var(--text-muted);
-    font-size: 20px;
+    font-size: 16px;
     cursor: pointer;
     line-height: 1;
 }
@@ -566,18 +570,18 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
 }
 
 .search-box {
-    margin-bottom: 12px;
+    margin-bottom: 6px;
 }
 
 .search-box input {
     width: 100%;
     background: var(--bg-input);
     border: 1px solid var(--border-panel);
-    border-radius: 6px;
-    padding: 8px 12px;
+    border-radius: 4px;
+    padding: 5px 8px;
     color: var(--text-primary);
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: 11px;
     transition: all 0.2s ease;
 }
 
@@ -588,11 +592,34 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
 }
 
 .node-type-list {
-    max-height: 250px;
+    max-height: 160px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+}
+
+.node-type-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.node-type-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.node-type-list::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 2px;
+    transition: background 0.3s ease;
+}
+
+.node-type-list:hover::-webkit-scrollbar-thumb,
+.node-type-list.scrolling::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+}
+
+.node-type-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
 }
 
 .node-item-btn {
@@ -601,10 +628,10 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
     background: transparent;
     border: 1px solid transparent;
     color: var(--text-secondary);
-    padding: 8px 10px;
-    font-size: 13px;
+    padding: 4px 6px;
+    font-size: 11px;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 4px;
     transition: all 0.2s ease;
     display: flex;
     justify-content: space-between;
@@ -622,9 +649,9 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
 }
 
 .node-item-category {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
+    font-size: 8px;
+    padding: 1px 4px;
+    border-radius: 3px;
     font-weight: 600;
     text-transform: uppercase;
 }
@@ -648,9 +675,15 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
 }
 
 .node-item-category.node {
-    background: rgba(255, 170, 0, 0.08);
-    color: var(--accent-orange);
-    border: 1px solid rgba(255, 170, 0, 0.18);
+    background: var(--node-default-header-start);
+    border: 1px solid var(--node-default-header-end);
+    color: var(--text-primary);
+}
+
+.node-item-category.action {
+    background: var(--action-header-start);
+    border: 1px solid var(--action-header-end);
+    color: var(--text-primary);
 }
 
 /* ============================================================================
@@ -1247,31 +1280,46 @@ body.light-theme #app-header .btn-secondary:hover:not(:disabled) {
 
 .context-menu {
     position: absolute;
-    border-radius: 12px;
-    padding: 6px;
+    border-radius: 8px;
+    padding: 4px;
     display: flex;
     flex-direction: column;
     z-index: 20;
-    min-width: 170px;
+    min-width: 140px;
 }
 
 .context-menu.hidden {
     display: none !important;
 }
 
+.context-menu.node-context {
+    border-color: var(--node-default-header-start);
+    box-shadow: 0 0 12px rgba(12, 180, 220, 0.1), var(--glass-shadow);
+}
+
+.context-menu.action-context {
+    border-color: var(--action-header-start);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.1), var(--glass-shadow);
+}
+
+.context-menu.pin-context {
+    border-color: var(--node-math-header-start);
+    box-shadow: 0 0 12px rgba(190, 100, 255, 0.1), var(--glass-shadow);
+}
+
 .context-menu-item {
     background: transparent;
     border: none;
     color: var(--text-primary);
-    padding: 8px 12px;
+    padding: 5px 8px;
     text-align: left;
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: 11px;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -1287,7 +1335,7 @@ body.light-theme .context-menu-item:hover {
 .context-menu-divider {
     height: 1px;
     background: var(--border-panel);
-    margin: 6px 0;
+    margin: 4px 0;
 }
 
 /* ============================================================================

@@ -2,17 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { GraphState } from '../core/ast.js';
 import { evaluateGraph } from '../engine/evaluate.js';
 
-describe('Stem Cell Node Modes', () => {
-    it('should evaluate nodes in formula mode with auto-derived pins', async () => {
+describe('Generic Node Action Containers', () => {
+    it('should evaluate nodes in formula action with auto-derived pins', async () => {
         const graph: GraphState = {
             nodes: {
                 'node1': {
                     id: 'node1',
-                    type: 'node/formula',
-                    mode: 'formula',
-                    params: {
-                        formula: '(a + b) * c'
-                    }
+                    type: 'formula',
+                    inputs: { a: 'any', b: 'any', c: 'any' },
+                    outputs: { out0: 'any' },
+                    params: { formula: '(a + b) * c' }
                 }
             },
             edges: []
@@ -31,13 +30,14 @@ describe('Stem Cell Node Modes', () => {
         expect(result.state['node1.out0']).toBe(90);
     });
 
-    it('should evaluate nodes in blocks mode (Scratch-like statements)', async () => {
+    it('should evaluate nodes in blocks action (Scratch-like statements)', async () => {
         const graph: GraphState = {
             nodes: {
                 'node1': {
                     id: 'node1',
-                    type: 'node/blocks',
-                    mode: 'blocks',
+                    type: 'blocks',
+                    inputs: { a: 'any', b: 'any', c: 'any' },
+                    outputs: { out0: 'any' },
                     params: {
                         blocks: [
                             { id: 'b1', targetVar: 'temp', operand1: 'a', operator: '+', operand2: 'b' },
@@ -59,5 +59,17 @@ describe('Stem Cell Node Modes', () => {
 
         // Expected: (5 + 3) * 10 = 80
         expect(result.state['node1.out0']).toBe(80);
+    });
+
+    it('should expose interactive actions on action registry definitions', async () => {
+        const { StandardActions } = await import('../registry/index.js');
+        const stateActionDef = StandardActions['system/state'];
+        expect(stateActionDef).toBeDefined();
+
+        const logActionDef = StandardActions['system/log'];
+        expect(logActionDef).toBeDefined();
+
+        const tableActionDef = StandardActions['database/table'];
+        expect(tableActionDef).toBeDefined();
     });
 });

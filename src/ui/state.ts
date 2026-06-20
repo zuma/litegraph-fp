@@ -18,43 +18,80 @@ export const GRID_SIZE = 30;        // Grid spacing for snapping (half the 60px 
 // ============================================================================
 export const defaultGraph: GraphState = {
     nodes: {
-        'add_4012': createNodeState({
-            id: 'add_4012',
-            type: 'node/generic',
-            mode: 'formula',
+        'node_4012': createNodeState({
+            id: 'node_4012',
+            type: 'node',
             inputs: { in0: 'any', in1: 'any' },
             outputs: { out0: 'any' },
-            params: { formula: 'in0 + in1', in0: 10, in1: 20 },
-            ui: { x: 100, y: 80, title: 'Input Adder' }
+            params: {},
+            ui: { x: 100, y: 80, title: 'Input Adder' },
+            nodes: {
+                'pin_4012_in0': createNodeState({
+                    id: 'pin_4012_in0',
+                    type: 'composite/input',
+                    inputs: { value: 'any' },
+                    outputs: { out: 'any' },
+                    params: { name: 'in0', value: 10 },
+                    ui: { x: 50, y: 100, title: 'in0' }
+                }),
+                'pin_4012_in1': createNodeState({
+                    id: 'pin_4012_in1',
+                    type: 'composite/input',
+                    inputs: { value: 'any' },
+                    outputs: { out: 'any' },
+                    params: { name: 'in1', value: 20 },
+                    ui: { x: 50, y: 250, title: 'in1' }
+                }),
+                'action_4012_formula': createNodeState({
+                    id: 'action_4012_formula',
+                    type: 'formula',
+                    inputs: { in0: 'any', in1: 'any' },
+                    outputs: { out0: 'any' },
+                    params: { formula: 'in0 + in1' },
+                    ui: { x: 300, y: 150, title: 'Adder Core' }
+                }),
+                'pin_4012_out0': createNodeState({
+                    id: 'pin_4012_out0',
+                    type: 'composite/output',
+                    inputs: { in: 'any' },
+                    outputs: {},
+                    params: { name: 'out0' },
+                    ui: { x: 550, y: 180, title: 'out0' }
+                })
+            },
+            edges: [
+                { id: 'node_4012_e1', sourceNodeId: 'pin_4012_in0', sourcePinId: 'out', targetNodeId: 'action_4012_formula', targetPinId: 'in0' },
+                { id: 'node_4012_e2', sourceNodeId: 'pin_4012_in1', sourcePinId: 'out', targetNodeId: 'action_4012_formula', targetPinId: 'in1' },
+                { id: 'node_4012_e3', sourceNodeId: 'action_4012_formula', sourcePinId: 'out0', targetNodeId: 'pin_4012_out0', targetPinId: 'in' }
+            ]
         }),
-        'multiply_8930': createNodeState({
-            id: 'multiply_8930',
-            type: 'node/generic',
-            mode: 'formula',
+        'action_8930': createNodeState({
+            id: 'action_8930',
+            type: 'formula',
             inputs: { in0: 'any', in1: 'any' },
             outputs: { out0: 'any' },
             params: { formula: 'in0 * in1', in1: 5 },
             ui: { x: 380, y: 150, title: 'Scaling Node' }
         }),
-        'log_1052': createNodeState({
-            id: 'log_1052',
+        'action_1052': createNodeState({
+            id: 'action_1052',
             type: 'system/log',
             inputs: { msg: 'any' },
             params: {},
             ui: { x: 650, y: 180, title: 'Output Logger' }
         }),
-        'delay_7701': createNodeState({
-            id: 'delay_7701',
+        'action_7701': createNodeState({
+            id: 'action_7701',
             type: 'system/delay',
             inputs: { in0: 'any', ms: 'number' },
             outputs: { out: 'any' },
-            params: { delayMs: 999999 }, // High delay to demonstrate watchdog cull!
+            params: { delayMs: 999999 },
             ui: { x: 100, y: 350, title: 'Rogue Delayer' }
         })
     },
     edges: [
-        { id: 'edge1', sourceNodeId: 'add_4012', sourcePinId: 'out0', targetNodeId: 'multiply_8930', targetPinId: 'in0' },
-        { id: 'edge2', sourceNodeId: 'multiply_8930', sourcePinId: 'out0', targetNodeId: 'log_1052', targetPinId: 'msg' }
+        { id: 'edge1', sourceNodeId: 'node_4012', sourcePinId: 'out0', targetNodeId: 'action_8930', targetPinId: 'in0' },
+        { id: 'edge2', sourceNodeId: 'action_8930', sourcePinId: 'out0', targetNodeId: 'action_1052', targetPinId: 'msg' }
     ]
 };
 
@@ -650,7 +687,7 @@ export function getInputPinCoords(node: NodeState, pinId: string): { x: number, 
     const ny = node.ui?.y ?? 0;
     return {
         x: nx,
-        y: ny + HEADER_HEIGHT + 30 + Math.max(0, idx) * ROW_HEIGHT // Pins at ny + 60 + idx * 15
+        y: ny + HEADER_HEIGHT + 30 + Math.max(0, idx) * ROW_HEIGHT
     };
 }
 
@@ -662,6 +699,6 @@ export function getOutputPinCoords(node: NodeState, pinId: string): { x: number,
     const nw = node.ui?.width ?? NODE_WIDTH;
     return {
         x: nx + nw,
-        y: ny + HEADER_HEIGHT + 30 + Math.max(0, idx) * ROW_HEIGHT // Pins at ny + 60 + idx * 15
+        y: ny + HEADER_HEIGHT + 30 + Math.max(0, idx) * ROW_HEIGHT
     };
 }

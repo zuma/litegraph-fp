@@ -1,5 +1,4 @@
 import { GraphState, NodeID } from '../core/ast.js';
-import { getNodeMode } from '../registry/index.js';
 import { NodeRegistry } from '../registry/types.js';
 
 // ============================================================================
@@ -47,18 +46,14 @@ export const sortTopologically = (graph: GraphState, registry?: NodeRegistry): N
         // ====================================================================
         // In purely functional graphs, true cycles result in infinite recursion.
         // To support stateful feedback loops (e.g. counters, accumulators):
-        // 1. A node running in 'state' mode acts as a "delay register" (flip-flop).
+        // 1. A node of type 'system/state' acts as a "delay register" (flip-flop).
         // 2. The 'nextValue' input pin represents the state input for the NEXT execution tick.
         // 3. By ignoring edges targeting 'nextValue' during topological sorting, we break the 
         //    cycle at compile-time, allowing evaluation of the rest of the graph.
         // 4. At execution-time, Phase 2 commits 'nextValue' to the current 'value' to be consumed 
         //    on the subsequent evaluation tick.
-        //
-        // NOTE FOR AI CODERS: Never change this exemption check to inspect 'node.type === "system/state"'
-        // directly. Under the "Lego base plate" model, any generic node (node/generic) operating
-        // in 'state' mode must qualify for this exemption.
         // ====================================================================
-        if (getNodeMode(nodes[target], registry) === 'state' && edge.targetPinId === 'nextValue') {
+        if (nodes[target].actions?.some(a => a.type === 'system/state') && edge.targetPinId === 'nextValue') {
             return;
         }
 

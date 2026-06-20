@@ -213,20 +213,20 @@
                     </label>
                 </div>
 
-                <!-- NODE INSPECTOR PANEL -->
+                <!-- DYNAMIC GENERIC PROPERTIES INSPECTOR PANEL -->
                 <section class="sidebar-section expanded" id="inspector-section">
                     <div class="section-header interactive" id="inspector-header">
-                        <h2>Node Inspector</h2>
+                        <h2>Inspector</h2>
                         <span class="toggle-icon">▼</span>
                     </div>
                     <div id="inspector-section-body" class="inspector-section-body">
                         <div id="inspector-placeholder" class="inspector-placeholder">
-                            Select a node to view properties & edit inputs
+                            Select an item to view properties
                         </div>
                         <div id="inspector-content" class="inspector-content hidden">
                             <div class="inspector-card">
                                 <div class="inspector-field-group">
-                                    <span class="inspector-label">Node ID</span>
+                                    <span class="inspector-label">ID</span>
                                     <span id="inspect-node-id" class="inspector-value mono"></span>
                                 </div>
                                 <div class="inspector-field-group">
@@ -262,6 +262,12 @@
                              </div>
                              <div id="inspect-outputs-container" class="inspector-card">
                                  <!-- Populated dynamically -->
+                             </div>
+                             <div class="inspector-header-row action-header-row hidden" id="inspect-actions-header-row">
+                                 <h3>Actions</h3>
+                             </div>
+                             <div id="inspect-actions-container" class="inspector-card hidden" style="display: flex; flex-direction: column; gap: 8px; padding: 12px;">
+                                 <!-- Populated dynamically with node actions -->
                              </div>
                              <div id="inspect-errors-container" class="error-container hidden">
                                  <!-- Populated dynamically -->

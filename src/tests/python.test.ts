@@ -3,23 +3,28 @@ import { GraphState } from '../core/ast.js';
 import { evaluateGraph } from '../engine/evaluate.js';
 import { StandardNodes } from '../registry/index.js';
 
-describe('Python Script Node', () => {
+describe('Python Script Action', () => {
     it('should execute python code and return calculated outputs', async () => {
         const graph: GraphState = {
             nodes: {
                 'py1': {
                     id: 'py1',
-                    type: 'node/python',
-                    inputs: { a: 'any', b: 'any' },
-                    outputs: { out: 'any' },
-                    params: {
-                        code: `
+                    type: 'node',
+                    actions: [{
+                        id: 'a1',
+                        type: 'python',
+                        params: {
+                            code: `
 def execute(inputs):
     a = inputs.get('a', 0)
     b = inputs.get('b', 0)
     return { 'out': a * b + 10 }
 `
-                    }
+                        }
+                    }],
+                    inputs: { a: 'any', b: 'any' },
+                    outputs: { out: 'any' },
+                    params: {}
                 }
             },
             edges: []
@@ -42,15 +47,20 @@ def execute(inputs):
             nodes: {
                 'py1': {
                     id: 'py1',
-                    type: 'node/python',
-                    outputs: { out: 'any' },
-                    params: {
-                        code: `
+                    type: 'node',
+                    actions: [{
+                        id: 'a1',
+                        type: 'python',
+                        params: {
+                            code: `
 def execute(inputs):
     # Syntax error / NameError
     return { 'out': undefined_variable }
 `
-                    }
+                        }
+                    }],
+                    outputs: { out: 'any' },
+                    params: {}
                 }
             },
             edges: []
